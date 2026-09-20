@@ -10,6 +10,7 @@ class LocalMusicService {
     // On Android 13+ (API 33+), use READ_MEDIA_AUDIO
     // On older Android, use READ_EXTERNAL_STORAGE
     final audioStatus = await Permission.audio.request();
+    final notificationStatus = await Permission.notification.request();
     if (audioStatus.isGranted) return true;
 
     final storageStatus = await Permission.storage.request();
