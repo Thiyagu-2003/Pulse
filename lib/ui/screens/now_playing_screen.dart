@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:audio_service/audio_service.dart';
+import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
+import 'dart:async';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
@@ -17,6 +20,66 @@ class NowPlayingScreen extends StatefulWidget {
 class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _showLyrics = false;
   double _playbackSpeed = 1.0;
+  bool _isVideoMode = false;
+  YoutubePlayerController? _youtubeController;
+  StreamSubscription? _playbackSubscription;
+  String? _currentVideoId;
+
+  @override
+  void dispose() {
+    _youtubeController?.dispose();
+    _playbackSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _toggleVideoMode(MusicPlayerProvider provider, AppMediaItem track) {
+    if (_isVideoMode) {
+      setState(() {
+        _isVideoMode = false;
+      });
+      _youtubeController?.pause();
+      return;
+    }
+
+    setState(() {
+      _isVideoMode = true;
+    });
+
+    if (_youtubeController == null || _currentVideoId != track.id) {
+      _youtubeController?.dispose();
+      _currentVideoId = track.id;
+      
+      _youtubeController = YoutubePlayerController(
+        initialVideoId: track.id,
+        flags: const YoutubePlayerFlags(
+          autoPlay: true,
+          mute: true,
+          hideControls: true,
+          disableDragSeek: true,
+          enableCaption: false,
+        ),
+      );
+
+      _playbackSubscription?.cancel();
+      _playbackSubscription = provider.audioHandler.playbackState.listen((state) {
+        if (_youtubeController != null) {
+          if (state.playing) {
+            _youtubeController!.play();
+            final audioPos = provider.audioHandler.player.position;
+            final ytPos = _youtubeController!.value.position;
+            if ((audioPos - ytPos).inSeconds.abs() > 2) {
+              _youtubeController!.seekTo(audioPos);
+            }
+          } else {
+            _youtubeController!.pause();
+          }
+        }
+      });
+    } else {
+      _youtubeController!.play();
+      _youtubeController!.seekTo(provider.audioHandler.player.position);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +91,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         appBar: AppBar(),
         body: const Center(child: Text('No song selected')),
       );
+    }
+
+    if (_currentVideoId != null && _currentVideoId != track.id && _isVideoMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isVideoMode = false;
+            _youtubeController?.pause();
+          });
+        }
+      });
     }
 
     final isFav = playerProvider.isFavorite(track.id);
@@ -125,38 +199,57 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     ),
                   )
                 else
-                  Hero(
-                    tag: 'artwork_${track.id}',
-                    child: Container(
-                      width: MediaQuery.of(context).size.width * 0.75,
-                      height: MediaQuery.of(context).size.width * 0.75,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primary.withValues(alpha: 0.3),
-                            blurRadius: 30,
-                            spreadRadius: 5,
-                          )
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: track.artUri != null && track.artUri!.startsWith('http')
-                            ? CachedNetworkImage(
-                                imageUrl: track.artUri!,
-                                fit: BoxFit.cover,
+                  Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      Hero(
+                        tag: 'artwork_${track.id}',
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.75,
+                          height: MediaQuery.of(context).size.width * 0.75,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primary.withValues(alpha: 0.3),
+                                blurRadius: 30,
+                                spreadRadius: 5,
                               )
-                            : Container(
-                                color: Colors.white10,
-                                child: const Icon(
-                                  Icons.music_note,
-                                  size: 100,
-                                  color: AppTheme.primary,
-                                ),
-                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: _isVideoMode && _youtubeController != null
+                                ? YoutubePlayer(
+                                    controller: _youtubeController!,
+                                    showVideoProgressIndicator: false,
+                                  )
+                                : track.artUri != null && track.artUri!.startsWith('http')
+                                    ? CachedNetworkImage(
+                                        imageUrl: track.artUri!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Container(
+                                        color: Colors.white10,
+                                        child: const Icon(
+                                          Icons.music_note,
+                                          size: 100,
+                                          color: AppTheme.primary,
+                                        ),
+                                      ),
+                          ),
+                        ),
                       ),
-                    ),
+                      if (track.sourceType == MediaSourceType.youtube)
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: FloatingActionButton.small(
+                            backgroundColor: _isVideoMode ? Colors.redAccent : AppTheme.accent,
+                            child: Icon(_isVideoMode ? Icons.music_note : Icons.video_library, color: Colors.white),
+                            onPressed: () => _toggleVideoMode(playerProvider, track),
+                          ),
+                        ),
+                    ],
                   ),
 
                 const Spacer(),

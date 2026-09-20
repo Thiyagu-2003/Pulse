@@ -120,32 +120,31 @@ class YoutubeService {
     return null;
   }
 
-  /// Download YouTube audio stream locally for offline listening (NewPipe style)
+
+
+  /// Download YouTube audio stream locally for offline listening using youtube_explode
   Future<String?> downloadAudioTrack(AppMediaItem item) async {
     try {
-      final video = await VideoExtractor.getStream('https://www.youtube.com/watch?v=${item.id}').timeout(
+      final manifest = await _yt.videos.streamsClient.getManifest(item.id).timeout(
         const Duration(seconds: 15),
       );
-      final bestAudio = video.audioWithBestAacQuality ?? video.audioWithHighestQuality;
-      final streamUrl = bestAudio?.url;
-
-      if (streamUrl == null) {
-        throw Exception('No stream URL found for downloading');
-      }
+      
+      final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
 
       final dir = await getApplicationDocumentsDirectory();
       final cleanTitle = item.title.replaceAll(RegExp(r'[^\w\s\-]'), '_');
       final filePath = '${dir.path}/$cleanTitle.m4a';
 
       final file = File(filePath);
-      final response = await http.get(Uri.parse(streamUrl));
+      final fileStream = file.openWrite();
       
-      if (response.statusCode == 200) {
-        await file.writeAsBytes(response.bodyBytes);
-        return filePath;
-      } else {
-        throw Exception('HTTP ${response.statusCode} while downloading');
-      }
+      final stream = _yt.videos.streamsClient.get(audioStreamInfo);
+      await stream.pipe(fileStream);
+      
+      await fileStream.flush();
+      await fileStream.close();
+      
+      return filePath;
     } catch (e) {
       debugPrint('Download error: $e');
       return null;
