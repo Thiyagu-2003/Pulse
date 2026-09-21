@@ -32,3 +32,21 @@
 # and extractors by reflection.
 -keep class androidx.media3.** { *; }
 -dontwarn androidx.media3.**
+
+# Flutter platform channels and app classes
+-keep class io.flutter.** { *; }
+-keep class com.pulse.music.** { *; }
+
+# AudioService & JustAudio
+-keep class com.ryanheise.** { *; }
+-dontwarn com.ryanheise.**
+
+# OnAudioQuery plugin
+-keep class com.lucasgosioso.on_audio_query.** { *; }
+-keep class com.antigravity.on_audio_query_android.** { *; }
+-dontwarn com.lucasgosioso.on_audio_query.**
+-dontwarn com.antigravity.on_audio_query_android.**
+
+# Hive local storage
+-keep class com.ioflux.hive.** { *; }
+-dontwarn com.ioflux.hive.**

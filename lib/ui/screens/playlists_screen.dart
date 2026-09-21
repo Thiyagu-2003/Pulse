@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/media_item_model.dart';
@@ -129,71 +130,163 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     );
   }
 
+  Widget _buildDownloadLocationHeader(
+    BuildContext context,
+    MusicPlayerProvider provider,
+  ) {
+    final customPath = provider.customDownloadPath;
+    final isCustom = customPath != null && customPath.isNotEmpty;
+    final displayPath = isCustom
+        ? customPath
+        : 'Internal Storage / Android / data / com.pulse.music / files / Music';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isCustom ? Icons.folder_special_rounded : Icons.folder_rounded,
+            color: AppTheme.accent,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      isCustom ? 'Custom Location' : 'Default Location',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.accent,
+                      ),
+                    ),
+                    if (isCustom) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => provider.setCustomDownloadPath(null),
+                        child: const Text(
+                          'Reset',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white54,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  displayPath,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: Colors.white60),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () async {
+              final selectedDir = await FilePicker.getDirectoryPath(
+                dialogTitle: 'Select Download Folder',
+              );
+              if (selectedDir != null && selectedDir.isNotEmpty) {
+                await provider.setCustomDownloadPath(selectedDir);
+              }
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Change',
+              style: TextStyle(color: AppTheme.accent, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDownloadsList(MusicPlayerProvider provider) {
     final downloads = filterTracks(provider.getDownloads(), _query);
 
-    if (downloads.isEmpty) {
-      return _buildEmpty(
-        Icons.download_done,
-        _query.isEmpty
-            ? 'No downloads yet.\nTap the download icon on any online track.'
-            : 'No downloads match your search.',
-      );
-    }
-
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${downloads.length} downloaded',
-                style: const TextStyle(color: Colors.white60),
-              ),
-              // Sized on demand: the numbers come from the filesystem, and a
-              // file removed outside the app simply stops counting.
-              FutureBuilder<int>(
-                future: _sizeFuture(provider, downloads.length),
-                builder: (_, snapshot) => Text(
-                  snapshot.hasData ? _formatBytes(snapshot.data!) : '',
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+        _buildDownloadLocationHeader(context, provider),
+        if (downloads.isEmpty)
+          Expanded(
+            child: _buildEmpty(
+              Icons.download_done,
+              _query.isEmpty
+                  ? 'No downloads yet.\nTap the download icon on any online track.'
+                  : 'No downloads match your search.',
+            ),
+          )
+        else ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${downloads.length} downloaded',
+                  style: const TextStyle(color: Colors.white60),
                 ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: downloads.length,
-            itemBuilder: (context, index) {
-              final item = downloads[index];
-              return Dismissible(
-                key: ValueKey('download_${item.id}'),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 32),
-                  margin: const EdgeInsets.symmetric(
-                    vertical: 4,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.delete_outline_rounded,
-                    color: Colors.redAccent,
+                FutureBuilder<int>(
+                  future: _sizeFuture(provider, downloads.length),
+                  builder: (_, snapshot) => Text(
+                    snapshot.hasData ? _formatBytes(snapshot.data!) : '',
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
                   ),
                 ),
-                onDismissed: (_) => provider.deleteDownload(item),
-                child: TrackTile(item: item, playlist: downloads),
-              );
-            },
+              ],
+            ),
           ),
-        ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: downloads.length,
+              itemBuilder: (context, index) {
+                final item = downloads[index];
+                return Dismissible(
+                  key: ValueKey('download_${item.id}'),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 32),
+                    margin: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                  onDismissed: (_) => provider.deleteDownload(item),
+                  child: TrackTile(item: item, playlist: downloads),
+                );
+              },
+            ),
+          ),
+        ],
       ],
     );
   }

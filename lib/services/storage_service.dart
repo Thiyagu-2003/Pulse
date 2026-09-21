@@ -10,6 +10,8 @@ class StorageService {
   static const String playlistsBox = 'playlists';
   static const String positionsBox = 'positions';
   static const String downloadsBox = 'downloads';
+  static const String settingsBox = 'settings';
+  static const String customDownloadPathKey = 'custom_download_path';
   static const int historyLimit = 200;
 
   Future<void> init() async {
@@ -19,6 +21,20 @@ class StorageService {
     await Hive.openBox<String>(playlistsBox);
     await Hive.openBox<int>(positionsBox);
     await Hive.openBox<String>(downloadsBox);
+    await Hive.openBox<String>(settingsBox);
+  }
+
+  /// Settings
+  Box<String> get _settingsBox => Hive.box<String>(settingsBox);
+
+  String? getCustomDownloadPath() => _settingsBox.get(customDownloadPathKey);
+
+  Future<void> setCustomDownloadPath(String? path) async {
+    if (path == null || path.isEmpty) {
+      await _settingsBox.delete(customDownloadPathKey);
+    } else {
+      await _settingsBox.put(customDownloadPathKey, path);
+    }
   }
 
   /// Downloads — kept separate from favorites. They answer different

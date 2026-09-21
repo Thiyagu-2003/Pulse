@@ -374,6 +374,14 @@ class MusicPlayerProvider extends ChangeNotifier {
   List<AppMediaItem> getFavorites() => _storageService.getFavorites();
   List<AppMediaItem> getHistory() => _storageService.getHistory();
 
+  /// Custom Download Location
+  String? get customDownloadPath => _storageService.getCustomDownloadPath();
+
+  Future<void> setCustomDownloadPath(String? path) async {
+    await _storageService.setCustomDownloadPath(path);
+    notifyListeners();
+  }
+
   /// Playlists
   List<Playlist> getPlaylists() => _storageService.getPlaylists();
   Playlist? getPlaylist(String id) => _storageService.getPlaylist(id);

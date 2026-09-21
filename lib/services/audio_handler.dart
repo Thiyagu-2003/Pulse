@@ -10,7 +10,7 @@ Future<CustomAudioHandler> initAudioService() async {
   return await AudioService.init<CustomAudioHandler>(
     builder: () => CustomAudioHandler(),
     config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.antigravity.musicplayer.channel.audio',
+      androidNotificationChannelId: 'com.pulse.music.channel.audio',
       androidNotificationChannelName: 'Music Player Playback',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,

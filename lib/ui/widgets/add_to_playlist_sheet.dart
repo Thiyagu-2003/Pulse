@@ -106,10 +106,9 @@ Future<String?> promptForPlaylistName(
   BuildContext context, {
   String initial = '',
   String title = 'New playlist',
-}) {
+}) async {
   final controller = TextEditingController(text: initial);
-  // Disposed when the dialog closes — otherwise every create/rename leaks one.
-  return showDialog<String>(
+  final result = await showDialog<String>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       backgroundColor: AppTheme.surface,
@@ -123,21 +122,25 @@ Future<String?> promptForPlaylistName(
           hintStyle: TextStyle(color: Colors.white38),
         ),
         onSubmitted: (value) =>
-            Navigator.pop(dialogContext, value.trim()),
+            Navigator.of(dialogContext).pop(value.trim()),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
         ),
         TextButton(
           onPressed: () =>
-              Navigator.pop(dialogContext, controller.text.trim()),
+              Navigator.of(dialogContext).pop(controller.text.trim()),
           child: const Text('Save', style: TextStyle(color: AppTheme.accent)),
         ),
       ],
     ),
-  ).whenComplete(controller.dispose);
+  );
+  Future.delayed(const Duration(milliseconds: 300), () {
+    controller.dispose();
+  });
+  return result;
 }
 
 void _confirm(ScaffoldMessengerState messenger, String message) {

@@ -5,6 +5,7 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'package:newpipeextractor_dart/newpipeextractor_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/media_item_model.dart';
+import 'storage_service.dart';
 
 class YoutubeService {
   // Shared instance: the audio handler, the provider and the search screen all
@@ -192,23 +193,59 @@ class YoutubeService {
   /// Tries NewPipe first (faster, more reliable on Android), then falls back
   /// to youtube_explode. [onProgress] reports 0.0–1.0 when the total size is
   /// known, so the UI can show a real bar rather than a spinner.
+  Future<Directory> _getDownloadDirectory() async {
+    final customPath = StorageService().getCustomDownloadPath();
+    if (customPath != null && customPath.isNotEmpty) {
+      try {
+        final customDir = Directory(customPath);
+        if (!await customDir.exists()) {
+          await customDir.create(recursive: true);
+        }
+        return customDir;
+      } catch (e) {
+        debugPrint('Custom download dir invalid, falling back to default: $e');
+      }
+    }
+
+    if (Platform.isAndroid) {
+      try {
+        final externalDirs = await getExternalStorageDirectories(
+          type: StorageDirectory.music,
+        );
+        if (externalDirs != null && externalDirs.isNotEmpty) {
+          final dir = externalDirs.first;
+          if (!await dir.exists()) await dir.create(recursive: true);
+          return dir;
+        }
+        final externalDir = await getExternalStorageDirectory();
+        if (externalDir != null) {
+          final musicDir = Directory('${externalDir.path}/Music');
+          if (!await musicDir.exists()) await musicDir.create(recursive: true);
+          return musicDir;
+        }
+      } catch (e) {
+        debugPrint('Failed to resolve external music dir: $e');
+      }
+    }
+    return await getApplicationDocumentsDirectory();
+  }
+
   Future<String?> downloadAudioTrack(
     AppMediaItem item, {
     void Function(double)? onProgress,
   }) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await _getDownloadDirectory();
       final cleanTitle = item.title.replaceAll(RegExp(r'[^\w\s\-]'), '_');
 
-      // 1. Try NewPipe — it's native Android and usually works when
-      //    youtube_explode's parser is out of date.
-      final newPipePath = await _downloadViaNewPipe(
+      // 1. Try youtube_explode first — unthrottled InnerTube streaming (1-2s total)
+      final explodePath = await _downloadViaExplode(
         item, dir.path, cleanTitle, onProgress,
       );
-      if (newPipePath != null) return newPipePath;
+      if (explodePath != null) return explodePath;
 
-      // 2. Fall back to youtube_explode
-      return await _downloadViaExplode(
+      // 2. Fall back to NewPipe with browser headers to prevent CDN bandwidth throttling
+      return await _downloadViaNewPipe(
         item, dir.path, cleanTitle, onProgress,
       );
     } catch (e) {
@@ -217,7 +254,7 @@ class YoutubeService {
     }
   }
 
-  /// Download using NewPipe extractor (Android-native, faster).
+  /// Download using NewPipe extractor with unthrottled headers.
   Future<String?> _downloadViaNewPipe(
     AppMediaItem item,
     String dirPath,
@@ -227,20 +264,26 @@ class YoutubeService {
     try {
       final video = await VideoExtractor.getStream(
         'https://www.youtube.com/watch?v=${item.id}',
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 5));
 
       final bestAudio = video.audioWithBestAacQuality ??
           video.audioWithHighestQuality;
       if (bestAudio?.url == null) return null;
 
       final url = bestAudio!.url!;
-      final ext = (bestAudio.formatSuffix ?? 'm4a')
-          .replaceAll('.', '');
+      final ext = (bestAudio.formatSuffix ?? 'm4a').replaceAll('.', '');
       final file = File('$dirPath/${cleanTitle}_${item.id}.$ext');
 
-      // Download the stream using http
+      // Download the stream using HttpClient with browser headers to bypass CDN throttling
       final request = await HttpClient().getUrl(Uri.parse(url));
-      final response = await request.close();
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
+      request.headers.set(HttpHeaders.acceptHeader, '*/*');
+      request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
+
+      final response = await request.close().timeout(const Duration(seconds: 15));
       final total = response.contentLength;
       final sink = file.openWrite();
       var received = 0;
