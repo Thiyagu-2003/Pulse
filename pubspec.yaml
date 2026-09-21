@@ -37,7 +37,10 @@ dependencies:
   just_audio: ^0.10.6
   audio_service: ^0.18.19
   youtube_explode_dart: ^3.1.0
-  on_audio_query: ^2.9.0
+  # Fork of on_audio_query, which was abandoned in May 2023 and declares
+  # package= in its AndroidManifest — something AGP 8 rejects outright, so the
+  # original cannot be built at all any more.
+  on_audio_query_pluse: ^3.0.7
   permission_handler: ^11.3.1
   http: ^1.6.0
   xml: ^6.6.1

@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:provider/provider.dart';
 import '../../services/local_music_service.dart';
+import '../../models/media_folder.dart';
 import '../../models/media_item_model.dart';
+import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
+import 'folder_songs_screen.dart';
 
 class LocalSongsScreen extends StatefulWidget {
   const LocalSongsScreen({super.key});
@@ -19,6 +23,35 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
   List<AppMediaItem> _localSongs = [];
   bool _isLoading = true;
   bool _hasPermission = false;
+  String _query = '';
+  TrackSort _sort = TrackSort.title;
+
+  /// Default on: Android's media store returns voice memos and call
+  /// recordings mixed in with music, and folders are what separate them.
+  bool _groupByFolder = true;
+
+  /// _localSongs stays the untouched source of truth; this is what's shown.
+  ///
+  /// Cached against the inputs: a library of a few thousand tracks was being
+  /// filtered and re-sorted several times per frame, once for every place in
+  /// build that asked for the list.
+  List<AppMediaItem>? _visibleCache;
+  String? _cachedQuery;
+  TrackSort? _cachedSort;
+  int _cachedSourceLength = -1;
+
+  List<AppMediaItem> get _visibleSongs {
+    if (_visibleCache == null ||
+        _cachedQuery != _query ||
+        _cachedSort != _sort ||
+        _cachedSourceLength != _localSongs.length) {
+      _cachedQuery = _query;
+      _cachedSort = _sort;
+      _cachedSourceLength = _localSongs.length;
+      _visibleCache = sortTracks(filterTracks(_localSongs, _query), _sort);
+    }
+    return _visibleCache!;
+  }
 
   @override
   void initState() {
@@ -51,11 +84,22 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Local Songs',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+          style: Theme.of(context).textTheme.displaySmall,
         ),
         actions: [
+          IconButton(
+            icon: Icon(
+              _groupByFolder
+                  ? Icons.folder_rounded
+                  : Icons.format_list_bulleted_rounded,
+              color: AppTheme.accent,
+            ),
+            tooltip: _groupByFolder ? 'Show all songs' : 'Group by folder',
+            onPressed: () =>
+                setState(() => _groupByFolder = !_groupByFolder),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: AppTheme.accent),
             onPressed: () {
@@ -78,13 +122,23 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
                   ? _buildEmptyView()
                   : Column(
                       children: [
+                        TrackFilterBar(
+                          query: _query,
+                          onQueryChanged: (value) =>
+                              setState(() => _query = value),
+                          sort: _sort,
+                          onSortChanged: (value) =>
+                              setState(() => _sort = value),
+                        ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                           child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                '${_localSongs.length} Songs found',
+                                _query.isEmpty
+                                    ? '${_localSongs.length} Songs found'
+                                    : '${_visibleSongs.length} of ${_localSongs.length}',
                                 style: const TextStyle(color: Colors.white60),
                               ),
                               ElevatedButton.icon(
@@ -97,15 +151,18 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
                                 icon: const Icon(Icons.play_arrow, color: Colors.white),
                                 label: const Text('Play All', style: TextStyle(color: Colors.white)),
                                 onPressed: () {
-                                  // Actually play the first song with the full local queue
-                                  if (_localSongs.isNotEmpty) {
+                                  // Queue what's on screen, not the whole
+                                  // library — otherwise a search result plays
+                                  // and then wanders off into unfiltered songs.
+                                  final visible = _visibleSongs;
+                                  if (visible.isNotEmpty) {
                                     final playerProvider = Provider.of<MusicPlayerProvider>(
                                       context,
                                       listen: false,
                                     );
                                     playerProvider.playTrack(
-                                      _localSongs.first,
-                                      playlist: _localSongs,
+                                      visible.first,
+                                      playlist: visible,
                                     );
                                   }
                                 },
@@ -114,18 +171,80 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
                           ),
                         ),
                         Expanded(
-                          child: ListView.builder(
-                            itemCount: _localSongs.length,
-                            itemBuilder: (context, index) {
-                              return TrackTile(
-                                item: _localSongs[index],
-                                playlist: _localSongs,
+                          child: Builder(
+                            builder: (context) {
+                              final visible = _visibleSongs;
+                              if (visible.isEmpty) {
+                                return const Center(
+                                  child: Text(
+                                    'No songs match your search.',
+                                    style: TextStyle(color: Colors.white54),
+                                  ),
+                                );
+                              }
+                              // A search is looking for a track, not a
+                              // folder, so results stay flat.
+                              if (_groupByFolder && _query.isEmpty) {
+                                return _buildFolderList(visible);
+                              }
+                              return ListView.builder(
+                                itemCount: visible.length,
+                                itemBuilder: (context, index) {
+                                  return TrackTile(
+                                    item: visible[index],
+                                    playlist: visible,
+                                  );
+                                },
                               );
                             },
                           ),
                         ),
                       ],
                     ),
+    );
+  }
+
+  Widget _buildFolderList(List<AppMediaItem> songs) {
+    final folders = groupByFolder(songs);
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: folders.length,
+      itemBuilder: (context, index) {
+        final folder = folders[index];
+        return ListTile(
+          leading: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: (folder.isRecordings ? Colors.orangeAccent : AppTheme.primary)
+                  .withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
+              color: folder.isRecordings ? Colors.orangeAccent : AppTheme.primary,
+            ),
+          ),
+          title: Text(
+            folder.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '${folder.length} ${folder.length == 1 ? 'track' : 'tracks'}',
+            style: const TextStyle(fontSize: 12, color: Colors.white60),
+          ),
+          trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FolderSongsScreen(folder: folder),
+            ),
+          ),
+        );
+      },
     );
   }
 

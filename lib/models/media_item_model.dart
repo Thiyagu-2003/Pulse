@@ -1,6 +1,28 @@
 import 'package:audio_service/audio_service.dart';
 
+/// Where a track comes from.
+///
+/// The `youtube` value name is persisted — it is written into every saved
+/// favorite, playlist, download and history entry as `sourceType.name`, and
+/// `fromJson` falls back to `local` for anything it doesn't recognise. So it
+/// must not be renamed: doing so would quietly turn every stored online track
+/// into a local one pointing at a file that isn't there. User-facing wording
+/// lives in [MediaSourceLabel] instead.
 enum MediaSourceType { local, youtube, podcast }
+
+extension MediaSourceLabel on MediaSourceType {
+  /// What the user sees. The app presents three libraries — what's on the
+  /// device, what's online, and podcasts — and naming the provider tells them
+  /// nothing useful about a track.
+  String get label => switch (this) {
+        MediaSourceType.local => 'Local',
+        MediaSourceType.youtube => 'Online',
+        MediaSourceType.podcast => 'Podcast',
+      };
+}
+
+/// The album shown for online tracks that have no real album of their own.
+const String onlineAlbumLabel = 'Online Music';
 
 class AppMediaItem {
   final String id;
@@ -73,11 +95,20 @@ class AppMediaItem {
         'extras': extras,
       };
 
+  /// Favorites, playlists, history and downloads saved before the UI stopped
+  /// naming the provider still carry the old album label in their stored
+  /// JSON. Normalising on read fixes entries already on the device, rather
+  /// than only affecting newly fetched tracks.
+  static String _displayAlbum(String? stored) {
+    if (stored == null || stored.isEmpty) return 'Unknown Album';
+    return stored == 'YouTube Music' ? onlineAlbumLabel : stored;
+  }
+
   factory AppMediaItem.fromJson(Map<String, dynamic> json) => AppMediaItem(
         id: json['id'] as String,
         title: json['title'] as String,
         artist: json['artist'] as String,
-        album: (json['album'] as String?) ?? 'Unknown Album',
+        album: _displayAlbum(json['album'] as String?),
         artUri: json['artUri'] as String?,
         streamUrl: json['streamUrl'] as String?,
         duration: json['durationMs'] != null

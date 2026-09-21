@@ -20,10 +20,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => MusicPlayerProvider(
-            audioHandler as CustomAudioHandler,
-            storageService,
-          ),
+          create: (_) => MusicPlayerProvider(audioHandler, storageService),
         ),
       ],
       child: const MusicPlayerApp(),
@@ -37,7 +34,7 @@ class MusicPlayerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Aura Music Player',
+      title: 'Pulse',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: const MainNavigationScreen(),

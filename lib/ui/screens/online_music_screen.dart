@@ -16,9 +16,11 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
   final YoutubeService _ytService = YoutubeService();
   final TextEditingController _searchController = TextEditingController();
 
+  static const String _trendingLabel = 'Trending';
+
   List<AppMediaItem> _results = [];
   bool _isLoading = false;
-  String _activeQuery = 'Trending Music';
+  String _activeQuery = _trendingLabel;
 
   @override
   void initState() {
@@ -29,6 +31,7 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
   Future<void> _loadTrending() async {
     setState(() {
       _isLoading = true;
+      _activeQuery = _trendingLabel;
     });
     final items = await _ytService.getTrendingMusic();
     if (mounted) {
@@ -58,9 +61,9 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Online Music',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+          style: Theme.of(context).textTheme.displaySmall,
         ),
       ),
       body: Column(
@@ -70,20 +73,33 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: AppTheme.lift,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(
+                  color: AppTheme.mist.withValues(alpha: 0.07),
+                ),
               ),
               child: TextField(
                 controller: _searchController,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppTheme.mist),
                 decoration: InputDecoration(
-                  hintText: 'Search songs, artists, videos...',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search, color: AppTheme.accent),
+                  hintText: 'Search songs, artists, videos',
+                  hintStyle: TextStyle(
+                    color: AppTheme.mist.withValues(alpha: 0.35),
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: AppTheme.mist.withValues(alpha: 0.45),
+                    size: 20,
+                  ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.white38),
+                          icon: Icon(
+                            Icons.clear_rounded,
+                            color: AppTheme.mist.withValues(alpha: 0.45),
+                            size: 18,
+                          ),
                           onPressed: () {
                             _searchController.clear();
                             _loadTrending();
@@ -93,6 +109,9 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 ),
+                // Without this the clear button never appears/disappears,
+                // since nothing else rebuilds as the field is typed into.
+                onChanged: (_) => setState(() {}),
                 onSubmitted: _performSearch,
               ),
             ),
@@ -105,7 +124,7 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
-                _buildGenreChip('Trending'),
+                _buildGenreChip(_trendingLabel),
                 _buildGenreChip('Pop Music'),
                 _buildGenreChip('Hip Hop'),
                 _buildGenreChip('Lo-Fi Chill'),
@@ -124,11 +143,7 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
               alignment: Alignment.centerLeft,
               child: Text(
                 _activeQuery,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70,
-                ),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
             ),
           ),
@@ -172,20 +187,32 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
       child: ChoiceChip(
         label: Text(label),
         selected: isSelected,
+        showCheckmark: false,
         selectedColor: AppTheme.primary,
-        backgroundColor: Colors.white.withValues(alpha: 0.06),
-        labelStyle: TextStyle(
-          color: isSelected ? Colors.white : Colors.white70,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        backgroundColor: AppTheme.lift,
+        side: BorderSide(
+          color: isSelected
+              ? Colors.transparent
+              : AppTheme.mist.withValues(alpha: 0.07),
         ),
-        onSelected: (_) => _performSearch(label),
+        shape: const StadiumBorder(),
+        labelStyle: TextStyle(
+          fontSize: 13,
+          color: isSelected ? AppTheme.mist : AppTheme.mist.withValues(alpha: 0.6),
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+        ),
+        // "Trending" has its own curated query — searching for the literal
+        // word returns unrelated videos.
+        onSelected: (_) =>
+            label == _trendingLabel ? _loadTrending() : _performSearch(label),
       ),
     );
   }
 
   @override
   void dispose() {
-    _ytService.dispose();
+    // YoutubeService is shared with the audio handler — disposing it here
+    // would kill stream extraction for the rest of the app.
     _searchController.dispose();
     super.dispose();
   }

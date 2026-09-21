@@ -48,28 +48,14 @@ class PodcastService {
           final audioUrl = enclosure?.getAttribute('url');
           if (audioUrl == null || audioUrl.isEmpty) continue;
 
-          // Extract image if available (try both namespaced and non-namespaced)
-          String? image;
-          try {
-            image = item.findElements('itunes:image').firstOrNull?.getAttribute('href');
-          } catch (_) {
-            // Namespace not registered, try without namespace
-            for (final element in item.childElements) {
-              if (element.name.local == 'image' && element.getAttribute('href') != null) {
-                image = element.getAttribute('href');
-                break;
-              }
-            }
-          }
+          // Feeds use varying prefixes for the itunes namespace, so match on
+          // the local name instead. (findElements never throws, so the old
+          // try/catch fallback was dead code and images were usually lost.)
+          final image = _episodeImage(item);
 
-          // Extract duration if available
-          Duration? duration;
-          try {
-            final durationStr = item.findElements('itunes:duration').firstOrNull?.innerText;
-            if (durationStr != null) {
-              duration = _parseDuration(durationStr);
-            }
-          } catch (_) {}
+          final durationStr = _childByLocalName(item, 'duration')?.innerText;
+          final duration =
+              durationStr != null ? _parseDuration(durationStr) : null;
 
           episodes.add(
             PodcastEpisode(
@@ -89,6 +75,26 @@ class PodcastService {
       debugPrint('Error parsing podcast RSS feed: $e');
     }
     return [];
+  }
+
+  /// Episode artwork: `<itunes:image href="...">` or plain RSS
+  /// `<image><url>...</url></image>`, whatever prefix the feed uses.
+  String? _episodeImage(XmlElement item) {
+    for (final element in item.childElements) {
+      if (element.name.local != 'image') continue;
+      final href = element.getAttribute('href') ??
+          _childByLocalName(element, 'url')?.innerText;
+      if (href != null && href.trim().isNotEmpty) return href.trim();
+    }
+    return null;
+  }
+
+  /// Finds a direct child by local name, ignoring any namespace prefix.
+  XmlElement? _childByLocalName(XmlElement parent, String localName) {
+    for (final element in parent.childElements) {
+      if (element.name.local == localName) return element;
+    }
+    return null;
   }
 
   /// Parse duration string like "1:23:45" or "3600" (seconds)

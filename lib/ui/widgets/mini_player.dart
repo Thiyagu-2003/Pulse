@@ -6,6 +6,7 @@ import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/now_playing_screen.dart';
 import 'glass_container.dart';
+import 'play_pause_button.dart';
 
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
@@ -102,18 +103,14 @@ class MiniPlayer extends StatelessWidget {
                     return Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          icon: Icon(
-                            playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                            color: AppTheme.accent,
-                            size: 28,
-                          ),
+                        PlayPauseButton(
+                          isPlaying: playing,
                           onPressed: playerProvider.togglePlayPause,
                         ),
                         IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.skip_next_rounded,
-                            color: Colors.white70,
+                            color: AppTheme.mist.withValues(alpha: 0.7),
                             size: 26,
                           ),
                           onPressed: playerProvider.skipToNext,
@@ -128,14 +125,13 @@ class MiniPlayer extends StatelessWidget {
             const SizedBox(height: 4),
 
             // Mini Linear Progress Indicator
-            StreamBuilder<PlaybackState>(
-              stream: playerProvider.playbackState,
+            StreamBuilder<Duration>(
+              stream: playerProvider.positionStream,
               builder: (context, snapshot) {
-                final state = snapshot.data;
-                final position = state?.position.inMilliseconds.toDouble() ?? 0.0;
-                final duration = playerProvider.audioHandler.player.duration?.inMilliseconds.toDouble() ??
-                    track.duration?.inMilliseconds.toDouble() ??
-                    1.0;
+                final position =
+                    (snapshot.data ?? Duration.zero).inMilliseconds.toDouble();
+                final duration =
+                    playerProvider.currentDuration?.inMilliseconds.toDouble() ?? 1.0;
 
                 final progress = (duration > 0) ? (position / duration).clamp(0.0, 1.0) : 0.0;
 

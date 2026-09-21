@@ -14,7 +14,7 @@ class LyricsService {
       final response = await http.get(url).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final result = data['syncedLyrics'] ?? data['plainLyrics'];
+        final result = _pickLyrics(data);
         if (result != null) return result;
       }
 
@@ -25,14 +25,27 @@ class LyricsService {
       if (searchRes.statusCode == 200) {
         final List searchData = jsonDecode(searchRes.body);
         if (searchData.isNotEmpty) {
-          final item = searchData.first;
-          return item['syncedLyrics'] ?? item['plainLyrics'];
+          return _pickLyrics(searchData.first);
         }
       }
     } catch (e) {
       debugPrint('Error fetching lyrics: $e');
     }
     return null;
+  }
+
+  /// The UI renders lyrics as plain text, so prefer plainLyrics and strip the
+  /// `[mm:ss.xx]` cues off syncedLyrics rather than showing them to the user.
+  String? _pickLyrics(dynamic data) {
+    final plain = data['plainLyrics'] as String?;
+    if (plain != null && plain.trim().isNotEmpty) return plain;
+
+    final synced = data['syncedLyrics'] as String?;
+    if (synced == null || synced.trim().isEmpty) return null;
+    final stripped = synced
+        .replaceAll(RegExp(r'^\s*(\[\d+:\d+(\.\d+)?\]\s*)+', multiLine: true), '')
+        .trim();
+    return stripped.isEmpty ? null : stripped;
   }
 
   String _cleanQuery(String input) {

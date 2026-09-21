@@ -55,9 +55,9 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Podcasts',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+          style: Theme.of(context).textTheme.displaySmall,
         ),
       ),
       body: Column(

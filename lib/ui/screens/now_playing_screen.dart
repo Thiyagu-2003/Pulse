@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:audio_service/audio_service.dart';
 import '../../models/media_item_model.dart';
+import '../../models/playback_mode.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
@@ -19,6 +20,7 @@ class NowPlayingScreen extends StatefulWidget {
 
 class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _showLyrics = false;
+  double? _dragMs;
   double _playbackSpeed = 1.0;
   bool _isVideoMode = false;
   YoutubePlayerController? _youtubeController;
@@ -32,53 +34,75 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     super.dispose();
   }
 
+  /// Video mode shows a muted YouTube player over the artwork while audio
+  /// keeps coming from just_audio. That split is what makes background
+  /// playback and the notification keep working, but it means the picture has
+  /// to be actively kept in step with the sound.
   void _toggleVideoMode(MusicPlayerProvider provider, AppMediaItem track) {
     if (_isVideoMode) {
-      setState(() {
-        _isVideoMode = false;
-      });
+      setState(() => _isVideoMode = false);
+      _stopVideoSync();
       _youtubeController?.pause();
       return;
     }
 
-    setState(() {
-      _isVideoMode = true;
-    });
+    final position = provider.audioHandler.player.position;
+    final isPlaying = provider.audioHandler.player.playing;
 
     if (_youtubeController == null || _currentVideoId != track.id) {
       _youtubeController?.dispose();
       _currentVideoId = track.id;
-      
       _youtubeController = YoutubePlayerController(
         initialVideoId: track.id,
-        flags: const YoutubePlayerFlags(
-          autoPlay: true,
-          mute: true,
+        flags: YoutubePlayerFlags(
+          // Match the audio instead of assuming playback: enabling video
+          // while paused used to start the picture moving on its own.
+          autoPlay: isPlaying,
+          startAt: position.inSeconds,
+          mute: true, // sound always comes from just_audio
           hideControls: true,
           disableDragSeek: true,
           enableCaption: false,
         ),
       );
-
-      _playbackSubscription?.cancel();
-      _playbackSubscription = provider.audioHandler.playbackState.listen((state) {
-        if (_youtubeController != null) {
-          if (state.playing) {
-            _youtubeController!.play();
-            final audioPos = provider.audioHandler.player.position;
-            final ytPos = _youtubeController!.value.position;
-            if ((audioPos - ytPos).inSeconds.abs() > 2) {
-              _youtubeController!.seekTo(audioPos);
-            }
-          } else {
-            _youtubeController!.pause();
-          }
-        }
-      });
     } else {
-      _youtubeController!.play();
-      _youtubeController!.seekTo(provider.audioHandler.player.position);
+      _youtubeController!.seekTo(position);
+      if (isPlaying) _youtubeController!.play();
     }
+
+    setState(() => _isVideoMode = true);
+    _startVideoSync(provider);
+  }
+
+  void _startVideoSync(MusicPlayerProvider provider) {
+    _playbackSubscription?.cancel();
+
+    // Driven by positionStream, which ticks several times a second. The old
+    // code synced only on playbackState events, which are sparse during
+    // steady playback — so the picture drifted away from the sound and never
+    // followed a seek until some unrelated event happened to fire.
+    _playbackSubscription = provider.positionStream.listen((audioPosition) {
+      final controller = _youtubeController;
+      if (!mounted || !_isVideoMode || controller == null) return;
+      if (!controller.value.isReady) return;
+
+      final isPlaying = provider.audioHandler.player.playing;
+      if (isPlaying != controller.value.isPlaying) {
+        isPlaying ? controller.play() : controller.pause();
+      }
+      if (!isPlaying) return;
+
+      final drift = audioPosition - controller.value.position;
+      if (drift.abs() > const Duration(milliseconds: 1500)) {
+        controller.seekTo(audioPosition);
+      }
+    });
+  }
+
+  /// Stops the hidden video streaming once it's no longer on screen.
+  void _stopVideoSync() {
+    _playbackSubscription?.cancel();
+    _playbackSubscription = null;
   }
 
   @override
@@ -96,6 +120,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     if (_currentVideoId != null && _currentVideoId != track.id && _isVideoMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
+          _stopVideoSync();
           setState(() {
             _isVideoMode = false;
             _youtubeController?.pause();
@@ -143,7 +168,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       Column(
                         children: [
                           Text(
-                            track.sourceType.name.toUpperCase(),
+                            track.sourceType.label.toUpperCase(),
                             style: const TextStyle(
                               fontSize: 10,
                               letterSpacing: 2,
@@ -166,6 +191,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           setState(() {
                             _showLyrics = !_showLyrics;
                           });
+                          // Lyrics are fetched on demand, not on every track
+                          // change, so ask for them when the panel opens.
+                          if (_showLyrics) playerProvider.ensureLyricsLoaded();
                         },
                       ),
                     ],
@@ -174,7 +202,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
                 const Spacer(),
 
-                // Center Content: Artwork OR Synced Lyrics
+                // Center Content: Artwork OR Synced Lyrics. Cross-faded so
+                // the swap reads as one surface turning over rather than two
+                // unrelated panels replacing each other.
                 if (_showLyrics)
                   Expanded(
                     flex: 8,
@@ -185,13 +215,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             ? const Center(child: CircularProgressIndicator())
                             : SingleChildScrollView(
                                 child: Text(
-                                  playerProvider.currentLyrics ?? 'No lyrics available',
+                                  playerProvider.currentLyrics ??
+                                      'No lyrics for this track yet.',
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
-                                    fontSize: 18,
-                                    height: 1.8,
+                                    fontSize: 17,
+                                    height: 1.9,
                                     fontWeight: FontWeight.w500,
-                                    color: Colors.white,
+                                    color: AppTheme.mist,
                                   ),
                                 ),
                               ),
@@ -220,9 +251,22 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(24),
                             child: _isVideoMode && _youtubeController != null
-                                ? YoutubePlayer(
-                                    controller: _youtubeController!,
-                                    showVideoProgressIndicator: false,
+                                // A 16:9 player dropped straight into this
+                                // square frame letterboxed itself. Scaling a
+                                // 16:9 box to cover crops the sides instead,
+                                // so the video fills the artwork.
+                                ? FittedBox(
+                                    fit: BoxFit.cover,
+                                    clipBehavior: Clip.hardEdge,
+                                    child: SizedBox(
+                                      width: 640,
+                                      height: 360,
+                                      child: YoutubePlayer(
+                                        controller: _youtubeController!,
+                                        showVideoProgressIndicator: false,
+                                        aspectRatio: 16 / 9,
+                                      ),
+                                    ),
                                   )
                                 : track.artUri != null && track.artUri!.startsWith('http')
                                     ? CachedNetworkImage(
@@ -244,9 +288,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         Padding(
                           padding: const EdgeInsets.all(12.0),
                           child: FloatingActionButton.small(
-                            backgroundColor: _isVideoMode ? Colors.redAccent : AppTheme.accent,
-                            child: Icon(_isVideoMode ? Icons.music_note : Icons.video_library, color: Colors.white),
+                            backgroundColor:
+                                _isVideoMode ? AppTheme.primary : AppTheme.lift,
+                            foregroundColor: AppTheme.mist,
+                            elevation: 0,
+                            tooltip:
+                                _isVideoMode ? 'Show artwork' : 'Show video',
                             onPressed: () => _toggleVideoMode(playerProvider, track),
+                            child: Icon(
+                              _isVideoMode
+                                  ? Icons.art_track_rounded
+                                  : Icons.videocam_rounded,
+                              size: 20,
+                            ),
                           ),
                         ),
                     ],
@@ -300,19 +354,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 const SizedBox(height: 16),
 
                 // Seek Progress Bar
-                StreamBuilder<PlaybackState>(
-                  stream: playerProvider.playbackState,
+                StreamBuilder<Duration>(
+                  stream: playerProvider.positionStream,
                   builder: (context, snapshot) {
-                    final state = snapshot.data;
-                    final position = state?.position ?? Duration.zero;
-                    final duration = playerProvider.audioHandler.player.duration ??
-                        track.duration ??
-                        Duration.zero;
+                    final duration = playerProvider.currentDuration ?? Duration.zero;
 
                     // Protect against zero/negative duration
                     final maxMs = duration.inMilliseconds.toDouble();
                     final safeDuration = maxMs > 0 ? maxMs : 1.0;
-                    final safePosition = position.inMilliseconds.toDouble().clamp(0.0, safeDuration);
+                    // While dragging, follow the thumb rather than the player.
+                    final rawPosition = _dragMs ??
+                        (snapshot.data ?? Duration.zero).inMilliseconds.toDouble();
+                    final safePosition = rawPosition.clamp(0.0, safeDuration);
+                    final position = Duration(milliseconds: safePosition.toInt());
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -329,7 +383,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               min: 0,
                               max: safeDuration,
                               value: safePosition,
-                              onChanged: (val) {
+                              // Seek once on release; seeking on every drag
+                              // frame floods the player and stutters.
+                              onChanged: (val) => setState(() => _dragMs = val),
+                              onChangeEnd: (val) {
+                                setState(() => _dragMs = null);
                                 playerProvider.audioHandler
                                     .seek(Duration(milliseconds: val.toInt()));
                               },
@@ -354,7 +412,65 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   },
                 ),
 
-                const SizedBox(height: 16),
+                // Shuffle / Repeat — kept on their own row so the main
+                // transport controls stay large and uncrowded.
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.shuffle_rounded, size: 22),
+                      color: playerProvider.isShuffled
+                          ? AppTheme.accent
+                          : Colors.white38,
+                      tooltip: playerProvider.isShuffled
+                          ? 'Shuffle on'
+                          : 'Shuffle off',
+                      onPressed: () {
+                        playerProvider.toggleShuffle();
+                        _toast(
+                          playerProvider.isShuffled
+                              ? 'Shuffle on'
+                              : 'Shuffle off',
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 24),
+                    IconButton(
+                      icon: Icon(
+                        playerProvider.repeatMode == QueueRepeat.one
+                            ? Icons.repeat_one_rounded
+                            : Icons.repeat_rounded,
+                        size: 22,
+                      ),
+                      color: playerProvider.repeatMode == QueueRepeat.off
+                          ? Colors.white38
+                          : AppTheme.accent,
+                      tooltip: switch (playerProvider.repeatMode) {
+                        QueueRepeat.off => 'Repeat off',
+                        QueueRepeat.all => 'Repeat queue',
+                        QueueRepeat.one => 'Repeat track',
+                      },
+                      onPressed: () {
+                        playerProvider.cycleRepeat();
+                        _toast(switch (playerProvider.repeatMode) {
+                          QueueRepeat.off => 'Repeat off',
+                          QueueRepeat.all => 'Repeating queue',
+                          QueueRepeat.one => 'Looping this track',
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 24),
+                    IconButton(
+                      icon: const Icon(Icons.bedtime_rounded, size: 22),
+                      color: playerProvider.hasSleepTimer
+                          ? AppTheme.accent
+                          : Colors.white38,
+                      tooltip: 'Sleep timer',
+                      onPressed: () =>
+                          _showSleepTimerSheet(context, playerProvider),
+                    ),
+                  ],
+                ),
 
                 // Playback Control Buttons
                 StreamBuilder<PlaybackState>(
@@ -405,34 +521,41 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           // Floating Play/Pause Action Button with Buffering state
                           GestureDetector(
                             onTap: playerProvider.togglePlayPause,
-                            child: Container(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOut,
                               width: 70,
                               height: 70,
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: [AppTheme.primary, AppTheme.accent],
-                                ),
+                                gradient: AppTheme.waveGradient,
                                 boxShadow: [
+                                  // The glow swells while sounding and
+                                  // settles when paused — the button itself
+                                  // carries the state.
                                   BoxShadow(
-                                    color: AppTheme.primary,
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
-                                  )
+                                    color: AppTheme.primary.withValues(
+                                      alpha: playing ? 0.55 : 0.25,
+                                    ),
+                                    blurRadius: playing ? 28 : 14,
+                                    spreadRadius: playing ? 2 : 0,
+                                  ),
                                 ],
                               ),
                               child: isBuffering
                                   ? const Padding(
-                                      padding: EdgeInsets.all(20.0),
+                                      padding: EdgeInsets.all(22.0),
                                       child: CircularProgressIndicator(
-                                        strokeWidth: 3,
-                                        color: Colors.black,
+                                        strokeWidth: 2.5,
+                                        color: AppTheme.mist,
                                       ),
                                     )
                                   : Icon(
-                                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                      size: 40,
-                                      color: Colors.black,
+                                      playing
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      size: 38,
+                                      color: AppTheme.mist,
                                     ),
                             ),
                           ),
@@ -464,6 +587,80 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 
+  /// Brief confirmation of a mode change. Tooltips only appear on long-press
+  /// on touch devices, so a tap would otherwise give no feedback but an icon.
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  void _showSleepTimerSheet(BuildContext context, MusicPlayerProvider provider) {
+    const options = [
+      Duration(minutes: 5),
+      Duration(minutes: 15),
+      Duration(minutes: 30),
+      Duration(minutes: 45),
+      Duration(hours: 1),
+    ];
+    final remaining = provider.sleepTimeRemaining;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                remaining != null
+                    ? 'Pausing in ${remaining.inMinutes + 1} min'
+                    : 'Sleep timer',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            for (final option in options)
+              ListTile(
+                leading: const Icon(Icons.bedtime_outlined, color: Colors.white54),
+                title: Text(
+                  option.inMinutes < 60
+                      ? '${option.inMinutes} minutes'
+                      : '1 hour',
+                ),
+                onTap: () {
+                  provider.startSleepTimer(option);
+                  Navigator.pop(sheetContext);
+                },
+              ),
+            if (remaining != null)
+              ListTile(
+                leading: const Icon(Icons.close_rounded, color: Colors.redAccent),
+                title: const Text(
+                  'Cancel timer',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+                onTap: () {
+                  provider.cancelSleepTimer();
+                  Navigator.pop(sheetContext);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showQueueBottomSheet(BuildContext context, MusicPlayerProvider provider) {
     showModalBottomSheet(
       context: context,
@@ -471,43 +668,98 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Playing Queue',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: provider.queue.length,
-              itemBuilder: (_, index) {
-                final item = provider.queue[index];
-                final isCurrent = index == provider.currentIndex;
-                return ListTile(
-                  leading: Icon(
-                    isCurrent ? Icons.volume_up : Icons.music_note,
-                    color: isCurrent ? AppTheme.accent : Colors.white38,
+      // Watches the provider so reorders and removals redraw the sheet in
+      // place — a modal route does not rebuild with the screen behind it.
+      builder: (_) => Consumer<MusicPlayerProvider>(
+        builder: (_, queueProvider, _) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Playing Queue',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  title: Text(
-                    item.title,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: isCurrent ? AppTheme.accent : Colors.white,
+                  Text(
+                    '${queueProvider.queue.length} tracks',
+                    style: const TextStyle(fontSize: 12, color: Colors.white54),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: queueProvider.queue.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Queue is empty.',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    )
+                  : ReorderableListView.builder(
+                      itemCount: queueProvider.queue.length,
+                      onReorder: (int oldIndex, int newIndex) {
+                        // ReorderableListView reports newIndex as if the
+                        // dragged item is still in the list, so adjust when
+                        // moving downward.
+                        if (oldIndex < newIndex) newIndex -= 1;
+                        queueProvider.moveInQueue(oldIndex, newIndex);
+                      },
+                      itemBuilder: (_, index) {
+                        final item = queueProvider.queue[index];
+                        final isCurrent = index == queueProvider.currentIndex;
+                        return ListTile(
+                          key: ValueKey('${item.id}_$index'),
+                          leading: Icon(
+                            isCurrent ? Icons.volume_up : Icons.music_note,
+                            color: isCurrent ? AppTheme.accent : Colors.white38,
+                          ),
+                          title: Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isCurrent ? AppTheme.accent : Colors.white,
+                            ),
+                          ),
+                          subtitle: Text(
+                            item.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                color: Colors.white38,
+                                tooltip: 'Remove from queue',
+                                onPressed: () =>
+                                    queueProvider.removeFromQueue(index),
+                              ),
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(right: 4),
+                                  child: Icon(
+                                    Icons.drag_handle_rounded,
+                                    color: Colors.white38,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          onTap: () {
+                            queueProvider.playTrack(item);
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
                     ),
-                  ),
-                  subtitle: Text(item.artist, maxLines: 1),
-                  onTap: () {
-                    provider.playTrack(item);
-                    Navigator.pop(context);
-                  },
-                );
-              },
             ),
-          )
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -516,6 +768,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
+    // Podcast episodes routinely run past an hour — without this, 1:05:23
+    // displayed as 05:23.
+    if (duration.inHours > 0) return '${duration.inHours}:$minutes:$seconds';
     return '$minutes:$seconds';
   }
 }
