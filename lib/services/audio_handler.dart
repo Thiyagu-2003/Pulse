@@ -195,6 +195,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       // Start playback immediately — don't await, fire and forget
       _player.play();
     } catch (e) {
+      _ytService.invalidateStreamUrl(item.id);
       _failPlayback('Couldn\'t play "${item.title}". Tap to try again.', e);
     }
   }

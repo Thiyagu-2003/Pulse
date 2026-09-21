@@ -36,7 +36,7 @@ void showAddToPlaylistSheet(BuildContext context, AppMediaItem item) {
                 leading: const Icon(Icons.add_rounded, color: AppTheme.accent),
                 title: const Text('New playlist'),
                 onTap: () async {
-                  final name = await promptForPlaylistName(context);
+                  final name = await promptForPlaylistName(sheetContext);
                   if (name == null || name.isEmpty) return;
                   final playlist = await provider.createPlaylist(name);
                   await provider.addToPlaylist(playlist.id, item);

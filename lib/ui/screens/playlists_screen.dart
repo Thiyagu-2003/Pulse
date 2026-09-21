@@ -50,7 +50,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final playerProvider = Provider.of<MusicPlayerProvider>(context);
+    final playerProvider = context.watch<MusicPlayerProvider>();
     final tabIndex = _tabIndex;
 
     return Scaffold(
@@ -67,7 +67,8 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               onPressed: () async {
                 final name = await promptForPlaylistName(context);
                 if (name == null || name.isEmpty) return;
-                await playerProvider.createPlaylist(name);
+                if (!context.mounted) return;
+                await context.read<MusicPlayerProvider>().createPlaylist(name);
               },
             ),
         ],
@@ -227,8 +228,27 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
       return _buildEmpty(
         Icons.queue_music,
         _query.isEmpty
-            ? 'No playlists yet.\nTap + to create one.'
+            ? 'No playlists yet.'
             : 'No playlists match your search.',
+        action: _query.isEmpty
+            ? ElevatedButton.icon(
+                onPressed: () async {
+                  final provider = context.read<MusicPlayerProvider>();
+                  final name = await promptForPlaylistName(context);
+                  if (name == null || name.isEmpty) return;
+                  await provider.createPlaylist(name);
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Create Playlist'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accent,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              )
+            : null,
       );
     }
 
@@ -372,7 +392,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     );
   }
 
-  Widget _buildEmpty(IconData icon, String message) {
+  Widget _buildEmpty(IconData icon, String message, {Widget? action}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -386,6 +406,10 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16, color: Colors.white60),
             ),
+            if (action != null) ...[
+              const SizedBox(height: 20),
+              action,
+            ],
           ],
         ),
       ),

@@ -5,7 +5,6 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'package:newpipeextractor_dart/newpipeextractor_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/media_item_model.dart';
-import '../util/first_success.dart';
 
 class YoutubeService {
   // Shared instance: the audio handler, the provider and the search screen all
@@ -112,8 +111,11 @@ class YoutubeService {
     }
   }
 
-  /// How long NewPipe gets on its own before the slower extractor joins in.
-  static const Duration _headStart = Duration(seconds: 3);
+
+  /// Invalidate cached stream URL (e.g., if playback fails with 403)
+  void invalidateStreamUrl(String videoId) {
+    _streamCache.remove(videoId);
+  }
 
   /// Get direct playable audio stream URL — tries multiple strategies
   Future<String?> getAudioStreamUrl(String videoId) async {
@@ -124,20 +126,20 @@ class YoutubeService {
       return cached.url;
     }
 
-    // 2. NewPipe is native and usually fastest, so give it a short head start
-    // by itself rather than firing two extractors at YouTube for every track.
-    final newPipe = _tryNewPipeExtractor(videoId);
-    final quick = await newPipe.timeout(_headStart, onTimeout: () => null);
-    if (quick != null) {
-      debugPrint('✅ NewPipe Extractor success for $videoId');
-      return _remember(videoId, quick);
+    // 2. youtube_explode handles signature and n-parameter deciphering required by
+    // YouTube's Googlevideo CDN to prevent HTTP 403 Forbidden errors on ExoPlayer.
+    final explodeUrl = await _tryYoutubeExplode(videoId);
+    if (explodeUrl != null) {
+      debugPrint('✅ youtube_explode success for $videoId');
+      return _remember(videoId, explodeUrl);
     }
 
-    // 3. Slow or failed — race the still-running NewPipe against
-    // youtube_explode instead of waiting out NewPipe's full timeout first,
-    // which used to make a failure cost 10s before the fallback even started.
-    final url = await firstSuccess([newPipe, _tryYoutubeExplode(videoId)]);
-    if (url != null) return _remember(videoId, url);
+    // 3. Fallback to NewPipe extractor
+    final newPipeUrl = await _tryNewPipeExtractor(videoId);
+    if (newPipeUrl != null) {
+      debugPrint('✅ NewPipe Extractor fallback for $videoId');
+      return _remember(videoId, newPipeUrl);
+    }
 
     debugPrint('❌ All extraction methods failed for $videoId');
     return null;
@@ -186,18 +188,96 @@ class YoutubeService {
 
 
 
-  /// Download YouTube audio stream locally for offline listening using
-  /// youtube_explode. [onProgress] reports 0.0–1.0 when the total size is
+  /// Download YouTube audio stream locally for offline listening.
+  /// Tries NewPipe first (faster, more reliable on Android), then falls back
+  /// to youtube_explode. [onProgress] reports 0.0–1.0 when the total size is
   /// known, so the UI can show a real bar rather than a spinner.
   Future<String?> downloadAudioTrack(
     AppMediaItem item, {
     void Function(double)? onProgress,
   }) async {
     try {
-      final manifest = await _yt.videos.streamsClient.getManifest(item.id).timeout(
-        const Duration(seconds: 15),
+      final dir = await getApplicationDocumentsDirectory();
+      final cleanTitle = item.title.replaceAll(RegExp(r'[^\w\s\-]'), '_');
+
+      // 1. Try NewPipe — it's native Android and usually works when
+      //    youtube_explode's parser is out of date.
+      final newPipePath = await _downloadViaNewPipe(
+        item, dir.path, cleanTitle, onProgress,
       );
-      
+      if (newPipePath != null) return newPipePath;
+
+      // 2. Fall back to youtube_explode
+      return await _downloadViaExplode(
+        item, dir.path, cleanTitle, onProgress,
+      );
+    } catch (e) {
+      debugPrint('Download error: $e');
+      return null;
+    }
+  }
+
+  /// Download using NewPipe extractor (Android-native, faster).
+  Future<String?> _downloadViaNewPipe(
+    AppMediaItem item,
+    String dirPath,
+    String cleanTitle,
+    void Function(double)? onProgress,
+  ) async {
+    try {
+      final video = await VideoExtractor.getStream(
+        'https://www.youtube.com/watch?v=${item.id}',
+      ).timeout(const Duration(seconds: 15));
+
+      final bestAudio = video.audioWithBestAacQuality ??
+          video.audioWithHighestQuality;
+      if (bestAudio?.url == null) return null;
+
+      final url = bestAudio!.url!;
+      final ext = (bestAudio.formatSuffix ?? 'm4a')
+          .replaceAll('.', '');
+      final file = File('$dirPath/${cleanTitle}_${item.id}.$ext');
+
+      // Download the stream using http
+      final request = await HttpClient().getUrl(Uri.parse(url));
+      final response = await request.close();
+      final total = response.contentLength;
+      final sink = file.openWrite();
+      var received = 0;
+
+      try {
+        await for (final chunk in response) {
+          sink.add(chunk);
+          received += chunk.length;
+          if (total > 0) onProgress?.call(received / total);
+        }
+        await sink.flush();
+        await sink.close();
+      } catch (_) {
+        await sink.close().catchError((_) {});
+        if (await file.exists()) await file.delete();
+        rethrow;
+      }
+
+      return file.path;
+    } catch (e) {
+      debugPrint('NewPipe download failed: $e');
+      return null;
+    }
+  }
+
+  /// Download using youtube_explode (slower but more portable).
+  Future<String?> _downloadViaExplode(
+    AppMediaItem item,
+    String dirPath,
+    String cleanTitle,
+    void Function(double)? onProgress,
+  ) async {
+    try {
+      final manifest = await _yt.videos.streamsClient
+          .getManifest(item.id)
+          .timeout(const Duration(seconds: 15));
+
       // Audio only — a video stream is never fetched or written to disk.
       final audioStreamInfo = _bestAudioStream(manifest);
       if (audioStreamInfo == null) {
@@ -205,14 +285,9 @@ class YoutubeService {
         return null;
       }
 
-      final dir = await getApplicationDocumentsDirectory();
-      final cleanTitle = item.title.replaceAll(RegExp(r'[^\w\s\-]'), '_');
-      // Name the file after what is actually in it. The extension used to be
-      // hardcoded .m4a while the bytes were usually Opus-in-WebM, producing a
-      // mislabelled file that iOS can't open and the media scanner misreads.
-      // Include the video id: different videos can clean down to the same title.
+      // Name the file after what is actually in it.
       final file = File(
-        '${dir.path}/${cleanTitle}_${item.id}.${_extensionFor(audioStreamInfo)}',
+        '$dirPath/${cleanTitle}_${item.id}.${_extensionFor(audioStreamInfo)}',
       );
 
       // Written chunk by chunk rather than piped, so progress can be
@@ -223,7 +298,8 @@ class YoutubeService {
       var received = 0;
 
       try {
-        await for (final chunk in _yt.videos.streamsClient.get(audioStreamInfo)) {
+        await for (final chunk
+            in _yt.videos.streamsClient.get(audioStreamInfo)) {
           sink.add(chunk);
           received += chunk.length;
           if (total > 0) onProgress?.call(received / total);
@@ -239,7 +315,7 @@ class YoutubeService {
 
       return file.path;
     } catch (e) {
-      debugPrint('Download error: $e');
+      debugPrint('youtube_explode download failed: $e');
       return null;
     }
   }
