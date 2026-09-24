@@ -6,6 +6,7 @@ import 'package:newpipeextractor_dart/newpipeextractor_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/media_item_model.dart';
 import 'storage_service.dart';
+import '../util/first_success.dart';
 
 class YoutubeService {
   // Shared instance: the audio handler, the provider and the search screen all
@@ -171,24 +172,36 @@ class YoutubeService {
   /// but answer the real GET with 403; the old chain only fell through to the
   /// next method when extraction *failed*, so a dead URL went straight to the
   /// player and nothing played.
+  ///
+  /// The two direct client calls are cheap (~200ms each) and race each other,
+  /// so a dead URL from one costs nothing while the other is still going.
+  /// The slow paths — the watch page, and NewPipe's on-device JavaScript
+  /// deciphering — only run if both lose.
   Future<String?> _extract(String videoId) async {
-    final attempts = <(String, Future<String?> Function())>[
-      ('explode/androidSdkless',
-          () => _tryYoutubeExplode(videoId, YoutubeApiClient.androidSdkless)),
-      ('explode/android',
-          () => _tryYoutubeExplode(videoId, YoutubeApiClient.android)),
-      ('explode/watch page', () => _tryYoutubeExplode(videoId, null)),
-      ('NewPipe', () => _tryNewPipeExtractor(videoId)),
-    ];
-    for (final (name, attempt) in attempts) {
-      final url = await attempt();
-      if (url == null) continue;
+    Future<String?> verified(String name, Future<String?> candidate) async {
+      final url = await candidate;
+      if (url == null) return null;
       if (await _isPlayable(url)) {
         debugPrint('✅ $name gave a playable stream for $videoId');
-        return _remember(videoId, url);
+        return url;
       }
       debugPrint('⚠️ $name returned a dead stream URL for $videoId');
+      return null;
     }
+
+    final fast = await firstSuccess([
+      verified('explode/androidSdkless',
+          _tryYoutubeExplode(videoId, YoutubeApiClient.androidSdkless)),
+      verified('explode/android',
+          _tryYoutubeExplode(videoId, YoutubeApiClient.android)),
+    ]);
+    if (fast != null) return _remember(videoId, fast);
+
+    final slow = await verified('explode/watch page',
+            _tryYoutubeExplode(videoId, null)) ??
+        await verified('NewPipe', _tryNewPipeExtractor(videoId));
+    if (slow != null) return _remember(videoId, slow);
+
     debugPrint('❌ All extraction methods failed for $videoId');
     return null;
   }
