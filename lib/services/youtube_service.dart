@@ -19,6 +19,10 @@ class YoutubeService {
   final YoutubeExplode _yt = YoutubeExplode();
   final Map<String, _CachedStream> _streamCache = {};
 
+  /// Extractions in progress. Prefetch starts one, then the user taps the
+  /// same track: without this they ran two full extractions side by side.
+  final Map<String, Future<String?>> _inFlight = {};
+
   /// Search for music tracks.
   ///
   /// NewPipe runs first. youtube_explode's search parser no longer matches
@@ -30,14 +34,47 @@ class YoutubeService {
   ///
   /// It stays as a fallback: NewPipe is Android-only, and upstream may fix
   /// the parser later.
-  Future<List<AppMediaItem>> searchMusic(String query) async {
+  ///
+  /// [prefetch] resolves the top results' streams in the background, which
+  /// suits a search the user is about to pick from — but not the home page,
+  /// where a dozen sections would start dozens of extractions.
+  Future<List<AppMediaItem>> searchMusic(
+    String query, {
+    bool prefetch = true,
+  }) async {
     final viaNewPipe = await _searchWithNewPipe(query);
-    if (viaNewPipe.isNotEmpty) {
-      _prefetchStreams(viaNewPipe.take(3).map((e) => e.id).toList());
-      return viaNewPipe;
-    }
-    return _searchWithExplode(query);
+    final results =
+        viaNewPipe.isNotEmpty ? viaNewPipe : await _searchWithExplode(query);
+    if (prefetch) _prefetchStreams(results.take(3).map((e) => e.id).toList());
+    return results;
   }
+
+  final Map<String, Future<List<AppMediaItem>>> _searchCache = {};
+
+  /// Search results kept for the session, so home sections don't reload
+  /// every time they scroll back into view or the tab is revisited. Failed or
+  /// empty searches are forgotten, so they can be retried.
+  Future<List<AppMediaItem>> cachedSearch(String query) =>
+      _searchCache[query] ??= searchMusic(query, prefetch: false).then(
+        (results) {
+          if (results.isEmpty) _searchCache.remove(query);
+          return results;
+        },
+        onError: (Object e) {
+          _searchCache.remove(query);
+          throw e;
+        },
+      );
+
+  void clearSearchCache() => _searchCache.clear();
+
+  @visibleForTesting
+  void seedSearch(String query, List<AppMediaItem> results) =>
+      _searchCache[query] = Future.value(results);
+
+  /// Forget every resolved stream URL — "Clear stream cache" in Settings,
+  /// and after the audio quality changes.
+  void clearStreamCache() => _streamCache.clear();
 
   /// Native Android search through the NewPipe extractor.
   Future<List<AppMediaItem>> _searchWithNewPipe(String query) async {
@@ -96,9 +133,6 @@ class YoutubeService {
         );
       }
 
-      // Pre-fetch stream URLs in background for top 3 results
-      _prefetchStreams(items.take(3).map((e) => e.id).toList());
-
       return items;
     } catch (e) {
       debugPrint('YouTube search error: $e');
@@ -126,24 +160,55 @@ class YoutubeService {
       debugPrint('✅ Cache hit for $videoId');
       return cached.url;
     }
+    return _inFlight[videoId] ??=
+        _extract(videoId).whenComplete(() => _inFlight.remove(videoId));
+  }
 
-    // 2. youtube_explode handles signature and n-parameter deciphering required by
-    // YouTube's Googlevideo CDN to prevent HTTP 403 Forbidden errors on ExoPlayer.
-    final explodeUrl = await _tryYoutubeExplode(videoId);
-    if (explodeUrl != null) {
-      debugPrint('✅ youtube_explode success for $videoId');
-      return _remember(videoId, explodeUrl);
+  /// Tries each way of getting a stream URL until one actually plays.
+  ///
+  /// Every candidate is checked with a two-byte request first. YouTube
+  /// intermittently hands out URLs that pass youtube_explode's own HEAD check
+  /// but answer the real GET with 403; the old chain only fell through to the
+  /// next method when extraction *failed*, so a dead URL went straight to the
+  /// player and nothing played.
+  Future<String?> _extract(String videoId) async {
+    final attempts = <(String, Future<String?> Function())>[
+      ('explode/androidSdkless',
+          () => _tryYoutubeExplode(videoId, YoutubeApiClient.androidSdkless)),
+      ('explode/android',
+          () => _tryYoutubeExplode(videoId, YoutubeApiClient.android)),
+      ('explode/watch page', () => _tryYoutubeExplode(videoId, null)),
+      ('NewPipe', () => _tryNewPipeExtractor(videoId)),
+    ];
+    for (final (name, attempt) in attempts) {
+      final url = await attempt();
+      if (url == null) continue;
+      if (await _isPlayable(url)) {
+        debugPrint('✅ $name gave a playable stream for $videoId');
+        return _remember(videoId, url);
+      }
+      debugPrint('⚠️ $name returned a dead stream URL for $videoId');
     }
-
-    // 3. Fallback to NewPipe extractor
-    final newPipeUrl = await _tryNewPipeExtractor(videoId);
-    if (newPipeUrl != null) {
-      debugPrint('✅ NewPipe Extractor fallback for $videoId');
-      return _remember(videoId, newPipeUrl);
-    }
-
     debugPrint('❌ All extraction methods failed for $videoId');
     return null;
+  }
+
+  /// A real two-byte GET — not HEAD, which is exactly what passes on URLs
+  /// that then refuse to stream.
+  static Future<bool> _isPlayable(String url) async {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      request.headers.set(HttpHeaders.rangeHeader, 'bytes=0-1');
+      final response =
+          await request.close().timeout(const Duration(seconds: 6));
+      await response.drain<void>();
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   String _remember(String videoId, String url) {
@@ -175,19 +240,46 @@ class YoutubeService {
   }
 
   /// Client-side InnerTube extraction via youtube_explode_dart (slowest but most reliable)
-  Future<String?> _tryYoutubeExplode(String videoId) async {
+  /// [client] null means youtube_explode's default path, which also
+  /// downloads the watch page — slower, but it sometimes gets through when
+  /// the direct client calls don't.
+  Future<String?> _tryYoutubeExplode(
+    String videoId,
+    YoutubeApiClient? client,
+  ) async {
     try {
-      final manifest = await _yt.videos.streamsClient.getManifest(videoId).timeout(
-        const Duration(seconds: 15), // Give it more time on mobile
-      );
-      return _bestAudioStream(manifest)?.url.toString();
+      final streams = _yt.videos.streamsClient;
+      final manifest = client == null
+          ? await streams.getManifest(videoId).timeout(const Duration(seconds: 15))
+          : await streams
+              .getManifest(videoId, ytClients: [client], requireWatchPage: false)
+              .timeout(const Duration(seconds: 8));
+      final quality = StorageService().getAudioQuality();
+      return _audioStreamFor(manifest, quality)?.url.toString();
     } catch (e) {
-      debugPrint('youtube_explode failed for $videoId: $e');
+      debugPrint('youtube_explode (${client == null ? 'watch page' : 'direct'}) failed for $videoId: $e');
     }
     return null;
   }
 
 
+
+
+  /// By default youtube_explode first downloads and parses the whole watch
+  /// page (~1MB of HTML) before the player API call. With no JS challenge
+  /// solver configured that page only supplies cookies, so try without it
+  /// first and fall back to the full path only if YouTube insists.
+  Future<StreamManifest> _getManifest(String videoId) async {
+    final client = _yt.videos.streamsClient;
+    try {
+      return await client
+          .getManifest(videoId, requireWatchPage: false)
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('Fast manifest failed for $videoId, retrying with watch page: $e');
+      return client.getManifest(videoId).timeout(const Duration(seconds: 15));
+    }
+  }
 
   /// Download YouTube audio stream locally for offline listening.
   /// Tries NewPipe first (faster, more reliable on Android), then falls back
@@ -198,10 +290,8 @@ class YoutubeService {
     if (customPath != null && customPath.isNotEmpty) {
       try {
         final customDir = Directory(customPath);
-        if (!await customDir.exists()) {
-          await customDir.create(recursive: true);
-        }
-        return customDir;
+        if (await isWritableDirectory(customDir)) return customDir;
+        debugPrint('Custom download dir not writable, using default');
       } catch (e) {
         debugPrint('Custom download dir invalid, falling back to default: $e');
       }
@@ -228,6 +318,21 @@ class YoutubeService {
       }
     }
     return await getApplicationDocumentsDirectory();
+  }
+
+  /// Whether files can actually be written into [dir]. Under Android 11+
+  /// scoped storage a folder from the picker usually exists but rejects
+  /// direct File writes, so exists() alone says nothing.
+  static Future<bool> isWritableDirectory(Directory dir) async {
+    try {
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final probe = File('${dir.path}/.pulse_write_test');
+      await probe.writeAsString('');
+      await probe.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<String?> downloadAudioTrack(
@@ -275,7 +380,8 @@ class YoutubeService {
       final file = File('$dirPath/${cleanTitle}_${item.id}.$ext');
 
       // Download the stream using HttpClient with browser headers to bypass CDN throttling
-      final request = await HttpClient().getUrl(Uri.parse(url));
+      final client = HttpClient();
+      final request = await client.getUrl(Uri.parse(url));
       request.headers.set(
         HttpHeaders.userAgentHeader,
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -300,6 +406,8 @@ class YoutubeService {
         await sink.close().catchError((_) {});
         if (await file.exists()) await file.delete();
         rethrow;
+      } finally {
+        client.close();
       }
 
       return file.path;
@@ -317,9 +425,7 @@ class YoutubeService {
     void Function(double)? onProgress,
   ) async {
     try {
-      final manifest = await _yt.videos.streamsClient
-          .getManifest(item.id)
-          .timeout(const Duration(seconds: 15));
+      final manifest = await _getManifest(item.id);
 
       // Audio only — a video stream is never fetched or written to disk.
       final audioStreamInfo = _bestAudioStream(manifest);
@@ -384,14 +490,25 @@ class YoutubeService {
         : streams.withHighestBitrate();
   }
 
+  /// The stream to *play* at the chosen quality. Downloads stay on
+  /// [_bestAudioStream].
+  AudioOnlyStreamInfo? _audioStreamFor(
+    StreamManifest manifest,
+    AudioQuality quality,
+  ) {
+    final streams = manifest.audioOnly;
+    if (streams.isEmpty) return null;
+    return switch (quality) {
+      AudioQuality.dataSaver => streams.sortByBitrate().last,
+      AudioQuality.balanced => _bestAudioStream(manifest),
+      AudioQuality.best => streams.withHighestBitrate(),
+    };
+  }
+
   /// File extension matching the stream's real container.
   String _extensionFor(AudioOnlyStreamInfo stream) =>
       stream.container == StreamContainer.mp4 ? 'm4a' : stream.container.name;
 
-  /// Get curated trending music tracks
-  Future<List<AppMediaItem>> getTrendingMusic() async {
-    return searchMusic('top hits 2024 2025 official audio');
-  }
 }
 
 /// Cached stream URL with 30-minute expiry (YouTube URLs expire)

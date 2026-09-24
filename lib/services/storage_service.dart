@@ -4,6 +4,23 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/media_item_model.dart';
 import '../models/playlist.dart';
 
+/// Which YouTube audio stream to play. Downloads always keep AAC in MP4,
+/// which is the safest thing to leave on disk.
+enum AudioQuality {
+  /// Lowest bitrate stream, around 50 kbps.
+  dataSaver('Data saver', 'About 50 kbps — least mobile data'),
+
+  /// AAC, about 128 kbps.
+  balanced('Balanced', 'About 128 kbps'),
+
+  /// Highest bitrate on offer, usually Opus at about 160 kbps.
+  best('Best available', 'Up to 160 kbps');
+
+  const AudioQuality(this.label, this.detail);
+  final String label;
+  final String detail;
+}
+
 class StorageService {
   static const String favoritesBox = 'favorites';
   static const String historyBox = 'history';
@@ -12,6 +29,11 @@ class StorageService {
   static const String downloadsBox = 'downloads';
   static const String settingsBox = 'settings';
   static const String customDownloadPathKey = 'custom_download_path';
+  static const String homeLanguageKey = 'home_language';
+  static const String audioQualityKey = 'audio_quality';
+  static const String recentSearchesKey = 'recent_searches';
+  static const String defaultHomeLanguage = 'Tamil';
+  static const int recentSearchLimit = 10;
   static const int historyLimit = 200;
 
   Future<void> init() async {
@@ -36,6 +58,48 @@ class StorageService {
       await _settingsBox.put(customDownloadPathKey, path);
     }
   }
+
+  /// Home page language; null means no language rows. Stored as '' for null
+  /// so "none" survives distinct from "never chosen".
+  String? getHomeLanguage() {
+    final stored = _settingsBox.get(homeLanguageKey);
+    if (stored == null) return defaultHomeLanguage;
+    return stored.isEmpty ? null : stored;
+  }
+
+  Future<void> setHomeLanguage(String? language) =>
+      _settingsBox.put(homeLanguageKey, language ?? '');
+
+  AudioQuality getAudioQuality() => AudioQuality.values.firstWhere(
+        (q) => q.name == _settingsBox.get(audioQualityKey),
+        orElse: () => AudioQuality.balanced,
+      );
+
+  Future<void> setAudioQuality(AudioQuality quality) =>
+      _settingsBox.put(audioQualityKey, quality.name);
+
+  List<String> getRecentSearches() {
+    final stored = _settingsBox.get(recentSearchesKey);
+    if (stored == null) return [];
+    try {
+      return (jsonDecode(stored) as List).cast<String>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Most recent first, no repeats (ignoring case), capped.
+  Future<void> addRecentSearch(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return;
+    final recent = [
+      q,
+      ...getRecentSearches().where((s) => s.toLowerCase() != q.toLowerCase()),
+    ].take(recentSearchLimit).toList();
+    await _settingsBox.put(recentSearchesKey, jsonEncode(recent));
+  }
+
+  Future<void> clearRecentSearches() => _settingsBox.delete(recentSearchesKey);
 
   /// Downloads — kept separate from favorites. They answer different
   /// questions ("do I like this" vs "is this on disk") and downloads own a
@@ -131,17 +195,42 @@ class StorageService {
   /// History Management
   Box<String> get _histBox => Hive.box<String>(historyBox);
 
-  List<AppMediaItem> getHistory() => _decodeAll(_histBox).reversed.toList();
+  /// Most recent first. Hive keeps keys *sorted*, not in insertion order, so
+  /// recency has to be stored in the entry itself; entries written before
+  /// that carry no stamp and sort last.
+  List<AppMediaItem> getHistory() {
+    final entries = <(int, AppMediaItem)>[];
+    for (final str in _histBox.values) {
+      try {
+        final json = jsonDecode(str) as Map<String, dynamic>;
+        entries.add(((json['playedAt'] as int?) ?? 0, AppMediaItem.fromJson(json)));
+      } catch (e) {
+        debugPrint('Skipping corrupt history entry: $e');
+      }
+    }
+    entries.sort((a, b) => b.$1.compareTo(a.$1));
+    return [for (final e in entries) e.$2];
+  }
+
+  int get historyCount => _histBox.length;
+
+  Future<void> clearHistory() => _histBox.clear();
 
   Future<void> addToHistory(AppMediaItem item) async {
-    // Re-putting an existing key keeps its original insertion position, so a
-    // replayed track would never move to the top. Delete first.
-    await _histBox.delete(item.id);
-    await _histBox.put(item.id, jsonEncode(item.toJson()));
+    await _histBox.put(
+      item.id,
+      jsonEncode({
+        ...item.toJson(),
+        'playedAt': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
 
-    // Keep history bounded; Hive keys are returned in insertion order.
-    while (_histBox.length > historyLimit) {
-      await _histBox.delete(_histBox.keyAt(0));
+    // Keep history bounded by dropping the oldest plays.
+    if (_histBox.length > historyLimit) {
+      final keep = getHistory().take(historyLimit).map((t) => t.id).toSet();
+      await _histBox.deleteAll(
+        _histBox.keys.where((k) => !keep.contains(k)).toList(),
+      );
     }
   }
 

@@ -34,7 +34,11 @@ class PodcastService {
     try {
       final response = await http.get(Uri.parse(feedUrl)).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        final document = XmlDocument.parse(response.body);
+        // Many feeds omit the charset, and http then decodes as Latin-1,
+        // garbling every non-English title.
+        final document = XmlDocument.parse(
+          utf8.decode(response.bodyBytes, allowMalformed: true),
+        );
         final items = document.findAllElements('item');
         final List<PodcastEpisode> episodes = [];
 

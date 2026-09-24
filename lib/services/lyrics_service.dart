@@ -13,7 +13,7 @@ class LyricsService {
 
       final response = await http.get(url).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
         final result = _pickLyrics(data);
         if (result != null) return result;
       }
@@ -23,7 +23,7 @@ class LyricsService {
           'https://lrclib.net/api/search?q=${Uri.encodeComponent("$cleanArtist $cleanTitle")}');
       final searchRes = await http.get(searchUrl).timeout(const Duration(seconds: 5));
       if (searchRes.statusCode == 200) {
-        final List searchData = jsonDecode(searchRes.body);
+        final List searchData = jsonDecode(utf8.decode(searchRes.bodyBytes));
         if (searchData.isNotEmpty) {
           return _pickLyrics(searchData.first);
         }
@@ -51,7 +51,8 @@ class LyricsService {
   String _cleanQuery(String input) {
     return input
         .replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), '')
-        .replaceAll(RegExp(r'Official Video|Official Audio|Lyric Video|HD|HQ|Audio|Video|MV',
+        // Whole words only: "Audioslave" and "HDMI" are not noise.
+        .replaceAll(RegExp(r'(Official Video|Official Audio|Lyric Video|HD|HQ|Audio|Video|MV)',
             caseSensitive: false), '')
         .trim();
   }

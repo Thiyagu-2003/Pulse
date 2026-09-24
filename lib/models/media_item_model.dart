@@ -57,10 +57,12 @@ class AppMediaItem {
       artist: artist,
       duration: duration,
       artUri: artUri != null && artUri!.isNotEmpty ? Uri.tryParse(artUri!) : null,
+      // Canonical fields last: extras copied from an earlier MediaItem carry
+      // their own stale 'streamUrl', which must not override the resolved one.
       extras: {
+        ...?extras,
         'sourceType': sourceType.name,
         'streamUrl': streamUrl,
-        ...?extras,
       },
     );
   }

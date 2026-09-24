@@ -8,6 +8,7 @@ import '../../models/playback_mode.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
+import '../widgets/track_tile.dart';
 import 'dart:async';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -21,7 +22,6 @@ class NowPlayingScreen extends StatefulWidget {
 class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _showLyrics = false;
   double? _dragMs;
-  double _playbackSpeed = 1.0;
   bool _isVideoMode = false;
   YoutubePlayerController? _youtubeController;
   StreamSubscription? _playbackSubscription;
@@ -86,6 +86,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       if (!mounted || !_isVideoMode || controller == null) return;
       if (!controller.value.isReady) return;
 
+      // The picture must run at the audio's speed, or at 1.5x it falls
+      // behind and gets re-seeked every couple of seconds.
+      final speed = provider.audioHandler.player.speed;
+      if (controller.value.playbackRate != speed) {
+        controller.setPlaybackRate(speed);
+      }
+
       final isPlaying = provider.audioHandler.player.playing;
       if (isPlaying != controller.value.isPlaying) {
         isPlaying ? controller.play() : controller.pause();
@@ -108,6 +115,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   @override
   Widget build(BuildContext context) {
     final playerProvider = Provider.of<MusicPlayerProvider>(context);
+    // Read from the player: it outlives this screen, so a copy in widget
+    // state showed "1.0x" on reopen while audio kept playing at 1.5x.
+    final playbackSpeed = playerProvider.audioHandler.player.speed;
     final track = playerProvider.currentTrack;
 
     if (track == null) {
@@ -339,6 +349,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           ],
                         ),
                       ),
+                      // A track played from its download is a local copy of
+                      // an online one; show its state so it can be removed.
+                      if (track.sourceType == MediaSourceType.youtube ||
+                          playerProvider.isDownloaded(track.id))
+                        DownloadButton(item: track, size: 26),
                       IconButton(
                         icon: Icon(
                           isFav ? Icons.favorite : Icons.favorite_border,
@@ -386,10 +401,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               // Seek once on release; seeking on every drag
                               // frame floods the player and stutters.
                               onChanged: (val) => setState(() => _dragMs = val),
-                              onChangeEnd: (val) {
-                                setState(() => _dragMs = null);
-                                playerProvider.audioHandler
+                              // Hold the thumb where it was dropped until the
+                              // seek lands, or it snaps back for a frame.
+                              onChangeEnd: (val) async {
+                                await playerProvider.audioHandler
                                     .seek(Duration(milliseconds: val.toInt()));
+                                if (mounted) setState(() => _dragMs = null);
                               },
                             ),
                           ),
@@ -489,26 +506,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         children: [
                           IconButton(
                             icon: Text(
-                              '${_playbackSpeed}x',
+                              '${playbackSpeed}x',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.accent,
                               ),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                if (_playbackSpeed == 1.0) {
-                                  _playbackSpeed = 1.25;
-                                } else if (_playbackSpeed == 1.25) {
-                                  _playbackSpeed = 1.5;
-                                } else if (_playbackSpeed == 1.5) {
-                                  _playbackSpeed = 2.0;
-                                } else {
-                                  _playbackSpeed = 1.0;
-                                }
-                              });
-                              playerProvider.audioHandler.setSpeed(_playbackSpeed);
+                            onPressed: () async {
+                              const speeds = [1.0, 1.25, 1.5, 2.0];
+                              final next = speeds[
+                                  (speeds.indexOf(playbackSpeed) + 1) %
+                                      speeds.length];
+                              await playerProvider.audioHandler.setSpeed(next);
+                              if (mounted) setState(() {});
                             },
                           ),
 
@@ -699,13 +710,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     )
                   : ReorderableListView.builder(
                       itemCount: queueProvider.queue.length,
-                      onReorder: (int oldIndex, int newIndex) {
-                        // ReorderableListView reports newIndex as if the
-                        // dragged item is still in the list, so adjust when
-                        // moving downward.
-                        if (oldIndex < newIndex) newIndex -= 1;
-                        queueProvider.moveInQueue(oldIndex, newIndex);
-                      },
+                      // onReorderItem already reports newIndex as a
+                      // position in the final list, which moveInQueue expects.
+                      onReorderItem: queueProvider.moveInQueue,
                       itemBuilder: (_, index) {
                         final item = queueProvider.queue[index];
                         final isCurrent = index == queueProvider.currentIndex;
@@ -751,7 +758,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             ],
                           ),
                           onTap: () {
-                            queueProvider.playTrack(item);
+                            queueProvider.playQueueItem(index);
                             Navigator.pop(context);
                           },
                         );

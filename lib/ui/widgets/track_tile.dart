@@ -46,7 +46,7 @@ class TrackTile extends StatelessWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         onTap: onTap ?? () => playerProvider.playTrack(item, playlist: playlist),
-        onLongPress: () => _showTrackActions(context, playerProvider),
+        onLongPress: () => showTrackActions(context, item),
         leading: Stack(
           alignment: Alignment.center,
           children: [
@@ -109,8 +109,10 @@ class TrackTile extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (item.sourceType != MediaSourceType.local)
-              _buildDownloadButton(context, playerProvider),
+            // Downloads go through YouTube extraction; a podcast id is a
+            // hash of its URL, so that could only ever fail.
+            if (item.sourceType == MediaSourceType.youtube)
+              DownloadButton(item: item),
             IconButton(
               // Scales up as it fills in, so the tap has a result you can see
               // without moving your eyes to a toast.
@@ -138,139 +140,6 @@ class TrackTile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Widget _buildDownloadButton(
-    BuildContext context,
-    MusicPlayerProvider provider,
-  ) {
-    if (provider.isDownloading(item.id)) {
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: AppTheme.accent,
-            // Null until the first chunk arrives, so it spins rather than
-            // sitting at a dead 0%.
-            value: provider.downloadProgress(item.id),
-          ),
-        ),
-      );
-    }
-
-    if (provider.isDownloaded(item.id)) {
-      return IconButton(
-        icon: const Icon(
-          Icons.download_done_rounded,
-          color: AppTheme.accent,
-          size: 20,
-        ),
-        tooltip: 'Downloaded — tap to remove',
-        onPressed: () async {
-          final messenger = ScaffoldMessenger.of(context);
-          await provider.deleteDownload(item);
-          messenger
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                content: Text('Removed download: ${item.title}'),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-        },
-      );
-    }
-
-    return IconButton(
-      icon: const Icon(Icons.download_rounded, color: Colors.white54, size: 20),
-      tooltip: 'Download for offline',
-      onPressed: () async {
-        final messenger = ScaffoldMessenger.of(context);
-        final path = await provider.downloadTrack(item);
-        // A failed download used to leave the user with a spinner that just
-        // vanished, with no explanation.
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(path != null
-                  ? 'Downloaded "${item.title}" for offline playback!'
-                  : 'Could not download "${item.title}". Check your connection and try again.'),
-              backgroundColor:
-                  path != null ? AppTheme.primary : Colors.redAccent,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-      },
-    );
-  }
-
-  void _showTrackActions(BuildContext context, MusicPlayerProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                item.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.playlist_play_rounded, color: AppTheme.accent),
-              title: const Text('Play next'),
-              onTap: () {
-                provider.playNext(item);
-                Navigator.pop(sheetContext);
-                _confirm(context, 'Playing next: ${item.title}');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.queue_music_rounded, color: AppTheme.accent),
-              title: const Text('Add to queue'),
-              onTap: () {
-                provider.addToQueue(item);
-                Navigator.pop(sheetContext);
-                _confirm(context, 'Added to queue: ${item.title}');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.playlist_add_rounded, color: AppTheme.accent),
-              title: const Text('Add to playlist'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                showAddToPlaylistSheet(context, item);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _confirm(BuildContext context, String message) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
-          duration: const Duration(milliseconds: 1500),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
   }
 
   Widget _buildPlaceholder() {
@@ -311,6 +180,186 @@ class TrackTile extends StatelessWidget {
         label,
         style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: color),
       ),
+    );
+  }
+}
+
+/// Play next / add to queue / add to playlist / download for [item] — the
+/// long-press menu on a track tile, and the ⋮ menu on home rows.
+void showTrackActions(BuildContext context, AppMediaItem item) {
+  final provider = context.read<MusicPlayerProvider>();
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppTheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              item.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.playlist_play_rounded, color: AppTheme.accent),
+            title: const Text('Play next'),
+            onTap: () {
+              final added = provider.playNext(item);
+              Navigator.pop(sheetContext);
+              _confirm(context, added
+                  ? 'Playing next: ${item.title}'
+                  : 'Already playing: ${item.title}');
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.queue_music_rounded, color: AppTheme.accent),
+            title: const Text('Add to queue'),
+            onTap: () {
+              final added = provider.addToQueue(item);
+              Navigator.pop(sheetContext);
+              _confirm(context, added
+                  ? 'Added to queue: ${item.title}'
+                  : 'Already playing: ${item.title}');
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.playlist_add_rounded, color: AppTheme.accent),
+            title: const Text('Add to playlist'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              showAddToPlaylistSheet(context, item);
+            },
+          ),
+          if (item.sourceType == MediaSourceType.youtube)
+            provider.isDownloaded(item.id)
+                ? ListTile(
+                    leading: const Icon(Icons.download_done_rounded,
+                        color: AppTheme.accent),
+                    title: const Text('Remove download'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      removeDownload(context, item);
+                    },
+                  )
+                : ListTile(
+                    leading: const Icon(Icons.download_rounded,
+                        color: AppTheme.accent),
+                    title: Text(provider.isDownloading(item.id)
+                        ? 'Downloading…'
+                        : 'Download'),
+                    enabled: !provider.isDownloading(item.id),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      startDownload(context, item);
+                    },
+                  ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _confirm(BuildContext context, String message) {
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
+        duration: const Duration(milliseconds: 1500),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+}
+
+/// Download [item] and say how it went. A failed download used to leave the
+/// user with a spinner that just vanished, with no explanation.
+Future<void> startDownload(BuildContext context, AppMediaItem item) async {
+  final provider = context.read<MusicPlayerProvider>();
+  if (provider.isDownloading(item.id)) return;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text('Downloading "${item.title}"…'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  final path = await provider.downloadTrack(item);
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(path != null
+            ? 'Downloaded "${item.title}" for offline playback!'
+            : 'Could not download "${item.title}". Check your connection and try again.'),
+        backgroundColor: path != null ? AppTheme.primary : Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+}
+
+Future<void> removeDownload(BuildContext context, AppMediaItem item) async {
+  final messenger = ScaffoldMessenger.of(context);
+  await context.read<MusicPlayerProvider>().deleteDownload(item);
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text('Removed download: ${item.title}'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+}
+
+/// Download / progress / downloaded toggle for one track.
+class DownloadButton extends StatelessWidget {
+  final AppMediaItem item;
+  final double size;
+  const DownloadButton({super.key, required this.item, this.size = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<MusicPlayerProvider>();
+
+    if (provider.isDownloading(item.id)) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: size - 2,
+          height: size - 2,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppTheme.accent,
+            // Null until the first chunk arrives, so it spins rather than
+            // sitting at a dead 0%.
+            value: provider.downloadProgress(item.id),
+          ),
+        ),
+      );
+    }
+
+    if (provider.isDownloaded(item.id)) {
+      return IconButton(
+        icon: Icon(Icons.download_done_rounded, color: AppTheme.accent, size: size),
+        tooltip: 'Downloaded — tap to remove',
+        onPressed: () => removeDownload(context, item),
+      );
+    }
+
+    return IconButton(
+      icon: Icon(Icons.download_rounded, color: Colors.white54, size: size),
+      tooltip: 'Download for offline',
+      onPressed: () => startDownload(context, item),
     );
   }
 }

@@ -21,6 +21,8 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
 
   List<PodcastChannel> _channels = [];
   bool _isLoading = true;
+  // Bumped per request; a slower earlier response must not overwrite a newer one.
+  int _request = 0;
 
   @override
   void initState() {
@@ -30,8 +32,9 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
 
   Future<void> _loadTopPodcasts() async {
     setState(() => _isLoading = true);
+    final request = ++_request;
     final results = await _podcastService.getTopPodcasts();
-    if (mounted) {
+    if (mounted && request == _request) {
       setState(() {
         _channels = results;
         _isLoading = false;
@@ -42,8 +45,9 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
   Future<void> _searchPodcasts(String query) async {
     if (query.trim().isEmpty) return;
     setState(() => _isLoading = true);
+    final request = ++_request;
     final results = await _podcastService.searchPodcasts(query);
-    if (mounted) {
+    if (mounted && request == _request) {
       setState(() {
         _channels = results;
         _isLoading = false;

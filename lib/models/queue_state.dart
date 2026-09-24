@@ -118,17 +118,44 @@ class QueueState {
     return wasCurrent;
   }
 
-  /// Queue [item] directly after whatever is playing.
-  void insertNext(AppMediaItem item) {
+  /// Make the queue row at [index] current. Tapping a row in the queue sheet
+  /// must play *that* row, which a lookup by id can't promise.
+  AppMediaItem? selectAt(int index) {
+    if (index < 0 || index >= _items.length) return null;
+    _currentIndex = index;
+    _orderPos = _order.indexOf(index);
+    return _items[index];
+  }
+
+  /// The queue never holds the same track twice: two copies both highlight as
+  /// playing and make next/previous look broken. Removes an existing copy of
+  /// [item] so it can be re-added; false when [item] is the track playing,
+  /// where re-queueing it is a no-op.
+  bool _dropExisting(AppMediaItem item) {
+    final existing = _items.indexWhere((t) => t.id == item.id);
+    if (existing == -1) return true;
+    if (existing == _currentIndex) return false;
+    removeAt(existing);
+    return true;
+  }
+
+  /// Queue [item] directly after whatever is playing. False if it already is
+  /// the track playing.
+  bool insertNext(AppMediaItem item) {
+    if (!_dropExisting(item)) return false;
     final insertAt = _currentIndex + 1;
     _items.insert(insertAt, item);
     _order = orderAfterInsertion(_order, insertAt);
     _order.insert(_orderPos + 1, insertAt);
+    return true;
   }
 
-  void append(AppMediaItem item) {
+  /// Queue [item] last. False if it is the track playing.
+  bool append(AppMediaItem item) {
+    if (!_dropExisting(item)) return false;
     _items.add(item);
     _order.add(_items.length - 1);
+    return true;
   }
 
   /// Step to the next track, or null when playback should stop. [auto] marks

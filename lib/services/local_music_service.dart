@@ -9,7 +9,11 @@ class LocalMusicService {
 
   /// Request storage/audio permissions safely using permission_handler
   /// to avoid on_audio_query_pluse's "Reply already submitted" crash.
-  Future<bool> requestPermission() async {
+  ///
+  /// Once Android marks the permission permanently denied, request() returns
+  /// without showing anything; [openSettingsIfBlocked] sends the user to app
+  /// settings instead, so "Grant Access" isn't a dead button.
+  Future<bool> requestPermission({bool openSettingsIfBlocked = false}) async {
     try {
       await Permission.notification.request();
 
@@ -24,7 +28,13 @@ class LocalMusicService {
         if (reqAudio.isGranted) return true;
 
         final reqStorage = await Permission.storage.request();
-        return reqStorage.isGranted;
+        if (reqStorage.isGranted) return true;
+
+        if (openSettingsIfBlocked &&
+            (reqAudio.isPermanentlyDenied || reqStorage.isPermanentlyDenied)) {
+          await openAppSettings();
+        }
+        return false;
       }
       return true;
     } catch (e) {

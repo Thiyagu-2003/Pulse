@@ -1,10 +1,18 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
-import '../../services/youtube_service.dart';
+import 'package:provider/provider.dart';
+import '../../models/home_sections.dart';
 import '../../models/media_item_model.dart';
+import '../../providers/music_player_provider.dart';
+import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
+import 'online_search_screen.dart';
+import 'settings_screen.dart';
+import 'track_list_screen.dart';
 
+/// The Online tab: greeting, quick picks, language chips, then rows of songs
+/// and playlist cards for the chosen language.
 class OnlineMusicScreen extends StatefulWidget {
   const OnlineMusicScreen({super.key});
 
@@ -13,207 +21,576 @@ class OnlineMusicScreen extends StatefulWidget {
 }
 
 class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
-  final YoutubeService _ytService = YoutubeService();
-  final TextEditingController _searchController = TextEditingController();
+  /// Bumped by pull-to-refresh; part of the list key so every section
+  /// rebuilds and searches again.
+  int _refreshCount = 0;
 
-  static const String _trendingLabel = 'Trending';
-
-  List<AppMediaItem> _results = [];
-  bool _isLoading = false;
-  String _activeQuery = _trendingLabel;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTrending();
-  }
-
-  Future<void> _loadTrending() async {
-    setState(() {
-      _isLoading = true;
-      _activeQuery = _trendingLabel;
-    });
-    final items = await _ytService.getTrendingMusic();
-    if (mounted) {
-      setState(() {
-        _results = items;
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _performSearch(String query) async {
-    if (query.trim().isEmpty) return;
-    setState(() {
-      _isLoading = true;
-      _activeQuery = query;
-    });
-    final items = await _ytService.searchMusic(query);
-    if (mounted) {
-      setState(() {
-        _results = items;
-        _isLoading = false;
-      });
-    }
+  Future<void> _refresh() async {
+    YoutubeService().clearSearchCache();
+    setState(() => _refreshCount++);
   }
 
   @override
   Widget build(BuildContext context) {
+    final language =
+        context.select<MusicPlayerProvider, String?>((p) => p.homeLanguage);
+    final sections = homeSectionsFor(language);
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Online Music',
-          style: Theme.of(context).textTheme.displaySmall,
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          color: AppTheme.accent,
+          child: ListView(
+            key: ValueKey('$language/$_refreshCount'),
+            // Room for the floating mini player.
+            padding: const EdgeInsets.only(bottom: 110),
+            children: [
+              const _Header(),
+              _QuickPicks(fallbackQuery: sections.first.query),
+              _LanguageChips(selected: language),
+              for (final section in sections)
+                section.style == HomeSectionStyle.rows
+                    ? _RowsSection(section: section)
+                    : _CardsSection(section: section),
+            ],
+          ),
         ),
       ),
-      body: Column(
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+      child: Row(
         children: [
-          // Search Input Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.lift,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppTheme.mist.withValues(alpha: 0.07),
-                ),
-              ),
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(color: AppTheme.mist),
-                decoration: InputDecoration(
-                  hintText: 'Search songs, artists, videos',
-                  hintStyle: TextStyle(
-                    color: AppTheme.mist.withValues(alpha: 0.35),
-                    fontSize: 14,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    color: AppTheme.mist.withValues(alpha: 0.45),
-                    size: 20,
-                  ),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(
-                            Icons.clear_rounded,
-                            color: AppTheme.mist.withValues(alpha: 0.45),
-                            size: 18,
-                          ),
-                          onPressed: () {
-                            _searchController.clear();
-                            _loadTrending();
-                          },
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                // Without this the clear button never appears/disappears,
-                // since nothing else rebuilds as the field is typed into.
-                onChanged: (_) => setState(() {}),
-                onSubmitted: _performSearch,
-              ),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: AppTheme.waveGradient,
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white),
           ),
-
-          // Genre Pill Tags
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildGenreChip(_trendingLabel),
-                _buildGenreChip('Pop Music'),
-                _buildGenreChip('Hip Hop'),
-                _buildGenreChip('Lo-Fi Chill'),
-                _buildGenreChip('Rock & Metal'),
-                _buildGenreChip('EDM Beats'),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Search Header Label
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _activeQuery,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-          ),
-
-          // Track Results List
+          const SizedBox(width: 12),
           Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: SpinKitDoubleBounce(
-                      color: AppTheme.primary,
-                      size: 50.0,
-                    ),
-                  )
-                : _results.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No results found. Try a different search.',
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: _results.length,
-                        itemBuilder: (context, index) {
-                          final item = _results[index];
-                          return TrackTile(
-                            item: item,
-                            playlist: _results,
-                          );
-                        },
-                      ),
+            child: Text(
+              greetingFor(DateTime.now().hour),
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Search',
+            icon: const Icon(Icons.search_rounded, size: 26),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const OnlineSearchScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined, size: 26),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildGenreChip(String label) {
-    final isSelected = _activeQuery == label;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: isSelected,
-        showCheckmark: false,
-        selectedColor: AppTheme.primary,
-        backgroundColor: AppTheme.lift,
-        side: BorderSide(
-          color: isSelected
-              ? Colors.transparent
-              : AppTheme.mist.withValues(alpha: 0.07),
-        ),
-        shape: const StadiumBorder(),
-        labelStyle: TextStyle(
-          fontSize: 13,
-          color: isSelected ? AppTheme.mist : AppTheme.mist.withValues(alpha: 0.6),
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-        ),
-        // "Trending" has its own curated query — searching for the literal
-        // word returns unrelated videos.
-        onSelected: (_) =>
-            label == _trendingLabel ? _loadTrending() : _performSearch(label),
-      ),
+/// Two columns of recently played tracks. Before anything has been played,
+/// the top of the first section stands in so the page doesn't open empty.
+class _QuickPicks extends StatelessWidget {
+  final String fallbackQuery;
+  const _QuickPicks({required this.fallbackQuery});
+
+  @override
+  Widget build(BuildContext context) {
+    // Rebuilt when the playing track changes, which is when history grows.
+    context.select<MusicPlayerProvider, String?>((p) => p.currentTrack?.id);
+    final history =
+        context.read<MusicPlayerProvider>().getHistory().take(8).toList();
+    if (history.isNotEmpty) return _grid(history);
+
+    return FutureBuilder<List<AppMediaItem>>(
+      future: YoutubeService().cachedSearch(fallbackQuery),
+      builder: (context, snapshot) {
+        final items = (snapshot.data ?? const <AppMediaItem>[])
+            .where((t) => isSongLength(t.duration))
+            .take(8)
+            .toList();
+        return items.isEmpty ? const SizedBox(height: 8) : _grid(items);
+      },
     );
   }
 
+  Widget _grid(List<AppMediaItem> items) {
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 2) {
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Expanded(child: _QuickPickTile(item: items[i], playlist: items)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: i + 1 < items.length
+                  ? _QuickPickTile(item: items[i + 1], playlist: items)
+                  : const SizedBox(),
+            ),
+          ],
+        ),
+      ));
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(children: rows),
+    );
+  }
+}
+
+class _QuickPickTile extends StatelessWidget {
+  final AppMediaItem item;
+  final List<AppMediaItem> playlist;
+  const _QuickPickTile({required this.item, required this.playlist});
+
+  @override
+  Widget build(BuildContext context) {
+    final isCurrent = context.select<MusicPlayerProvider, bool>(
+      (p) => p.currentTrack?.id == item.id,
+    );
+    return Material(
+      color: AppTheme.lift,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context
+            .read<MusicPlayerProvider>()
+            .playTrack(item, playlist: playlist),
+        onLongPress: () => showTrackActions(context, item),
+        child: SizedBox(
+          height: 56,
+          child: Row(
+            children: [
+              _Artwork(url: item.artUri, size: 56, radius: 0),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isCurrent ? AppTheme.accent : AppTheme.mist,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Picking a chip is the same setting as "Home language" in Settings.
+class _LanguageChips extends StatelessWidget {
+  final String? selected;
+  const _LanguageChips({required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        itemCount: homeLanguages.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final language = homeLanguages[index];
+          final isSelected = language == selected;
+          return ChoiceChip(
+            label: Text(language),
+            selected: isSelected,
+            showCheckmark: false,
+            selectedColor: AppTheme.primary,
+            backgroundColor: AppTheme.lift,
+            side: BorderSide.none,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            labelStyle: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: isSelected
+                  ? Colors.white
+                  : AppTheme.mist.withValues(alpha: 0.8),
+            ),
+            onSelected: (_) {
+              if (!isSelected) {
+                context.read<MusicPlayerProvider>().setHomeLanguage(language);
+              }
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  const _SectionTitle(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      child: Text(
+        title,
+        style: Theme.of(context)
+            .textTheme
+            .titleLarge
+            ?.copyWith(fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+}
+
+/// Pages of four track rows, swiped sideways, with the next page peeking in
+/// from the right so it's obvious there is more.
+class _RowsSection extends StatefulWidget {
+  final HomeSection section;
+  const _RowsSection({required this.section});
+
+  @override
+  State<_RowsSection> createState() => _RowsSectionState();
+}
+
+class _RowsSectionState extends State<_RowsSection> {
+  static const _rowsPerPage = 4;
+  static const _rowHeight = 64.0;
+
+  final _pages = PageController(viewportFraction: 0.9);
+  late Future<List<AppMediaItem>> _tracks = _load();
+
+  Future<List<AppMediaItem>> _load() => YoutubeService()
+      .cachedSearch(widget.section.query)
+      .then((all) => all.where((t) => isSongLength(t.duration)).toList());
+
   @override
   void dispose() {
-    // YoutubeService is shared with the audio handler — disposing it here
-    // would kill stream extraction for the rest of the app.
-    _searchController.dispose();
+    _pages.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle(widget.section.title),
+        FutureBuilder<List<AppMediaItem>>(
+          future: _tracks,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _RowsSkeleton(rows: _rowsPerPage, height: _rowHeight);
+            }
+            final tracks = snapshot.data ?? const <AppMediaItem>[];
+            if (tracks.isEmpty) {
+              return _LoadFailed(
+                onRetry: () => setState(() => _tracks = _load()),
+              );
+            }
+            final pageCount = (tracks.length / _rowsPerPage).ceil();
+            return SizedBox(
+              height: _rowsPerPage * _rowHeight,
+              child: PageView.builder(
+                controller: _pages,
+                padEnds: false,
+                itemCount: pageCount,
+                itemBuilder: (context, page) => Column(
+                  children: [
+                    for (final track in tracks
+                        .skip(page * _rowsPerPage)
+                        .take(_rowsPerPage))
+                      _TrackRow(
+                        item: track,
+                        playlist: tracks,
+                        height: _rowHeight,
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _TrackRow extends StatelessWidget {
+  final AppMediaItem item;
+  final List<AppMediaItem> playlist;
+  final double height;
+  const _TrackRow({
+    required this.item,
+    required this.playlist,
+    required this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isCurrent = context.select<MusicPlayerProvider, bool>(
+      (p) => p.currentTrack?.id == item.id,
+    );
+    return InkWell(
+      onTap: () =>
+          context.read<MusicPlayerProvider>().playTrack(item, playlist: playlist),
+      onLongPress: () => showTrackActions(context, item),
+      child: SizedBox(
+        height: height,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Row(
+            children: [
+              _Artwork(url: item.artUri, size: 50, radius: 6),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: isCurrent ? AppTheme.accent : AppTheme.mist,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.mist.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'More',
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  color: AppTheme.mist.withValues(alpha: 0.7),
+                ),
+                onPressed: () => showTrackActions(context, item),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Square playlist cards. Each card is a search; its artwork is the cover of
+/// the first song it finds.
+class _CardsSection extends StatelessWidget {
+  final HomeSection section;
+  const _CardsSection({required this.section});
+
+  static const _cardSize = 150.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle(section.title),
+        SizedBox(
+          // Artwork, gap, and two lines of title — fixed, so a long title
+          // can't overflow the row.
+          height: _cardSize + 8 + 40,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: section.cards.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 14),
+            itemBuilder: (context, index) =>
+                _PlaylistCard(card: section.cards[index], size: _cardSize),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PlaylistCard extends StatelessWidget {
+  final HomeCard card;
+  final double size;
+  const _PlaylistCard({required this.card, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TrackListScreen(title: card.title, query: card.query),
+        ),
+      ),
+      child: SizedBox(
+        width: size,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            FutureBuilder<List<AppMediaItem>>(
+              future: YoutubeService().cachedSearch(card.query),
+              builder: (context, snapshot) {
+                final tracks = snapshot.data;
+                return _Artwork(
+                  url: tracks != null && tracks.isNotEmpty
+                      ? tracks.first.artUri
+                      : null,
+                  size: size,
+                  radius: 12,
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              card.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, color: AppTheme.mist),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Artwork extends StatelessWidget {
+  final String? url;
+  final double size;
+  final double radius;
+  const _Artwork({required this.url, required this.size, required this.radius});
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = Container(
+      width: size,
+      height: size,
+      color: AppTheme.lift,
+      child: Icon(
+        Icons.music_note_rounded,
+        color: AppTheme.primary,
+        size: size * 0.4,
+      ),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: url != null && url!.startsWith('http')
+          ? CachedNetworkImage(
+              imageUrl: url!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              placeholder: (_, _) => placeholder,
+              errorWidget: (_, _, _) => placeholder,
+            )
+          : placeholder,
+    );
+  }
+}
+
+class _RowsSkeleton extends StatelessWidget {
+  final int rows;
+  final double height;
+  const _RowsSkeleton({required this.rows, required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    final block = AppTheme.mist.withValues(alpha: 0.06);
+    return Column(
+      children: [
+        for (var i = 0; i < rows; i++)
+          SizedBox(
+            height: height,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: block,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(width: 180, height: 12, color: block),
+                        const SizedBox(height: 8),
+                        Container(width: 110, height: 10, color: block),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _LoadFailed extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _LoadFailed({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Text(
+            "Couldn't load these songs.",
+            style: TextStyle(color: AppTheme.mist.withValues(alpha: 0.55)),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
   }
 }

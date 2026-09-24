@@ -199,6 +199,11 @@ class MusicPlayerProvider extends ChangeNotifier {
     final stored = _storageService.getDownload(item.id);
     final path = stored?.streamUrl;
 
+    // Drop the entry before the file I/O: a swiped-away Dismissible still in
+    // the list on the next rebuild throws.
+    await _storageService.deleteDownload(item.id);
+    notifyListeners();
+
     if (path != null && path.isNotEmpty && !path.startsWith('http')) {
       try {
         final file = File(path);
@@ -207,9 +212,6 @@ class MusicPlayerProvider extends ChangeNotifier {
         debugPrint('Could not delete downloaded file: $e');
       }
     }
-
-    await _storageService.deleteDownload(item.id);
-    notifyListeners();
   }
 
   /// Total bytes held by downloads, for the storage line in the UI.
@@ -233,16 +235,19 @@ class MusicPlayerProvider extends ChangeNotifier {
     AppMediaItem requested, {
     List<AppMediaItem>? playlist,
   }) async {
+    if (playlist != null && playlist.isNotEmpty) {
+      _queueState.replaceWith(playlist, requested);
+    } else {
+      _queueState.selectOrAppend(requested);
+    }
+    await _play(requested);
+  }
+
+  /// Start [requested], which the queue already points at.
+  Future<void> _play(AppMediaItem requested) async {
     // If it's already on disk, play that: instant, offline, and no risk of an
     // expired stream URL. This is the whole point of downloading.
     final track = _storageService.getDownload(requested.id) ?? requested;
-
-    if (playlist != null && playlist.isNotEmpty) {
-      _queueState.replaceWith(playlist, track);
-    } else {
-      _queueState.selectOrAppend(track);
-    }
-
     _currentTrack = track;
     notifyListeners();
 
@@ -293,22 +298,35 @@ class MusicPlayerProvider extends ChangeNotifier {
 
     final next = _queueState.currentTrack;
     if (next == null) {
+      _currentTrack = null;
+      notifyListeners();
       await _audioHandler.stop();
       return;
     }
-    await playTrack(next);
+    await _play(next);
   }
 
-  /// Queue [item] directly after whatever is playing.
-  void playNext(AppMediaItem item) {
-    _queueState.insertNext(item);
+  /// Queue [item] directly after whatever is playing. False if [item] is
+  /// what's playing, so the UI doesn't claim it was queued.
+  bool playNext(AppMediaItem item) {
+    final added = _queueState.insertNext(item);
     notifyListeners();
+    _prefetchUpcoming();
+    return added;
   }
 
-  /// Append [item] to the end of the queue.
-  void addToQueue(AppMediaItem item) {
-    _queueState.append(item);
+  /// Append [item] to the end of the queue. False if it's what's playing.
+  bool addToQueue(AppMediaItem item) {
+    final added = _queueState.append(item);
     notifyListeners();
+    return added;
+  }
+
+  /// Play the queue row at [index] — the row itself, even if a lookup by id
+  /// would find a different one.
+  Future<void> playQueueItem(int index) async {
+    final item = _queueState.selectAt(index);
+    if (item != null) await _play(item);
   }
 
   /// Skip to next track in queue
@@ -326,7 +344,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> _moveTo({required bool auto}) async {
     final next = _queueState.advance(repeat: _repeat, auto: auto);
     if (next == null) return;
-    await playTrack(next);
+    await _play(next);
   }
 
   /// Skip to previous track in queue
@@ -338,29 +356,17 @@ class MusicPlayerProvider extends ChangeNotifier {
       return;
     }
     final previous = _queueState.previous();
-    if (previous != null) await playTrack(previous);
+    if (previous != null) await _play(previous);
   }
 
-  /// Toggle Play/Pause — fast, no async loading delays
+  /// Toggle Play/Pause. Resuming (and reloading after a failure) is the
+  /// handler's job, so the notification and headset get the same behaviour.
   Future<void> togglePlayPause() async {
     if (_audioHandler.player.playing) {
       await _audioHandler.pause();
-      return;
+    } else if (_currentTrack != null) {
+      await _audioHandler.play();
     }
-
-    if (_audioHandler.player.audioSource == null && _currentTrack != null) {
-      // No audio source loaded, re-play the current track
-      await _audioHandler.playAppMediaItem(_currentTrack!);
-      return;
-    }
-
-    // A finished track is parked at its end, where play() does nothing —
-    // rewind first so the button isn't dead after the queue runs out.
-    if (_audioHandler.playbackState.value.processingState ==
-        AudioProcessingState.completed) {
-      await _audioHandler.seek(Duration.zero);
-    }
-    await _audioHandler.play();
   }
 
   /// Toggle Favorites
@@ -379,6 +385,42 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   Future<void> setCustomDownloadPath(String? path) async {
     await _storageService.setCustomDownloadPath(path);
+    notifyListeners();
+  }
+
+  /// Settings
+  String? get homeLanguage => _storageService.getHomeLanguage();
+
+  Future<void> setHomeLanguage(String? language) async {
+    await _storageService.setHomeLanguage(language);
+    notifyListeners();
+  }
+
+  AudioQuality get audioQuality => _storageService.getAudioQuality();
+
+  /// Cached stream URLs were picked at the old quality, so drop them.
+  Future<void> setAudioQuality(AudioQuality quality) async {
+    await _storageService.setAudioQuality(quality);
+    ytService.clearStreamCache();
+    notifyListeners();
+  }
+
+  int get historyCount => _storageService.historyCount;
+
+  Future<void> clearHistory() async {
+    await _storageService.clearHistory();
+    notifyListeners();
+  }
+
+  List<String> get recentSearches => _storageService.getRecentSearches();
+
+  Future<void> addRecentSearch(String query) async {
+    await _storageService.addRecentSearch(query);
+    notifyListeners();
+  }
+
+  Future<void> clearRecentSearches() async {
+    await _storageService.clearRecentSearches();
     notifyListeners();
   }
 
@@ -457,8 +499,10 @@ class MusicPlayerProvider extends ChangeNotifier {
         _currentTrack!.artist,
       );
 
+      if (_lyricsKey != key) return; // track changed while fetching
       _currentLyrics = lyrics ?? 'Lyrics not available for this track.';
     } catch (_) {
+      if (_lyricsKey != key) return;
       _currentLyrics = 'Lyrics not available for this track.';
     }
     _isLoadingLyrics = false;

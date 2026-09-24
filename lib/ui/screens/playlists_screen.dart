@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +7,7 @@ import '../../models/media_item_model.dart';
 import '../../models/playlist.dart';
 import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/track_filter_bar.dart';
@@ -29,7 +32,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
   /// build restarts on every rebuild, and this one stats every downloaded
   /// file on disk.
   Future<int>? _downloadsSize;
-  int _sizedForCount = -1;
+  String? _sizedFor;
 
   @override
   void initState() {
@@ -202,9 +205,21 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               final selectedDir = await FilePicker.getDirectoryPath(
                 dialogTitle: 'Select Download Folder',
               );
-              if (selectedDir != null && selectedDir.isNotEmpty) {
-                await provider.setCustomDownloadPath(selectedDir);
+              if (selectedDir == null || selectedDir.isEmpty) return;
+              if (!await YoutubeService.isWritableDirectory(
+                Directory(selectedDir),
+              )) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      "Pulse can't save files in that folder. Pick one inside Music or Download.",
+                    ),
+                  ),
+                );
+                return;
               }
+              await provider.setCustomDownloadPath(selectedDir);
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -247,7 +262,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   style: const TextStyle(color: Colors.white60),
                 ),
                 FutureBuilder<int>(
-                  future: _sizeFuture(provider, downloads.length),
+                  future: _sizeFuture(provider),
                   builder: (_, snapshot) => Text(
                     snapshot.hasData ? _formatBytes(snapshot.data!) : '',
                     style: const TextStyle(color: Colors.white38, fontSize: 12),
@@ -291,11 +306,13 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     );
   }
 
-  /// Recomputes only when the number of downloads changes, so scrolling or an
-  /// unrelated provider notification doesn't re-stat every file on disk.
-  Future<int> _sizeFuture(MusicPlayerProvider provider, int count) {
-    if (_downloadsSize == null || _sizedForCount != count) {
-      _sizedForCount = count;
+  /// Recomputes only when the set of downloads changes — keyed on all of them,
+  /// not the search-filtered list, so typing doesn't re-stat every file and
+  /// swapping one download for another doesn't leave a stale total.
+  Future<int> _sizeFuture(MusicPlayerProvider provider) {
+    final key = provider.getDownloads().map((d) => d.id).join(',');
+    if (_downloadsSize == null || _sizedFor != key) {
+      _sizedFor = key;
       _downloadsSize = provider.downloadedBytes();
     }
     return _downloadsSize!;

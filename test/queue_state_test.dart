@@ -357,6 +357,78 @@ void main() {
     });
   });
 
+  group('no duplicates', () {
+    test('play next on a queued track moves it instead of copying it', () {
+      final queue = QueueState()
+        ..replaceWith(tracks(['a', 'b', 'c', 'd']), track('a'));
+      expect(queue.insertNext(track('d')), isTrue);
+
+      expect(idsOf(queue), ['a', 'd', 'b', 'c']);
+      expect(queue.advance(repeat: QueueRepeat.off, auto: false)?.id, 'd');
+      expect(queue.isConsistent, isTrue);
+    });
+
+    test('play next on a track *before* the current one keeps the cursor', () {
+      final queue = QueueState()
+        ..replaceWith(tracks(['a', 'b', 'c']), track('b'));
+      queue.insertNext(track('a'));
+
+      expect(idsOf(queue), ['b', 'a', 'c']);
+      expect(queue.currentTrack?.id, 'b');
+      expect(queue.advance(repeat: QueueRepeat.off, auto: false)?.id, 'a');
+      expect(queue.isConsistent, isTrue);
+    });
+
+    test('play next / add to queue on the playing track is a no-op', () {
+      final queue = QueueState()
+        ..replaceWith(tracks(['a', 'b']), track('a'));
+
+      expect(queue.insertNext(track('a')), isFalse);
+      expect(queue.append(track('a')), isFalse);
+      expect(idsOf(queue), ['a', 'b']);
+      expect(queue.isConsistent, isTrue);
+    });
+
+    test('add to queue on a queued track moves it to the end', () {
+      final queue = QueueState()
+        ..replaceWith(tracks(['a', 'b', 'c']), track('a'));
+      queue.append(track('b'));
+
+      expect(idsOf(queue), ['a', 'c', 'b']);
+      expect(queue.isConsistent, isTrue);
+    });
+
+    test('dedupe stays consistent under shuffle', () {
+      final queue = QueueState()
+        ..replaceWith(tracks(['a', 'b', 'c', 'd', 'e']), track('c'))
+        ..setShuffled(true);
+      queue.insertNext(track('a'));
+      expect(queue.advance(repeat: QueueRepeat.off, auto: false)?.id, 'a');
+      queue.append(track('e'));
+      expect(queue.items.where((t) => t.id == 'e').length, 1);
+      expect(queue.isConsistent, isTrue);
+    });
+  });
+
+  group('selectAt', () {
+    test('selects the exact row tapped', () {
+      final queue = QueueState()
+        ..replaceWith(tracks(['a', 'b', 'c']), track('a'));
+
+      expect(queue.selectAt(2)?.id, 'c');
+      expect(queue.currentIndex, 2);
+      expect(queue.advance(repeat: QueueRepeat.all, auto: false)?.id, 'a');
+      expect(queue.isConsistent, isTrue);
+    });
+
+    test('ignores out-of-range rows', () {
+      final queue = QueueState()..replaceWith(tracks(['a']), track('a'));
+      expect(queue.selectAt(5), isNull);
+      expect(queue.selectAt(-1), isNull);
+      expect(queue.currentIndex, 0);
+    });
+  });
+
   test('survives a long mixed sequence of edits', () {
     final queue = QueueState()
       ..replaceWith(tracks(['a', 'b', 'c', 'd', 'e']), track('c'));

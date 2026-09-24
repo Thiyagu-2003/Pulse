@@ -110,4 +110,19 @@ void main() {
     expect(restored.duration, isNull);
     expect(restored.sourceType, MediaSourceType.local);
   });
+
+  test('a stale streamUrl in extras does not override the resolved one', () {
+    final item = AppMediaItem(
+      id: 'abc',
+      title: 't',
+      artist: 'a',
+      streamUrl: 'https://fresh',
+      sourceType: MediaSourceType.youtube,
+      extras: {'streamUrl': 'https://stale', 'sourceType': 'local'},
+    );
+    final restored =
+        AppMediaItem.fromAudioServiceMediaItem(item.toAudioServiceMediaItem());
+    expect(restored.streamUrl, 'https://fresh');
+    expect(restored.sourceType, MediaSourceType.youtube);
+  });
 }

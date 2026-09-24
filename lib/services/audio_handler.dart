@@ -20,7 +20,10 @@ Future<CustomAudioHandler> initAudioService() async {
 }
 
 class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
-  final AudioPlayer _player = AudioPlayer();
+  // Headers (our User-Agent) would otherwise route every stream through
+  // just_audio's local HTTP proxy: an extra hop at startup and every audio
+  // byte relayed through the UI isolate. ExoPlayer sends them natively.
+  final AudioPlayer _player = AudioPlayer(useProxyForRequestHeaders: false);
   final YoutubeService _ytService = YoutubeService();
 
   /// The queue lives in MusicPlayerProvider, not in audio_service's QueueHandler.
@@ -34,6 +37,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   VoidCallback? onTrackCompleted;
 
   bool _loopOne = false;
+  int _loadGeneration = 0;
 
   /// Loop the current track at the player level. ExoPlayer/AVPlayer repeat the
   /// source themselves, which is gapless and — unlike replaying on completion
@@ -113,6 +117,10 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// after the fact, which would race the asynchronous source loading.
   Future<void> playAppMediaItem(AppMediaItem item, {Duration? startAt}) async {
     String? uri = item.streamUrl;
+    // Tapping B while A's YouTube URL is still resolving must not let A take
+    // over (or report an error) once its resolution finally lands.
+    final load = ++_loadGeneration;
+    bool superseded() => load != _loadGeneration;
 
     // Immediately broadcast the mediaItem so the UI updates with track info
     mediaItem.add(item.toAudioServiceMediaItem());
@@ -130,15 +138,21 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       // immediate and setAudioSource replaces the source anyway.
       await _player.pause();
 
-      // Extract stream URL for YouTube tracks if not already cached/resolved
-      if (item.sourceType == MediaSourceType.youtube && (uri == null || !uri.startsWith('http'))) {
+      // Always resolve YouTube through the service, never a URL carried on
+      // the item: those expire, so a retry of a track that had played before
+      // kept failing on its old link. The service's cache knows when a URL
+      // is still fresh.
+      if (item.sourceType == MediaSourceType.youtube) {
         try {
           uri = await _ytService.getAudioStreamUrl(item.id);
         } catch (e) {
+          if (superseded()) return;
           _failPlayback('Couldn\'t load "${item.title}". Tap to try again.', e);
           return;
         }
       }
+
+      if (superseded()) return;
 
       if (uri == null || uri.isEmpty) {
         _failPlayback(
@@ -192,9 +206,14 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       // keeps looping too.
       await _player.setLoopMode(_loopOne ? LoopMode.one : LoopMode.off);
 
+      // Checked right before play(): no await may sit between this and it.
+      if (superseded()) return;
+
       // Start playback immediately — don't await, fire and forget
       _player.play();
     } catch (e) {
+      // A newer setAudioSource interrupts this one; that isn't a failure.
+      if (superseded()) return;
       _ytService.invalidateStreamUrl(item.id);
       _failPlayback('Couldn\'t play "${item.title}". Tap to try again.', e);
     }
@@ -203,6 +222,9 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// Reset to idle so the UI doesn't hang on "loading", and tell the user.
   void _failPlayback(String userMessage, [Object? cause]) {
     if (cause != null) debugPrint('Playback failed: $cause');
+    // The previous track's source is still loaded (we only paused it), so
+    // without this, Play would resume the old audio under the new title.
+    _player.stop();
     playbackState.add(playbackState.value.copyWith(
       processingState: AudioProcessingState.idle,
       playing: false,
@@ -210,8 +232,25 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     _errors.add(userMessage);
   }
 
+  /// Every resume goes through here — the in-app button, the notification,
+  /// headset keys. After a failed or stopped load the player may still hold
+  /// the *previous* track's source, so plain play() would bring back the old
+  /// song under the new title; reload what the UI shows instead.
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    final current = mediaItem.value;
+    if (current != null &&
+        (_player.audioSource == null ||
+            _player.processingState == ProcessingState.idle)) {
+      await playAppMediaItem(AppMediaItem.fromAudioServiceMediaItem(current));
+      return;
+    }
+    // A finished track is parked at its end, where play() does nothing.
+    if (_player.processingState == ProcessingState.completed) {
+      await _player.seek(Duration.zero);
+    }
+    await _player.play();
+  }
 
   @override
   Future<void> pause() => _player.pause();

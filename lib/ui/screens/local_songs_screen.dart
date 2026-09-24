@@ -38,16 +38,16 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
   List<AppMediaItem>? _visibleCache;
   String? _cachedQuery;
   TrackSort? _cachedSort;
-  int _cachedSourceLength = -1;
+  List<AppMediaItem>? _cachedSource;
 
   List<AppMediaItem> get _visibleSongs {
     if (_visibleCache == null ||
         _cachedQuery != _query ||
         _cachedSort != _sort ||
-        _cachedSourceLength != _localSongs.length) {
+        !identical(_cachedSource, _localSongs)) {
       _cachedQuery = _query;
       _cachedSort = _sort;
-      _cachedSourceLength = _localSongs.length;
+      _cachedSource = _localSongs;
       _visibleCache = sortTracks(filterTracks(_localSongs, _query), _sort);
     }
     return _visibleCache!;
@@ -59,8 +59,10 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
     _initLocalMusic();
   }
 
-  Future<void> _initLocalMusic() async {
-    final granted = await _localService.requestPermission();
+  Future<void> _initLocalMusic({bool fromButton = false}) async {
+    final granted = await _localService.requestPermission(
+      openSettingsIfBlocked: fromButton,
+    );
     if (granted) {
       final songs = await _localService.fetchLocalSongs();
       if (mounted) {
@@ -273,7 +275,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
                 backgroundColor: AppTheme.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
-              onPressed: _initLocalMusic,
+              onPressed: () => _initLocalMusic(fromButton: true),
               child: const Text('Grant Access', style: TextStyle(color: Colors.white)),
             ),
           ],

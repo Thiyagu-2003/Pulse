@@ -73,7 +73,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           const Positioned(
             left: 0,
             right: 0,
-            bottom: 70,
+            bottom: 0,
             child: MiniPlayer(),
           ),
         ],
