@@ -62,22 +62,22 @@ class _TrackFilterBarState extends State<TrackFilterBar> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: context.colors.mist.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(color: context.colors.mist.withValues(alpha: 0.10)),
               ),
               child: TextField(
                 controller: _controller,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: context.colors.mist),
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: hintText,
-                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
-                  prefixIcon: const Icon(Icons.search, color: AppTheme.accent, size: 20),
+                  hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.38), fontSize: 14),
+                  prefixIcon: Icon(Icons.search, color: context.colors.accent, size: 20),
                   suffixIcon: query.isEmpty
                       ? null
                       : IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.white38, size: 18),
+                          icon: Icon(Icons.clear, color: context.colors.mist.withValues(alpha: 0.38), size: 18),
                           onPressed: () => onQueryChanged(''),
                         ),
                   border: InputBorder.none,
@@ -90,9 +90,9 @@ class _TrackFilterBarState extends State<TrackFilterBar> {
           if (sort != null && onSortChanged != null) ...[
             const SizedBox(width: 8),
             PopupMenuButton<TrackSort>(
-              icon: const Icon(Icons.sort_rounded, color: AppTheme.accent),
+              icon: Icon(Icons.sort_rounded, color: context.colors.accent),
               tooltip: 'Sort by ${sort.label}',
-              color: AppTheme.surface,
+              color: context.colors.surface,
               initialValue: sort,
               onSelected: onSortChanged,
               itemBuilder: (_) => [
@@ -106,7 +106,7 @@ class _TrackFilterBarState extends State<TrackFilterBar> {
                               ? Icons.radio_button_checked
                               : Icons.radio_button_unchecked,
                           size: 16,
-                          color: option == sort ? AppTheme.accent : Colors.white38,
+                          color: option == sort ? context.colors.accent : context.colors.mist.withValues(alpha: 0.38),
                         ),
                         const SizedBox(width: 10),
                         Text(option.label),

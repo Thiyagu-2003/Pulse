@@ -66,7 +66,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
         actions: [
           if (tabIndex == 2)
             IconButton(
-              icon: const Icon(Icons.add_rounded, color: AppTheme.accent),
+              icon: Icon(Icons.add_rounded, color: context.colors.accent),
               tooltip: 'New playlist',
               onPressed: () async {
                 final name = await promptForPlaylistName(context);
@@ -147,15 +147,15 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: context.colors.mist.withValues(alpha: 0.10)),
       ),
       child: Row(
         children: [
           Icon(
             isCustom ? Icons.folder_special_rounded : Icons.folder_rounded,
-            color: AppTheme.accent,
+            color: context.colors.accent,
             size: 22,
           ),
           const SizedBox(width: 12),
@@ -167,21 +167,21 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   children: [
                     Text(
                       isCustom ? 'Custom Location' : 'Default Location',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: AppTheme.accent,
+                        color: context.colors.accent,
                       ),
                     ),
                     if (isCustom) ...[
                       const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () => provider.setCustomDownloadPath(null),
-                        child: const Text(
+                        child: Text(
                           'Reset',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.white54,
+                            color: context.colors.mist.withValues(alpha: 0.54),
                             decoration: TextDecoration.underline,
                           ),
                         ),
@@ -194,7 +194,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   displayPath,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: Colors.white60),
+                  style: TextStyle(fontSize: 11, color: context.colors.mist.withValues(alpha: 0.60)),
                 ),
               ],
             ),
@@ -226,9 +226,9 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text(
+            child: Text(
               'Change',
-              style: TextStyle(color: AppTheme.accent, fontSize: 12),
+              style: TextStyle(color: context.colors.accent, fontSize: 12),
             ),
           ),
         ],
@@ -259,13 +259,13 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               children: [
                 Text(
                   '${downloads.length} downloaded',
-                  style: const TextStyle(color: Colors.white60),
+                  style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
                 ),
                 FutureBuilder<int>(
                   future: _sizeFuture(provider),
                   builder: (_, snapshot) => Text(
                     snapshot.hasData ? _formatBytes(snapshot.data!) : '',
-                    style: const TextStyle(color: Colors.white38, fontSize: 12),
+                    style: TextStyle(color: context.colors.mist.withValues(alpha: 0.38), fontSize: 12),
                   ),
                 ),
               ],
@@ -351,7 +351,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Create Playlist'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.accent,
+                  backgroundColor: context.colors.accent,
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -385,10 +385,10 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
           ),
           subtitle: Text(
             '${playlist.length} tracks',
-            style: const TextStyle(fontSize: 12, color: Colors.white60),
+            style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.60)),
           ),
           trailing: IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white38),
+            icon: Icon(Icons.more_vert, color: context.colors.mist.withValues(alpha: 0.38)),
             onPressed: () => _showPlaylistActions(playlist, provider),
           ),
           onTap: () => Navigator.push(
@@ -405,7 +405,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
   void _showPlaylistActions(Playlist playlist, MusicPlayerProvider provider) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surface,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -415,7 +415,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
           children: [
             if (playlist.items.isNotEmpty)
               ListTile(
-                leading: const Icon(Icons.play_arrow_rounded, color: AppTheme.accent),
+                leading: Icon(Icons.play_arrow_rounded, color: context.colors.accent),
                 title: Text('Play all'),
                 onTap: () {
                   provider.playTrack(
@@ -426,7 +426,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.edit_rounded, color: AppTheme.accent),
+              leading: Icon(Icons.edit_rounded, color: context.colors.accent),
               title: Text('Rename'),
               onTap: () async {
                 Navigator.pop(sheetContext);
@@ -459,17 +459,17 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.colors.surface,
         title: Text('Delete playlist?'),
         content: Text(
           '"${playlist.name}" and its ${playlist.length} tracks will be removed. '
           'This cannot be undone.',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.70)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: Text('Cancel', style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54))),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
@@ -509,12 +509,12 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 80, color: Colors.white24),
+            Icon(icon, size: 80, color: context.colors.mist.withValues(alpha: 0.24)),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, color: Colors.white60),
+              style: TextStyle(fontSize: 16, color: context.colors.mist.withValues(alpha: 0.60)),
             ),
             if (action != null) ...[
               const SizedBox(height: 20),

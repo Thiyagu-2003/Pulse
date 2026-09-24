@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -23,6 +24,11 @@ class YoutubeService {
   /// Extractions in progress. Prefetch starts one, then the user taps the
   /// same track: without this they ran two full extractions side by side.
   final Map<String, Future<String?>> _inFlight = {};
+
+  /// Stands in for the network extraction in tests.
+  @visibleForTesting
+  Future<String?> Function(String videoId, {required bool verify})?
+      debugExtractOverride;
 
   /// Search for music tracks.
   ///
@@ -55,17 +61,66 @@ class YoutubeService {
   /// Search results kept for the session, so home sections don't reload
   /// every time they scroll back into view or the tab is revisited. Failed or
   /// empty searches are forgotten, so they can be retried.
-  Future<List<AppMediaItem>> cachedSearch(String query) =>
-      _searchCache[query] ??= searchMusic(query, prefetch: false).then(
-        (results) {
-          if (results.isEmpty) _searchCache.remove(query);
-          return results;
-        },
-        onError: (Object e) {
-          _searchCache.remove(query);
-          throw e;
-        },
-      );
+  Future<List<AppMediaItem>> cachedSearch(String query) {
+    final cached = _searchCache[query];
+    if (cached != null) return cached;
+    late final Future<List<AppMediaItem>> search;
+    // Only ever evict *this* search: after a refresh, a stale one finishing
+    // late must not throw out the newer entry for the same query.
+    void forget() {
+      if (identical(_searchCache[query], search)) _searchCache.remove(query);
+    }
+
+    search = _limited(() async {
+      final run = debugSearchOverride ??
+          (String q) => searchMusic(q, prefetch: false);
+      var results = await run(query);
+      if (results.isEmpty) {
+        // Usually YouTube briefly refusing a burst; one calm retry.
+        await Future<void>.delayed(searchRetryDelay);
+        results = await run(query);
+      }
+      if (results.isEmpty) forget();
+      return results;
+    }).catchError((Object e, StackTrace st) {
+      forget();
+      Error.throwWithStackTrace(e, st);
+    });
+    return _searchCache[query] = search;
+  }
+
+  /// The home page asks for a dozen searches at once; fired together,
+  /// YouTube answers with redirect loops and empty pages. At most
+  /// [_maxSearches] run at a time, the rest wait their turn in order.
+  static const _maxSearches = 3;
+
+  @visibleForTesting
+  Duration searchRetryDelay = const Duration(milliseconds: 1500);
+
+  /// Stands in for the network search in tests.
+  @visibleForTesting
+  Future<List<AppMediaItem>> Function(String query)? debugSearchOverride;
+  int _activeSearches = 0;
+  final _waitingSearches = Queue<Completer<void>>();
+
+  Future<T> _limited<T>(Future<T> Function() task) async {
+    if (_activeSearches >= _maxSearches) {
+      final turn = Completer<void>();
+      _waitingSearches.add(turn);
+      await turn.future; // the finishing search hands over its slot
+    } else {
+      _activeSearches++;
+    }
+    try {
+      return await task();
+    } finally {
+      if (_waitingSearches.isNotEmpty) {
+        _waitingSearches.removeFirst().complete();
+      } else {
+        _activeSearches--;
+      }
+    }
+  }
 
   void clearSearchCache() => _searchCache.clear();
 
@@ -154,20 +209,31 @@ class YoutubeService {
   }
 
   /// Get direct playable audio stream URL — tries multiple strategies
-  Future<String?> getAudioStreamUrl(String videoId) async {
+  ///
+  /// By default the URL is *not* test-fetched first: the player's own request
+  /// is that test, and skipping a separate one saves a round trip on every
+  /// tap. [verify] is for the retry after the player got a dead URL.
+  Future<String?> getAudioStreamUrl(String videoId, {bool verify = false}) async {
     // 1. Check in-memory cache (instant)
     final cached = _streamCache[videoId];
     if (cached != null && !cached.isExpired) {
       debugPrint('✅ Cache hit for $videoId');
       return cached.url;
     }
-    return _inFlight[videoId] ??=
-        _extract(videoId).whenComplete(() => _inFlight.remove(videoId));
+    final key = '$videoId/$verify';
+    // Block body on purpose: `=> _inFlight.remove(key)` would return this
+    // very future, and whenComplete waits on a returned future — so it
+    // waited on itself and never completed. Every uncached first tap hung.
+    final extract = debugExtractOverride ?? _extract;
+    return _inFlight[key] ??=
+        extract(videoId, verify: verify).whenComplete(() {
+      _inFlight.remove(key);
+    });
   }
 
   /// Tries each way of getting a stream URL until one actually plays.
   ///
-  /// Every candidate is checked with a two-byte request first. YouTube
+  /// With [verify], every candidate is checked with a two-byte request first. YouTube
   /// intermittently hands out URLs that pass youtube_explode's own HEAD check
   /// but answer the real GET with 403; the old chain only fell through to the
   /// next method when extraction *failed*, so a dead URL went straight to the
@@ -177,11 +243,11 @@ class YoutubeService {
   /// so a dead URL from one costs nothing while the other is still going.
   /// The slow paths — the watch page, and NewPipe's on-device JavaScript
   /// deciphering — only run if both lose.
-  Future<String?> _extract(String videoId) async {
+  Future<String?> _extract(String videoId, {required bool verify}) async {
     Future<String?> verified(String name, Future<String?> candidate) async {
       final url = await candidate;
       if (url == null) return null;
-      if (await _isPlayable(url)) {
+      if (!verify || await _isPlayable(url)) {
         debugPrint('✅ $name gave a playable stream for $videoId');
         return url;
       }
@@ -231,9 +297,15 @@ class YoutubeService {
 
   /// Resolve a stream URL ahead of time so tapping the track is instant.
   void warmStreamUrl(String videoId) {
+    warmStreamUrlNow(videoId);
+  }
+
+  /// [warmStreamUrl] that can be awaited, so a batch can be warmed one at a
+  /// time instead of firing a burst of requests at YouTube.
+  Future<void> warmStreamUrlNow(String videoId) async {
     final cached = _streamCache[videoId];
     if (cached != null && !cached.isExpired) return;
-    getAudioStreamUrl(videoId).catchError((_) => null);
+    await getAudioStreamUrl(videoId).catchError((_) => null);
   }
 
   /// NewPipe native extraction (Fast on Android)

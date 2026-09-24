@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name_widget">Pulse</string>
+    <string name="widget_description">Now playing, with play/pause and skip</string>
+    <string name="widget_idle">Tap to start listening</string>
+    <string name="widget_art_description">Album art</string>
+    <string name="widget_previous">Previous</string>
+    <string name="widget_play_pause">Play or pause</string>
+    <string name="widget_next">Next</string>
+</resources>

@@ -33,10 +33,14 @@ class MusicPlayerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode =
+        context.select<MusicPlayerProvider, ThemeMode>((p) => p.themeMode);
     return MaterialApp(
       title: 'Pulse',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeMode,
       home: const MainNavigationScreen(),
     );
   }

@@ -71,16 +71,16 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: context.colors.mist.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(color: context.colors.mist.withValues(alpha: 0.10)),
               ),
               child: TextField(
                 controller: _searchController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                style: TextStyle(color: context.colors.mist),
+                decoration: InputDecoration(
                   hintText: 'Search podcasts & RSS shows...',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.38)),
                   prefixIcon: Icon(Icons.podcasts, color: Colors.orangeAccent),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 14),
@@ -99,10 +99,10 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                     ),
                   )
                 : _channels.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           'No podcasts found.',
-                          style: TextStyle(color: Colors.white54),
+                          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
                         ),
                       )
                     : GridView.builder(
@@ -140,14 +140,14 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                       imageUrl: channel.artworkUrl,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(color: Colors.white10),
+                      placeholder: (context, url) => Container(color: context.colors.mist.withValues(alpha: 0.10)),
                       errorWidget: (context, url, error) => Container(
-                        color: Colors.white10,
+                        color: context.colors.mist.withValues(alpha: 0.10),
                         child: const Icon(Icons.podcasts, color: Colors.orangeAccent, size: 50),
                       ),
                     )
                   : Container(
-                      color: Colors.white10,
+                      color: context.colors.mist.withValues(alpha: 0.10),
                       child: const Icon(Icons.podcasts, color: Colors.orangeAccent, size: 50),
                     ),
             ),
@@ -168,7 +168,7 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                   channel.author,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: Colors.white60),
+                  style: TextStyle(fontSize: 11, color: context.colors.mist.withValues(alpha: 0.60)),
                 ),
               ],
             ),
@@ -182,7 +182,7 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surface,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -267,7 +267,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                     : Container(
                         width: 60,
                         height: 60,
-                        color: Colors.white10,
+                        color: context.colors.mist.withValues(alpha: 0.10),
                         child: const Icon(Icons.podcasts, color: Colors.orangeAccent),
                       ),
               ),
@@ -284,7 +284,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                     Text(
                       widget.channel.author,
                       maxLines: 1,
-                      style: const TextStyle(color: Colors.white60, fontSize: 13),
+                      style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60), fontSize: 13),
                     ),
                   ],
                 ),
@@ -293,7 +293,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
           ),
         ),
 
-        const Divider(color: Colors.white10),
+        Divider(color: context.colors.mist.withValues(alpha: 0.10)),
 
         Expanded(
           child: _isLoading
@@ -301,10 +301,10 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                   child: SpinKitDoubleBounce(color: Colors.orangeAccent, size: 40),
                 )
               : _episodes.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'No episodes found.',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
                       ),
                     )
                   : ListView.builder(
@@ -320,7 +320,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                           ),
                           subtitle: Text(
                             episode.pubDate ?? 'Podcast Episode',
-                            style: const TextStyle(fontSize: 12, color: Colors.white54),
+                            style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.54)),
                           ),
                           trailing: const Icon(Icons.play_circle_fill, color: Colors.orangeAccent, size: 36),
                           onTap: () {

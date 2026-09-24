@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:music_player/models/media_item_model.dart';
@@ -70,6 +71,15 @@ void main() {
       expect(storage.getHomeLanguage(), 'Hindi');
       await storage.setHomeLanguage(null);
       expect(storage.getHomeLanguage(), isNull);
+    });
+
+    test('theme defaults to dark, icon to light; both round-trip', () async {
+      expect(storage.getThemeMode(), ThemeMode.dark);
+      expect(storage.getDarkLauncherIcon(), isFalse);
+      await storage.setThemeMode(ThemeMode.system);
+      await storage.setDarkLauncherIcon(true);
+      expect(storage.getThemeMode(), ThemeMode.system);
+      expect(storage.getDarkLauncherIcon(), isTrue);
     });
 
     test('audio quality defaults to balanced and round-trips', () async {

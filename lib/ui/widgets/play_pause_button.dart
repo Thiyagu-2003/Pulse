@@ -11,14 +11,15 @@ class PlayPauseButton extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onPressed;
   final double size;
-  final Color color;
+  /// Defaults to the theme's accent.
+  final Color? color;
 
   const PlayPauseButton({
     super.key,
     required this.isPlaying,
     required this.onPressed,
     this.size = 28,
-    this.color = AppTheme.accent,
+    this.color,
   });
 
   @override
@@ -57,7 +58,7 @@ class _PlayPauseButtonState extends State<PlayPauseButton>
         icon: AnimatedIcons.play_pause,
         progress: _controller,
         size: widget.size,
-        color: widget.color,
+        color: widget.color ?? context.colors.accent,
       ),
     );
   }

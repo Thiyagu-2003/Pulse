@@ -19,6 +19,34 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          const _Heading('Appearance'),
+          ListTile(
+            leading: const Icon(Icons.dark_mode_outlined),
+            title: const Text('Theme'),
+            subtitle: Text(_themeLabel(provider.themeMode)),
+            onTap: () => _pick<ThemeMode>(
+              context,
+              options: const [ThemeMode.system, ThemeMode.light, ThemeMode.dark],
+              selected: provider.themeMode,
+              label: _themeLabel,
+              onPicked: provider.setThemeMode,
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.apps_rounded),
+            title: const Text('App icon'),
+            subtitle: Text(
+              '${provider.darkLauncherIcon ? 'Dark' : 'Light'} · '
+              'changes on your home screen when you leave the app',
+            ),
+            onTap: () => _pick<bool>(
+              context,
+              options: const [false, true],
+              selected: provider.darkLauncherIcon,
+              label: (dark) => dark ? 'Dark' : 'Light',
+              onPicked: provider.setDarkLauncherIcon,
+            ),
+          ),
           const _Heading('Playback'),
           ListTile(
             leading: const Icon(Icons.high_quality_rounded),
@@ -90,6 +118,12 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  static String _themeLabel(ThemeMode mode) => switch (mode) {
+        ThemeMode.system => 'Follow system',
+        ThemeMode.light => 'Light',
+        ThemeMode.dark => 'Dark',
+      };
+
   /// A bottom sheet of options with the current one marked.
   void _pick<T>(
     BuildContext context, {
@@ -100,7 +134,7 @@ class SettingsScreen extends StatelessWidget {
   }) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surface,
+      backgroundColor: context.colors.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -118,8 +152,8 @@ class SettingsScreen extends StatelessWidget {
                         ? Icons.radio_button_checked_rounded
                         : Icons.radio_button_off_rounded,
                     color: option == selected
-                        ? AppTheme.accent
-                        : AppTheme.mist.withValues(alpha: 0.6),
+                        ? context.colors.accent
+                        : context.colors.mist.withValues(alpha: 0.6),
                   ),
                   title: Text(label(option)),
                   onTap: () {
@@ -141,7 +175,7 @@ class SettingsScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.colors.surface,
         title: const Text('Clear listening history?'),
         content: const Text(
           'Recently played and the quick picks on the home screen start '
@@ -173,11 +207,11 @@ class _Heading extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 4),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           letterSpacing: 1.5,
           fontWeight: FontWeight.bold,
-          color: AppTheme.accent,
+          color: context.colors.accent,
         ),
       ),
     );

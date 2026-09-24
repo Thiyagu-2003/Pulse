@@ -14,7 +14,9 @@ import 'track_list_screen.dart';
 /// The Online tab: greeting, quick picks, language chips, then rows of songs
 /// and playlist cards for the chosen language.
 class OnlineMusicScreen extends StatefulWidget {
-  const OnlineMusicScreen({super.key});
+  /// Off in widget tests, which have no network to prefetch from.
+  final bool prefetch;
+  const OnlineMusicScreen({super.key, this.prefetch = true});
 
   @override
   State<OnlineMusicScreen> createState() => _OnlineMusicScreenState();
@@ -30,20 +32,52 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
     setState(() => _refreshCount++);
   }
 
+  /// Which page (language + refresh) has had its top songs warmed.
+  String? _prefetchedFor;
+
+  /// Resolve stream URLs for the songs most likely to be tapped — the first
+  /// quick picks and the first page of the top section — so they start
+  /// almost instantly. One at a time: a burst of requests is what gets
+  /// YouTube handing out dead URLs.
+  Future<void> _prefetchTopSongs(String firstQuery) async {
+    final yt = YoutubeService();
+    final recent = context
+        .read<MusicPlayerProvider>()
+        .getHistory()
+        .where((t) => t.sourceType == MediaSourceType.youtube)
+        .take(4)
+        .toList();
+    final top = await yt
+        .cachedSearch(firstQuery)
+        .catchError((Object _) => <AppMediaItem>[]);
+    for (final track in [
+      ...recent,
+      ...top.where((t) => isSongLength(t.duration)).take(4),
+    ]) {
+      if (!mounted) return;
+      await yt.warmStreamUrlNow(track.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final language =
         context.select<MusicPlayerProvider, String?>((p) => p.homeLanguage);
     final sections = homeSectionsFor(language);
+    final page = '$language/$_refreshCount';
+    if (widget.prefetch && _prefetchedFor != page) {
+      _prefetchedFor = page;
+      _prefetchTopSongs(sections.first.query);
+    }
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           onRefresh: _refresh,
-          color: AppTheme.accent,
+          color: context.colors.accent,
           child: ListView(
-            key: ValueKey('$language/$_refreshCount'),
+            key: ValueKey(page),
             // Room for the floating mini player.
             padding: const EdgeInsets.only(bottom: 110),
             children: [
@@ -174,7 +208,7 @@ class _QuickPickTile extends StatelessWidget {
       (p) => p.currentTrack?.id == item.id,
     );
     return Material(
-      color: AppTheme.lift,
+      color: context.colors.lift,
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -196,7 +230,7 @@ class _QuickPickTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isCurrent ? AppTheme.accent : AppTheme.mist,
+                    color: isCurrent ? context.colors.accent : context.colors.mist,
                   ),
                 ),
               ),
@@ -231,16 +265,17 @@ class _LanguageChips extends StatelessWidget {
             selected: isSelected,
             showCheckmark: false,
             selectedColor: AppTheme.primary,
-            backgroundColor: AppTheme.lift,
+            backgroundColor: context.colors.lift,
             side: BorderSide.none,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
             labelStyle: TextStyle(
               fontWeight: FontWeight.w600,
+              // White on the violet pill in both themes.
               color: isSelected
                   ? Colors.white
-                  : AppTheme.mist.withValues(alpha: 0.8),
+                  : context.colors.mist.withValues(alpha: 0.8),
             ),
             onSelected: (_) {
               if (!isSelected) {
@@ -384,7 +419,7 @@ class _TrackRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 15,
-                        color: isCurrent ? AppTheme.accent : AppTheme.mist,
+                        color: isCurrent ? context.colors.accent : context.colors.mist,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -394,7 +429,7 @@ class _TrackRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppTheme.mist.withValues(alpha: 0.55),
+                        color: context.colors.mist.withValues(alpha: 0.55),
                       ),
                     ),
                   ],
@@ -404,7 +439,7 @@ class _TrackRow extends StatelessWidget {
                 tooltip: 'More',
                 icon: Icon(
                   Icons.more_vert_rounded,
-                  color: AppTheme.mist.withValues(alpha: 0.7),
+                  color: context.colors.mist.withValues(alpha: 0.7),
                 ),
                 onPressed: () => showTrackActions(context, item),
               ),
@@ -485,7 +520,7 @@ class _PlaylistCard extends StatelessWidget {
               card.title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, color: AppTheme.mist),
+              style: TextStyle(fontSize: 14, color: context.colors.mist),
             ),
           ],
         ),
@@ -505,7 +540,7 @@ class _Artwork extends StatelessWidget {
     final placeholder = Container(
       width: size,
       height: size,
-      color: AppTheme.lift,
+      color: context.colors.lift,
       child: Icon(
         Icons.music_note_rounded,
         color: AppTheme.primary,
@@ -535,7 +570,7 @@ class _RowsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final block = AppTheme.mist.withValues(alpha: 0.06);
+    final block = context.colors.mist.withValues(alpha: 0.06);
     return Column(
       children: [
         for (var i = 0; i < rows; i++)
@@ -586,7 +621,7 @@ class _LoadFailed extends StatelessWidget {
         children: [
           Text(
             "Couldn't load these songs.",
-            style: TextStyle(color: AppTheme.mist.withValues(alpha: 0.55)),
+            style: TextStyle(color: context.colors.mist.withValues(alpha: 0.55)),
           ),
           TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],

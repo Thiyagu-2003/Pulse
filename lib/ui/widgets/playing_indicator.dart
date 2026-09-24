@@ -13,13 +13,14 @@ import '../theme/app_theme.dart';
 class PlayingIndicator extends StatefulWidget {
   final bool isPlaying;
   final double size;
-  final Color color;
+  /// Defaults to the theme's accent.
+  final Color? color;
 
   const PlayingIndicator({
     super.key,
     required this.isPlaying,
     this.size = 16,
-    this.color = AppTheme.accent,
+    this.color,
   });
 
   @override
@@ -108,7 +109,7 @@ class _PlayingIndicatorState extends State<PlayingIndicator>
       width: width,
       height: widget.size * factor,
       decoration: BoxDecoration(
-        color: widget.color,
+        color: widget.color ?? context.colors.accent,
         borderRadius: BorderRadius.circular(width),
       ),
     );

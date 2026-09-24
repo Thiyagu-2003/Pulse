@@ -54,6 +54,7 @@ dependencies:
   newpipeextractor_dart: ^2.0.2
   youtube_player_flutter: ^9.0.1
   file_picker: ^13.1.0
+  flutter_local_notifications: 19.4.0
 
 # on_audio_query_pluse's Android implementation, patched (see PULSE PATCH
 # comments in third_party/): it crashed the app with "Reply already

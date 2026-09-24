@@ -54,7 +54,8 @@ void main() {
     await dir.delete(recursive: true);
   });
 
-  Future<void> pumpHome(WidgetTester tester, Widget screen) async {
+  Future<void> pumpHome(WidgetTester tester, Widget screen,
+      {ThemeData? theme}) async {
     // Seeded here, not in setUp: a future completed outside the test's
     // fake-async zone never delivers inside it, leaving rows loading.
     final yt = YoutubeService();
@@ -74,7 +75,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<MusicPlayerProvider>.value(
         value: provider,
-        child: MaterialApp(theme: AppTheme.darkTheme, home: screen),
+        child: MaterialApp(theme: theme ?? AppTheme.darkTheme, home: screen),
       ),
     );
     await tester.pump();
@@ -89,7 +90,7 @@ void main() {
         await storage.addToHistory(_song('h$i', title: 'Recent $i'));
       }
     });
-    await pumpHome(tester, const OnlineMusicScreen());
+    await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
 
     expect(find.textContaining('Good '), findsOneWidget);
     expect(find.text('Recent 0'), findsOneWidget); // quick picks
@@ -110,9 +111,25 @@ void main() {
     expect(find.text('Tamil romance'), findsOneWidget);
   });
 
+  testWidgets('home renders in the light theme on a light background',
+      (tester) async {
+    await pumpHome(tester, const OnlineMusicScreen(prefetch: false),
+        theme: AppTheme.lightTheme);
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+    final bg = scaffold.backgroundColor ??
+        Theme.of(tester.element(find.byType(Scaffold).first))
+            .scaffoldBackgroundColor;
+    expect(bg.computeLuminance(), greaterThan(0.8));
+    for (final title in ['Tamil love songs', 'Top playlists']) {
+      await tester.scrollUntilVisible(find.text(title), 300,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pump();
+    }
+  });
+
   testWidgets('picking a language chip switches the sections',
       (tester) async {
-    await pumpHome(tester, const OnlineMusicScreen());
+    await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
     expect(find.widgetWithText(ChoiceChip, 'Hindi'), findsOneWidget);
     await tester.runAsync(() => provider.setHomeLanguage('Hindi'));
     await tester.pump();

@@ -27,7 +27,13 @@ class MiniPlayer extends StatelessWidget {
           Navigator.push(
             context,
             PageRouteBuilder(
-              pageBuilder: (_, animation, secondaryAnimation) => const NowPlayingScreen(),
+              // Dark in both themes: it sits on the blurred artwork, like
+              // every music player's full-screen view. Wrapping the route (not
+              // just the screen) keeps its sheets dark too.
+              pageBuilder: (_, animation, secondaryAnimation) => Theme(
+                data: AppTheme.darkTheme,
+                child: const NowPlayingScreen(),
+              ),
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
                 return SlideTransition(
                   position: Tween<Offset>(
@@ -60,7 +66,7 @@ class MiniPlayer extends StatelessWidget {
                         : Container(
                             width: 44,
                             height: 44,
-                            color: Colors.white10,
+                            color: context.colors.mist.withValues(alpha: 0.10),
                             child: const Icon(Icons.music_note, color: AppTheme.primary),
                           ),
                   ),
@@ -86,9 +92,9 @@ class MiniPlayer extends StatelessWidget {
                         track.artist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white60,
+                          color: context.colors.mist.withValues(alpha: 0.60),
                         ),
                       ),
                     ],
@@ -110,7 +116,7 @@ class MiniPlayer extends StatelessWidget {
                         IconButton(
                           icon: Icon(
                             Icons.skip_next_rounded,
-                            color: AppTheme.mist.withValues(alpha: 0.7),
+                            color: context.colors.mist.withValues(alpha: 0.7),
                             size: 26,
                           ),
                           onPressed: playerProvider.skipToNext,
@@ -140,8 +146,8 @@ class MiniPlayer extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: progress,
                     minHeight: 2,
-                    backgroundColor: Colors.white10,
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                    backgroundColor: context.colors.mist.withValues(alpha: 0.10),
+                    valueColor: AlwaysStoppedAnimation<Color>(context.colors.accent),
                   ),
                 );
               },

@@ -20,10 +20,10 @@ class PlaylistDetailScreen extends StatelessWidget {
     if (playlist == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(
+        body: Center(
           child: Text(
             'This playlist no longer exists.',
-            style: TextStyle(color: Colors.white54),
+            style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
           ),
         ),
       );
@@ -37,7 +37,7 @@ class PlaylistDetailScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_rounded, color: Colors.white70),
+            icon: Icon(Icons.edit_rounded, color: context.colors.mist.withValues(alpha: 0.70)),
             tooltip: 'Rename',
             onPressed: () async {
               final name = await promptForPlaylistName(
@@ -52,13 +52,13 @@ class PlaylistDetailScreen extends StatelessWidget {
         ],
       ),
       body: playlist.items.isEmpty
-          ? const Center(
+          ? Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
                 child: Text(
                   'Nothing here yet.\nLong-press any track to add it.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
                 ),
               ),
             )
@@ -71,7 +71,7 @@ class PlaylistDetailScreen extends StatelessWidget {
                     children: [
                       Text(
                         '${playlist.length} tracks',
-                        style: const TextStyle(color: Colors.white60),
+                        style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(

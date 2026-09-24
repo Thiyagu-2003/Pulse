@@ -26,13 +26,13 @@ class FolderSongsScreen extends StatelessWidget {
             ),
             Text(
               '${folder.length} ${folder.length == 1 ? 'track' : 'tracks'}',
-              style: const TextStyle(fontSize: 12, color: Colors.white54),
+              style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.54)),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.play_arrow_rounded, color: AppTheme.accent),
+            icon: Icon(Icons.play_arrow_rounded, color: context.colors.accent),
             tooltip: 'Play all',
             onPressed: folder.items.isEmpty
                 ? null

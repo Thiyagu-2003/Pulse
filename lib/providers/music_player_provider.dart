@@ -11,6 +11,10 @@ import '../services/audio_handler.dart';
 import '../services/storage_service.dart';
 import '../services/lyrics_service.dart';
 import '../services/youtube_service.dart';
+import '../services/download_notifications.dart';
+import '../services/platform_bridge.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 class MusicPlayerProvider extends ChangeNotifier {
   final CustomAudioHandler _audioHandler;
@@ -117,8 +121,15 @@ class MusicPlayerProvider extends ChangeNotifier {
         _currentTrack = AppMediaItem.fromAudioServiceMediaItem(item);
         _invalidateLyrics();
         notifyListeners();
+        _syncWidget();
       }
     });
+
+    // The home-screen widget's play/pause icon.
+    _audioHandler.playbackState
+        .map((s) => s.playing)
+        .distinct()
+        .listen((_) => _syncWidget());
 
     // Deliberately NOT notifying on every playbackState event. Those fire many
     // times a second while buffering — precisely when a track is tapped — and
@@ -141,14 +152,70 @@ class MusicPlayerProvider extends ChangeNotifier {
     });
   }
 
+  String? _widgetArtUrl;
+  Future<String?>? _widgetArt;
+
+  /// Push the current track to the home-screen widget. The widget can only
+  /// show a local file, so network artwork is fetched once per track.
+  Future<void> _syncWidget() async {
+    final track = _currentTrack;
+    final url = track?.artUri;
+    String? artPath;
+    if (url != null && url.startsWith('http')) {
+      if (url != _widgetArtUrl) {
+        _widgetArtUrl = url;
+        _widgetArt = _fetchWidgetArt(url);
+      }
+      artPath = await _widgetArt;
+      // A failed fetch shouldn't stick for this track; try again next time.
+      if (artPath == null && url == _widgetArtUrl) _widgetArtUrl = null;
+    }
+    if (!identical(track, _currentTrack)) return; // changed while fetching
+    await PlatformBridge.updateWidget(
+      title: track?.title,
+      artist: track?.artist,
+      artPath: artPath,
+      playing: _audioHandler.playbackState.value.playing,
+    );
+  }
+
+  Future<String?> _fetchWidgetArt(String url) async {
+    try {
+      final response =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return null;
+      final dir = await getTemporaryDirectory();
+      // One file per image, so the widget never reads a half-written one.
+      final file = File('${dir.path}/widget_art_${url.hashCode}.jpg');
+      await file.writeAsBytes(response.bodyBytes);
+      // Only the newest fetch cleans up: a slow, older one finishing last
+      // would otherwise delete the current track's artwork.
+      if (url != _widgetArtUrl) return file.path;
+      for (final old in dir.listSync().whereType<File>()) {
+        if (old.path.contains('widget_art_') && old.path != file.path) {
+          old.deleteSync();
+        }
+      }
+      return file.path;
+    } catch (e) {
+      debugPrint('Widget artwork unavailable: $e');
+      return null;
+    }
+  }
+
   /// Download YouTube/Online track locally for offline playback
   Future<String?> downloadTrack(AppMediaItem item) async {
+    if (_downloadingIds.contains(item.id)) return null;
     _downloadingIds.add(item.id);
     _downloadProgress[item.id] = 0;
     notifyListeners();
+    final notifications = DownloadNotifications.instance;
+    notifications.progress(item.id, item.title, null);
+    var lastNotified = DateTime.now();
 
+    String? path;
     try {
-      final path = await ytService.downloadAudioTrack(
+      path = await ytService.downloadAudioTrack(
         item,
         onProgress: (value) {
           // Repaint per percent, not per chunk — a 5MB file arrives in
@@ -159,6 +226,13 @@ class MusicPlayerProvider extends ChangeNotifier {
           }
           _downloadProgress[item.id] = value;
           notifyListeners();
+          // At most once a second: Android drops notification updates
+          // sent faster than that, and could drop the final "Downloaded".
+          final now = DateTime.now();
+          if (now.difference(lastNotified) >= const Duration(seconds: 1)) {
+            lastNotified = now;
+            notifications.progress(item.id, item.title, value);
+          }
         },
       );
 
@@ -179,8 +253,10 @@ class MusicPlayerProvider extends ChangeNotifier {
       return path;
     } catch (e) {
       debugPrint('Download failed: $e');
+      path = null;
       return null;
     } finally {
+      notifications.finished(item.id, item.title, succeeded: path != null);
       _downloadingIds.remove(item.id);
       _downloadProgress.remove(item.id);
       notifyListeners();
@@ -362,7 +438,9 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Toggle Play/Pause. Resuming (and reloading after a failure) is the
   /// handler's job, so the notification and headset get the same behaviour.
   Future<void> togglePlayPause() async {
-    if (_audioHandler.player.playing) {
+    // The handler's state, not the raw player: while a track loads the
+    // player is still the old one, paused, but the user sees "playing".
+    if (_audioHandler.playbackState.value.playing) {
       await _audioHandler.pause();
     } else if (_currentTrack != null) {
       await _audioHandler.play();
@@ -402,6 +480,22 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> setAudioQuality(AudioQuality quality) async {
     await _storageService.setAudioQuality(quality);
     ytService.clearStreamCache();
+    notifyListeners();
+  }
+
+  ThemeMode get themeMode => _storageService.getThemeMode();
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    await _storageService.setThemeMode(mode);
+    notifyListeners();
+  }
+
+  bool get darkLauncherIcon => _storageService.getDarkLauncherIcon();
+
+  /// Saved now, applied when the app goes to the background: swapping the
+  /// launcher entry while the app is open closes it on some phones.
+  Future<void> setDarkLauncherIcon(bool dark) async {
+    await _storageService.setDarkLauncherIcon(dark);
     notifyListeners();
   }
 

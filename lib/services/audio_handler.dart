@@ -14,7 +14,9 @@ Future<CustomAudioHandler> initAudioService() async {
       androidNotificationChannelName: 'Music Player Playback',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,
-      androidNotificationIcon: 'mipmap/ic_launcher',
+      // Status-bar icons are drawn from alpha only; the full-colour launcher
+      // PNG showed as a white square.
+      androidNotificationIcon: 'drawable/ic_stat_pulse',
     ),
   );
 }
@@ -38,6 +40,15 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   bool _loopOne = false;
   int _loadGeneration = 0;
+
+  /// True from a tap until the new track starts (or fails). Meanwhile the
+  /// player still holds the *previous* source, paused — so its events must
+  /// not be broadcast as-is, or the UI shows the new title as "paused,
+  /// ready" and Play resumes the old song under it.
+  bool _loading = false;
+
+  /// Pause pressed while loading: honoured by not starting playback.
+  bool _pauseRequested = false;
 
   /// Loop the current track at the player level. ExoPlayer/AVPlayer repeat the
   /// source themselves, which is gapless and — unlike replaying on completion
@@ -80,7 +91,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   }
 
   void _broadcastState() {
-    final playing = _player.playing;
+    final playing = _loading ? !_pauseRequested : _player.playing;
     playbackState.add(playbackState.value.copyWith(
       controls: [
         MediaControl.skipToPrevious,
@@ -100,7 +111,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
         ProcessingState.buffering: AudioProcessingState.buffering,
         ProcessingState.ready: AudioProcessingState.ready,
         ProcessingState.completed: AudioProcessingState.completed,
-      }[_player.processingState]!,
+      }[_loading ? ProcessingState.loading : _player.processingState]!,
       playing: playing,
       updatePosition: _player.position,
       bufferedPosition: _player.bufferedPosition,
@@ -121,6 +132,8 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     // over (or report an error) once its resolution finally lands.
     final load = ++_loadGeneration;
     bool superseded() => load != _loadGeneration;
+    _loading = true;
+    _pauseRequested = false;
 
     // Immediately broadcast the mediaItem so the UI updates with track info
     mediaItem.add(item.toAudioServiceMediaItem());
@@ -189,17 +202,33 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
         await _player.setFilePath(uri, initialPosition: startAt);
       } else {
         // HTTP stream (YouTube, podcast, etc.)
-        await _player.setAudioSource(
-          AudioSource.uri(
-            Uri.parse(uri),
-            headers: {
-              'User-Agent':
-                  'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-            },
-          ),
-          preload: true,
-          initialPosition: startAt,
-        );
+        Future<void> load(String url) => _player.setAudioSource(
+              AudioSource.uri(
+                Uri.parse(url),
+                headers: {
+                  'User-Agent':
+                      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                },
+              ),
+              preload: true,
+              initialPosition: startAt,
+            );
+        try {
+          await load(uri);
+        } catch (_) {
+          if (superseded() || item.sourceType != MediaSourceType.youtube) {
+            rethrow;
+          }
+          // YouTube sometimes hands out URLs that 403. The first one wasn't
+          // test-fetched (to start faster), so resolve again — this time
+          // only accepting a URL that has been checked to actually stream.
+          _ytService.invalidateStreamUrl(item.id);
+          final retry =
+              await _ytService.getAudioStreamUrl(item.id, verify: true);
+          if (superseded()) return;
+          if (retry == null) rethrow;
+          await load(retry);
+        }
       }
 
       // Re-assert looping: it must outlive the source swap so the next track
@@ -209,8 +238,13 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       // Checked right before play(): no await may sit between this and it.
       if (superseded()) return;
 
-      // Start playback immediately — don't await, fire and forget
-      _player.play();
+      _loading = false;
+      if (_pauseRequested) {
+        _broadcastState(); // loaded, but the user paused while waiting
+      } else {
+        // Start playback immediately — don't await, fire and forget
+        _player.play();
+      }
     } catch (e) {
       // A newer setAudioSource interrupts this one; that isn't a failure.
       if (superseded()) return;
@@ -222,6 +256,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// Reset to idle so the UI doesn't hang on "loading", and tell the user.
   void _failPlayback(String userMessage, [Object? cause]) {
     if (cause != null) debugPrint('Playback failed: $cause');
+    _loading = false;
     // The previous track's source is still loaded (we only paused it), so
     // without this, Play would resume the old audio under the new title.
     _player.stop();
@@ -238,6 +273,12 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// song under the new title; reload what the UI shows instead.
   @override
   Future<void> play() async {
+    if (_loading) {
+      // The track being prepared will start by itself; just undo a pause.
+      _pauseRequested = false;
+      _broadcastState();
+      return;
+    }
     final current = mediaItem.value;
     if (current != null &&
         (_player.audioSource == null ||
@@ -253,10 +294,20 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    if (_loading) {
+      _pauseRequested = true;
+      _broadcastState();
+      return;
+    }
+    await _player.pause();
+  }
 
   @override
   Future<void> stop() async {
+    // Abandon any load in progress, or the state stays "loading" forever.
+    _loadGeneration++;
+    _loading = false;
     await _player.stop();
     await super.stop();
   }

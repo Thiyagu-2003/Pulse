@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode, debugPrint;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/media_item_model.dart';
 import '../models/playlist.dart';
@@ -32,6 +32,8 @@ class StorageService {
   static const String homeLanguageKey = 'home_language';
   static const String audioQualityKey = 'audio_quality';
   static const String recentSearchesKey = 'recent_searches';
+  static const String themeModeKey = 'theme_mode';
+  static const String darkLauncherIconKey = 'dark_launcher_icon';
   static const String defaultHomeLanguage = 'Tamil';
   static const int recentSearchLimit = 10;
   static const int historyLimit = 200;
@@ -77,6 +79,21 @@ class StorageService {
 
   Future<void> setAudioQuality(AudioQuality quality) =>
       _settingsBox.put(audioQualityKey, quality.name);
+
+  /// Dark unless chosen otherwise — the app was designed dark first.
+  ThemeMode getThemeMode() => ThemeMode.values.firstWhere(
+        (m) => m.name == _settingsBox.get(themeModeKey),
+        orElse: () => ThemeMode.dark,
+      );
+
+  Future<void> setThemeMode(ThemeMode mode) =>
+      _settingsBox.put(themeModeKey, mode.name);
+
+  /// The launcher shows the light icon (logo on white) unless chosen.
+  bool getDarkLauncherIcon() => _settingsBox.get(darkLauncherIconKey) == 'true';
+
+  Future<void> setDarkLauncherIcon(bool dark) =>
+      _settingsBox.put(darkLauncherIconKey, '$dark');
 
   List<String> getRecentSearches() {
     final stored = _settingsBox.get(recentSearchesKey);

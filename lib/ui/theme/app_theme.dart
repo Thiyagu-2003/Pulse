@@ -12,6 +12,10 @@ import 'package:google_fonts/google_fonts.dart';
 /// mode. Violet is for anything you can press. Spraying the accent on every
 /// icon is what made the old UI read as decoration rather than signal.
 class AppTheme {
+  // The constants below are the *dark* palette. Screens that follow the
+  // light/dark setting read `context.colors` instead; these stay for the
+  // surfaces that are dark in both themes, like Now Playing over its art.
+
   /// The logo plate. Warm-neutral, not navy.
   static const Color background = Color(0xFF13141B);
 
@@ -41,57 +45,69 @@ class AppTheme {
     end: Alignment.centerRight,
   );
 
-  static ThemeData get darkTheme {
-    final base = ThemeData.dark(useMaterial3: true);
+  static ThemeData get darkTheme => _build(PulseColors.dark, Brightness.dark);
+  static ThemeData get lightTheme =>
+      _build(PulseColors.light, Brightness.light);
+
+  static ThemeData _build(PulseColors c, Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final base = isDark
+        ? ThemeData.dark(useMaterial3: true)
+        : ThemeData.light(useMaterial3: true);
+    // On a light plate the soft violet is too pale to mark a selection.
+    final selected = isDark ? primarySoft : primary;
 
     return base.copyWith(
-      scaffoldBackgroundColor: background,
+      extensions: [c],
+      scaffoldBackgroundColor: c.background,
       primaryColor: primary,
       splashFactory: InkSparkle.splashFactory,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: (isDark ? const ColorScheme.dark() : const ColorScheme.light())
+          .copyWith(
         primary: primary,
-        onPrimary: mist,
-        secondary: accent,
-        onSecondary: background,
-        surface: surface,
-        onSurface: mist,
-        surfaceContainerHighest: lift,
+        onPrimary: Colors.white,
+        secondary: c.accent,
+        onSecondary: c.background,
+        surface: c.surface,
+        onSurface: c.mist,
+        surfaceContainerHighest: c.lift,
       ),
-      textTheme: _textTheme(base.textTheme),
-      appBarTheme: const AppBarTheme(
+      textTheme: _textTheme(base.textTheme, c.mist),
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        iconTheme: IconThemeData(color: mist),
+        iconTheme: IconThemeData(color: c.mist),
+        foregroundColor: c.mist,
       ),
       // One radius family, but not one radius for everything: rows are
       // gentler than sheets, so hierarchy stays readable.
       cardTheme: CardThemeData(
-        color: lift,
+        color: c.lift,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: surface,
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: c.surface,
         showDragHandle: true,
-        dragHandleColor: Color(0x33F2F1FA),
-        shape: RoundedRectangleBorder(
+        dragHandleColor: c.mist.withValues(alpha: 0.2),
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: surface,
+        backgroundColor: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: lift,
-        contentTextStyle: GoogleFonts.inter(color: mist, fontSize: 14),
+        backgroundColor: c.lift,
+        contentTextStyle: GoogleFonts.inter(color: c.mist, fontSize: 14),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: surface,
+        backgroundColor: c.surface,
         indicatorColor: primary.withValues(alpha: 0.22),
         elevation: 0,
         height: 68,
@@ -100,43 +116,43 @@ class AppTheme {
           (states) => IconThemeData(
             size: 24,
             color: states.contains(WidgetState.selected)
-                ? primarySoft
-                : mist.withValues(alpha: 0.45),
+                ? selected
+                : c.mist.withValues(alpha: 0.45),
           ),
         ),
         labelTextStyle: WidgetStateProperty.all(
           GoogleFonts.inter(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: primarySoft,
+            color: selected,
           ),
         ),
       ),
       sliderTheme: SliderThemeData(
-        activeTrackColor: accent,
-        inactiveTrackColor: mist.withValues(alpha: 0.14),
-        thumbColor: accent,
+        activeTrackColor: c.accent,
+        inactiveTrackColor: c.mist.withValues(alpha: 0.14),
+        thumbColor: c.accent,
         trackHeight: 3,
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
       ),
       tabBarTheme: TabBarThemeData(
-        indicatorColor: primarySoft,
-        labelColor: mist,
-        unselectedLabelColor: mist.withValues(alpha: 0.45),
+        indicatorColor: selected,
+        labelColor: c.mist,
+        unselectedLabelColor: c.mist.withValues(alpha: 0.45),
         dividerColor: Colors.transparent,
         labelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
       ),
-      listTileTheme: const ListTileThemeData(
-        iconColor: mist,
-        textColor: mist,
+      listTileTheme: ListTileThemeData(
+        iconColor: c.mist,
+        textColor: c.mist,
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: surface,
+        color: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: accent,
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: c.accent,
         linearMinHeight: 2,
       ),
     );
@@ -145,7 +161,7 @@ class AppTheme {
   /// Outfit carries headings, Inter carries text. Two families, clearly
   /// distinct: Outfit's geometric caps read as a wordmark, Inter stays quiet
   /// at track-title size where it has to hold up in long lists.
-  static TextTheme _textTheme(TextTheme base) {
+  static TextTheme _textTheme(TextTheme base, Color mist) {
     return GoogleFonts.outfitTextTheme(base).copyWith(
       displaySmall: GoogleFonts.outfit(
         fontSize: 30,
@@ -181,4 +197,75 @@ class AppTheme {
       ),
     );
   }
+}
+
+/// The colours that differ between the light and dark themes. Brand violet
+/// is the same in both; everything neutral, and the teal (which is too pale
+/// to read on white), comes from here.
+@immutable
+class PulseColors extends ThemeExtension<PulseColors> {
+  final Color background;
+  final Color surface;
+  final Color lift;
+
+  /// Text and icons on [background] / [surface].
+  final Color mist;
+  final Color accent;
+
+  const PulseColors({
+    required this.background,
+    required this.surface,
+    required this.lift,
+    required this.mist,
+    required this.accent,
+  });
+
+  static const dark = PulseColors(
+    background: AppTheme.background,
+    surface: AppTheme.surface,
+    lift: AppTheme.lift,
+    mist: AppTheme.mist,
+    accent: AppTheme.accent,
+  );
+
+  static const light = PulseColors(
+    background: Color(0xFFF6F5FB),
+    surface: Color(0xFFFFFFFF),
+    lift: Color(0xFFECEAF6),
+    mist: Color(0xFF1B1A2E),
+    accent: Color(0xFF0891B2),
+  );
+
+  @override
+  PulseColors copyWith({
+    Color? background,
+    Color? surface,
+    Color? lift,
+    Color? mist,
+    Color? accent,
+  }) =>
+      PulseColors(
+        background: background ?? this.background,
+        surface: surface ?? this.surface,
+        lift: lift ?? this.lift,
+        mist: mist ?? this.mist,
+        accent: accent ?? this.accent,
+      );
+
+  @override
+  PulseColors lerp(PulseColors? other, double t) {
+    if (other == null) return this;
+    return PulseColors(
+      background: Color.lerp(background, other.background, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      lift: Color.lerp(lift, other.lift, t)!,
+      mist: Color.lerp(mist, other.mist, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
+    );
+  }
+}
+
+extension PulseThemeContext on BuildContext {
+  /// The light- or dark-theme palette in effect here.
+  PulseColors get colors => Theme.of(this).extension<PulseColors>()!;
 }

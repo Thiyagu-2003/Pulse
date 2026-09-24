@@ -31,10 +31,10 @@ class GlassContainer extends StatelessWidget {
             child: Container(
               padding: padding,
               decoration: BoxDecoration(
-                color: AppTheme.cardGlass,
+                color: context.colors.lift.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(borderRadius),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: context.colors.mist.withValues(alpha: 0.08),
                   width: 1,
                 ),
               ),

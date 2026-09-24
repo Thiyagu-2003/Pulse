@@ -73,15 +73,15 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
             controller: _controller,
             autofocus: true,
             textInputAction: TextInputAction.search,
-            style: const TextStyle(color: AppTheme.mist),
+            style: TextStyle(color: context.colors.mist),
             decoration: InputDecoration(
               hintText: 'Songs, artists, albums...',
-              hintStyle: TextStyle(color: AppTheme.mist.withValues(alpha: 0.4)),
+              hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.4)),
               filled: true,
-              fillColor: AppTheme.lift,
+              fillColor: context.colors.lift,
               prefixIcon: Icon(
                 Icons.search_rounded,
-                color: AppTheme.mist.withValues(alpha: 0.6),
+                color: context.colors.mist.withValues(alpha: 0.6),
               ),
               suffixIcon: _controller.text.isEmpty
                   ? null
@@ -114,7 +114,7 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
       return Center(
         child: Text(
           'Search for any song or artist',
-          style: TextStyle(color: AppTheme.mist.withValues(alpha: 0.5)),
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.5)),
         ),
       );
     }
@@ -145,7 +145,7 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
           ListTile(
             leading: Icon(
               Icons.history_rounded,
-              color: AppTheme.mist.withValues(alpha: 0.6),
+              color: context.colors.mist.withValues(alpha: 0.6),
             ),
             title: Text(query),
             onTap: () => _search(query),
@@ -161,10 +161,10 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
       );
     }
     if (_results.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No results found. Try a different search.',
-          style: TextStyle(color: Colors.white54),
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
         ),
       );
     }

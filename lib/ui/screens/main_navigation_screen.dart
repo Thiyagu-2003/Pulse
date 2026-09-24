@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/platform_bridge.dart';
 import 'online_music_screen.dart';
 import 'local_songs_screen.dart';
 import 'podcasts_screen.dart';
@@ -17,7 +18,8 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends State<MainNavigationScreen>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
   StreamSubscription<String>? _errorSubscription;
 
@@ -28,9 +30,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     PlaylistsScreen(),
   ];
 
+  /// The launcher icon is applied on the way out: swapping launcher entries
+  /// while the app is on screen closes it on some phones.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      PlatformBridge.setLauncherIcon(
+        dark: context.read<MusicPlayerProvider>().darkLauncherIcon,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // This shell outlives every tab and the Now Playing route, so it is the
     // one place guaranteed to be mounted whenever playback fails.
     _errorSubscription = context
@@ -55,6 +69,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _errorSubscription?.cancel();
     super.dispose();
   }
@@ -84,7 +99,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(
-            top: BorderSide(color: AppTheme.mist.withValues(alpha: 0.06)),
+            top: BorderSide(color: context.colors.mist.withValues(alpha: 0.06)),
           ),
         ),
         child: NavigationBar(

@@ -96,14 +96,14 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
               _groupByFolder
                   ? Icons.folder_rounded
                   : Icons.format_list_bulleted_rounded,
-              color: AppTheme.accent,
+              color: context.colors.accent,
             ),
             tooltip: _groupByFolder ? 'Show all songs' : 'Group by folder',
             onPressed: () =>
                 setState(() => _groupByFolder = !_groupByFolder),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppTheme.accent),
+            icon: Icon(Icons.refresh, color: context.colors.accent),
             onPressed: () {
               setState(() => _isLoading = true);
               _initLocalMusic();
@@ -112,9 +112,9 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
+          ? Center(
               child: SpinKitDoubleBounce(
-                color: AppTheme.accent,
+                color: context.colors.accent,
                 size: 50.0,
               ),
             )
@@ -141,7 +141,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
                                 _query.isEmpty
                                     ? '${_localSongs.length} Songs found'
                                     : '${_visibleSongs.length} of ${_localSongs.length}',
-                                style: const TextStyle(color: Colors.white60),
+                                style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
                               ),
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
@@ -177,10 +177,10 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
                             builder: (context) {
                               final visible = _visibleSongs;
                               if (visible.isEmpty) {
-                                return const Center(
+                                return Center(
                                   child: Text(
                                     'No songs match your search.',
-                                    style: TextStyle(color: Colors.white54),
+                                    style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
                                   ),
                                 );
                               }
@@ -236,9 +236,9 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
           ),
           subtitle: Text(
             '${folder.length} ${folder.length == 1 ? 'track' : 'tracks'}',
-            style: const TextStyle(fontSize: 12, color: Colors.white60),
+            style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.60)),
           ),
-          trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+          trailing: Icon(Icons.chevron_right, color: context.colors.mist.withValues(alpha: 0.38)),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -257,17 +257,17 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.folder_off, size: 80, color: Colors.white24),
+            Icon(Icons.folder_off, size: 80, color: context.colors.mist.withValues(alpha: 0.24)),
             const SizedBox(height: 16),
             const Text(
               'Storage Permission Required',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Grant permission to scan your device for local MP3, FLAC, and audio files.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white60),
+              style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -288,8 +288,8 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.library_music, size: 80, color: Colors.white24),
+        children: [
+          Icon(Icons.library_music, size: 80, color: context.colors.mist.withValues(alpha: 0.24)),
           SizedBox(height: 16),
           Text(
             'No Local Songs Found',
@@ -298,7 +298,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
           SizedBox(height: 8),
           Text(
             'Add music files to your device storage to play them offline.',
-            style: TextStyle(color: Colors.white60),
+            style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
           ),
         ],
       ),

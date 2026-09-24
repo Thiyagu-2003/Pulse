@@ -13,12 +13,7 @@ class TrackTile extends StatelessWidget {
   final List<AppMediaItem>? playlist;
   final VoidCallback? onTap;
 
-  const TrackTile({
-    super.key,
-    required this.item,
-    this.playlist,
-    this.onTap,
-  });
+  const TrackTile({super.key, required this.item, this.playlist, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +30,7 @@ class TrackTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: isPlayingCurrent
             ? AppTheme.primary.withValues(alpha: 0.16)
-            : AppTheme.mist.withValues(alpha: 0.03),
+            : context.colors.mist.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isPlayingCurrent
@@ -43,115 +38,134 @@ class TrackTile extends StatelessWidget {
               : Colors.transparent,
         ),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        onTap: onTap ?? () => playerProvider.playTrack(item, playlist: playlist),
-        onLongPress: () => showTrackActions(context, item),
-        leading: Stack(
-          alignment: Alignment.center,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: item.artUri != null && item.artUri!.startsWith('http')
-                  ? CachedNetworkImage(
-                      imageUrl: item.artUri!,
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => _buildPlaceholder(),
-                      errorWidget: (context, url, error) => _buildPlaceholder(),
-                    )
-                  : _buildPlaceholder(),
-            ),
-            // The pulse sits on the artwork of the track you can hear.
-            if (isPlayingCurrent)
-              Container(
-                width: 50,
-                height: 50,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: StreamBuilder<PlaybackState>(
-                  stream: playerProvider.playbackState,
-                  builder: (context, snapshot) => PlayingIndicator(
-                    isPlaying: snapshot.data?.playing ?? false,
-                    size: 18,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        title: Text(
-          item.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: isPlayingCurrent ? AppTheme.accent : Colors.white,
+      // The row's own Material: ListTile paints its tap ripple on the nearest
+      // Material, and the decorated container above would hide it — taps
+      // gave no visual feedback at all.
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
           ),
-        ),
-        subtitle: Row(
-          children: [
-            _buildSourceBadge(item.sourceType),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                item.artist,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: Colors.white60),
+          onTap:
+              onTap ?? () => playerProvider.playTrack(item, playlist: playlist),
+          onLongPress: () => showTrackActions(context, item),
+          leading: Stack(
+            alignment: Alignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: item.artUri != null && item.artUri!.startsWith('http')
+                    ? CachedNetworkImage(
+                        imageUrl: item.artUri!,
+                        width: 50,
+                        height: 50,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) =>
+                            _buildPlaceholder(context),
+                        errorWidget: (context, url, error) =>
+                            _buildPlaceholder(context),
+                      )
+                    : _buildPlaceholder(context),
               ),
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Downloads go through YouTube extraction; a podcast id is a
-            // hash of its URL, so that could only ever fail.
-            if (item.sourceType == MediaSourceType.youtube)
-              DownloadButton(item: item),
-            IconButton(
-              // Scales up as it fills in, so the tap has a result you can see
-              // without moving your eyes to a toast.
-              icon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 260),
-                transitionBuilder: (child, animation) => ScaleTransition(
-                  scale: CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutBack,
+              // The pulse sits on the artwork of the track you can hear.
+              if (isPlayingCurrent)
+                Container(
+                  width: 50,
+                  height: 50,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: child,
+                  child: StreamBuilder<PlaybackState>(
+                    stream: playerProvider.playbackState,
+                    builder: (context, snapshot) => PlayingIndicator(
+                      isPlaying: snapshot.data?.playing ?? false,
+                      size: 18,
+                    ),
+                  ),
                 ),
-                child: Icon(
-                  isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  key: ValueKey(isFav),
-                  color: isFav
-                      ? const Color(0xFFFF5C7A)
-                      : AppTheme.mist.withValues(alpha: 0.35),
-                  size: 20,
+            ],
+          ),
+          title: Text(
+            item.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: isPlayingCurrent
+                  ? context.colors.accent
+                  : context.colors.mist,
+            ),
+          ),
+          subtitle: Row(
+            children: [
+              _buildSourceBadge(context, item.sourceType),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  item.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.colors.mist.withValues(alpha: 0.60),
+                  ),
                 ),
               ),
-              onPressed: () => playerProvider.toggleFavorite(item),
-            ),
-          ],
+            ],
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Downloads go through YouTube extraction; a podcast id is a
+              // hash of its URL, so that could only ever fail.
+              if (item.sourceType == MediaSourceType.youtube)
+                DownloadButton(item: item),
+              IconButton(
+                // Scales up as it fills in, so the tap has a result you can see
+                // without moving your eyes to a toast.
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  transitionBuilder: (child, animation) => ScaleTransition(
+                    scale: CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutBack,
+                    ),
+                    child: child,
+                  ),
+                  child: Icon(
+                    isFav
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    key: ValueKey(isFav),
+                    color: isFav
+                        ? const Color(0xFFFF5C7A)
+                        : context.colors.mist.withValues(alpha: 0.35),
+                    size: 20,
+                  ),
+                ),
+                onPressed: () => playerProvider.toggleFavorite(item),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(BuildContext context) {
     return Container(
       width: 50,
       height: 50,
-      color: Colors.white10,
+      color: context.colors.mist.withValues(alpha: 0.10),
       child: const Icon(Icons.music_note, color: AppTheme.primary),
     );
   }
 
-  Widget _buildSourceBadge(MediaSourceType type) {
+  Widget _buildSourceBadge(BuildContext context, MediaSourceType type) {
     Color color;
     String label;
     switch (type) {
@@ -162,7 +176,7 @@ class TrackTile extends StatelessWidget {
         label = type.label;
         break;
       case MediaSourceType.local:
-        color = AppTheme.accent;
+        color = context.colors.accent;
         label = type.label;
         break;
       case MediaSourceType.podcast:
@@ -178,7 +192,11 @@ class TrackTile extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: color),
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
       ),
     );
   }
@@ -190,7 +208,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
   final provider = context.read<MusicPlayerProvider>();
   showModalBottomSheet(
     context: context,
-    backgroundColor: AppTheme.surface,
+    backgroundColor: context.colors.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
@@ -208,29 +226,44 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.playlist_play_rounded, color: AppTheme.accent),
+            leading: Icon(
+              Icons.playlist_play_rounded,
+              color: context.colors.accent,
+            ),
             title: const Text('Play next'),
             onTap: () {
               final added = provider.playNext(item);
               Navigator.pop(sheetContext);
-              _confirm(context, added
-                  ? 'Playing next: ${item.title}'
-                  : 'Already playing: ${item.title}');
+              _confirm(
+                context,
+                added
+                    ? 'Playing next: ${item.title}'
+                    : 'Already playing: ${item.title}',
+              );
             },
           ),
           ListTile(
-            leading: const Icon(Icons.queue_music_rounded, color: AppTheme.accent),
+            leading: Icon(
+              Icons.queue_music_rounded,
+              color: context.colors.accent,
+            ),
             title: const Text('Add to queue'),
             onTap: () {
               final added = provider.addToQueue(item);
               Navigator.pop(sheetContext);
-              _confirm(context, added
-                  ? 'Added to queue: ${item.title}'
-                  : 'Already playing: ${item.title}');
+              _confirm(
+                context,
+                added
+                    ? 'Added to queue: ${item.title}'
+                    : 'Already playing: ${item.title}',
+              );
             },
           ),
           ListTile(
-            leading: const Icon(Icons.playlist_add_rounded, color: AppTheme.accent),
+            leading: Icon(
+              Icons.playlist_add_rounded,
+              color: context.colors.accent,
+            ),
             title: const Text('Add to playlist'),
             onTap: () {
               Navigator.pop(sheetContext);
@@ -240,8 +273,10 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
           if (item.sourceType == MediaSourceType.youtube)
             provider.isDownloaded(item.id)
                 ? ListTile(
-                    leading: const Icon(Icons.download_done_rounded,
-                        color: AppTheme.accent),
+                    leading: Icon(
+                      Icons.download_done_rounded,
+                      color: context.colors.accent,
+                    ),
                     title: const Text('Remove download'),
                     onTap: () {
                       Navigator.pop(sheetContext);
@@ -249,11 +284,15 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                     },
                   )
                 : ListTile(
-                    leading: const Icon(Icons.download_rounded,
-                        color: AppTheme.accent),
-                    title: Text(provider.isDownloading(item.id)
-                        ? 'Downloading…'
-                        : 'Download'),
+                    leading: Icon(
+                      Icons.download_rounded,
+                      color: context.colors.accent,
+                    ),
+                    title: Text(
+                      provider.isDownloading(item.id)
+                          ? 'Downloading…'
+                          : 'Download',
+                    ),
                     enabled: !provider.isDownloading(item.id),
                     onTap: () {
                       Navigator.pop(sheetContext);
@@ -268,55 +307,71 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
 
 void _confirm(BuildContext context, String message) {
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
-        duration: const Duration(milliseconds: 1500),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  showCompactSnack(
+    ScaffoldMessenger.of(context),
+    message,
+    icon: Icons.queue_music_rounded,
+  );
 }
 
-/// Download [item] and say how it went. A failed download used to leave the
-/// user with a spinner that just vanished, with no explanation.
+/// Download [item]. Progress lives in the notification shade; in the app
+/// there's only a one-line confirmation, so a long title can't cover the list.
 Future<void> startDownload(BuildContext context, AppMediaItem item) async {
   final provider = context.read<MusicPlayerProvider>();
   if (provider.isDownloading(item.id)) return;
   final messenger = ScaffoldMessenger.of(context);
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text('Downloading "${item.title}"…'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   final path = await provider.downloadTrack(item);
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(path != null
-            ? 'Downloaded "${item.title}" for offline playback!'
-            : 'Could not download "${item.title}". Check your connection and try again.'),
-        backgroundColor: path != null ? AppTheme.primary : Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  showCompactSnack(
+    messenger,
+    path != null
+        ? 'Downloaded: ${item.title}'
+        : "Couldn't download: ${item.title}",
+    icon: path != null
+        ? Icons.download_done_rounded
+        : Icons.error_outline_rounded,
+    error: path == null,
+  );
 }
 
 Future<void> removeDownload(BuildContext context, AppMediaItem item) async {
   final messenger = ScaffoldMessenger.of(context);
   await context.read<MusicPlayerProvider>().deleteDownload(item);
+  showCompactSnack(
+    messenger,
+    'Removed download: ${item.title}',
+    icon: Icons.delete_outline_rounded,
+  );
+}
+
+/// One line, icon first, gone in two seconds.
+void showCompactSnack(
+  ScaffoldMessengerState messenger,
+  String message, {
+  IconData icon = Icons.check_circle_outline_rounded,
+  bool error = false,
+}) {
+  final colors = messenger.context.colors;
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text('Removed download: ${item.title}'),
+        content: Row(
+          children: [
+            Icon(icon, size: 20, color: error ? Colors.white : colors.accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: error ? Colors.redAccent : colors.lift,
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
 }
@@ -339,7 +394,7 @@ class DownloadButton extends StatelessWidget {
           height: size - 2,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: AppTheme.accent,
+            color: context.colors.accent,
             // Null until the first chunk arrives, so it spins rather than
             // sitting at a dead 0%.
             value: provider.downloadProgress(item.id),
@@ -350,14 +405,22 @@ class DownloadButton extends StatelessWidget {
 
     if (provider.isDownloaded(item.id)) {
       return IconButton(
-        icon: Icon(Icons.download_done_rounded, color: AppTheme.accent, size: size),
+        icon: Icon(
+          Icons.download_done_rounded,
+          color: context.colors.accent,
+          size: size,
+        ),
         tooltip: 'Downloaded — tap to remove',
         onPressed: () => removeDownload(context, item),
       );
     }
 
     return IconButton(
-      icon: Icon(Icons.download_rounded, color: Colors.white54, size: size),
+      icon: Icon(
+        Icons.download_rounded,
+        color: context.colors.mist.withValues(alpha: 0.54),
+        size: size,
+      ),
       tooltip: 'Download for offline',
       onPressed: () => startDownload(context, item),
     );
