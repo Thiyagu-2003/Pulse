@@ -62,7 +62,8 @@ class PulseWidgetProvider : AppWidgetProvider() {
             if (art != null) {
                 views.setImageViewBitmap(R.id.widget_art, art)
             } else {
-                views.setImageViewResource(R.id.widget_art, R.mipmap.launcher_icon)
+                // No artwork: the app icon, in the style chosen in Settings.
+                views.setImageViewResource(R.id.widget_art, IconStyle.imageRes(context))
             }
 
             views.setOnClickPendingIntent(R.id.widget_root, openApp(context))

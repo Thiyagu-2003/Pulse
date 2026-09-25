@@ -25,8 +25,8 @@ class QueueState {
 
   AppMediaItem? get currentTrack =>
       (_currentIndex >= 0 && _currentIndex < _items.length)
-          ? _items[_currentIndex]
-          : null;
+      ? _items[_currentIndex]
+      : null;
 
   /// Replace the whole queue and make [track] current, adding it if the list
   /// somehow doesn't contain it.

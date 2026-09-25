@@ -7,9 +7,11 @@ import '../../models/media_item_model.dart';
 import '../../models/playback_mode.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/track_tile.dart';
+import 'full_screen_lyrics.dart';
 import 'dart:async';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -128,7 +130,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final playerProvider = Provider.of<MusicPlayerProvider>(context);
     // Read from the player: it outlives this screen, so a copy in widget
     // state showed "1.0x" on reopen while audio kept playing at 1.5x.
-    final playbackSpeed = playerProvider.audioHandler.player.speed;
+    final playbackSpeed = playerProvider.speed;
+    final isPodcast =
+        playerProvider.currentTrack?.sourceType == MediaSourceType.podcast;
     final track = playerProvider.currentTrack;
 
     if (track == null) {
@@ -255,13 +259,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         child: playerProvider.isLoadingLyrics
                             ? const Center(child: CircularProgressIndicator())
                             : playerProvider.currentLyrics == null
-                                ? const Center(
-                                    child: Text(
-                                      'No lyrics found for this song.',
-                                      style: TextStyle(color: Colors.white60),
-                                    ),
-                                  )
-                                : LyricsView(
+                            ? const Center(
+                                child: Text(
+                                  'No lyrics found for this song.',
+                                  style: TextStyle(color: Colors.white60),
+                                ),
+                              )
+                            : Stack(
+                                children: [
+                                  LyricsView(
                                     // A new song starts a fresh view.
                                     key: ValueKey(playerProvider.currentLyrics),
                                     lyrics: playerProvider.currentLyrics!,
@@ -270,6 +276,26 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                         playerProvider.currentDuration,
                                     onSeek: playerProvider.audioHandler.seek,
                                   ),
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: IconButton(
+                                      tooltip: 'Full screen lyrics',
+                                      icon: const Icon(
+                                        Icons.fullscreen_rounded,
+                                        color: Colors.white70,
+                                      ),
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const FullScreenLyrics(),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                       ),
                     ),
                   )
@@ -569,20 +595,29 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               ),
                             ),
                             onPressed: () async {
-                              const speeds = [1.0, 1.25, 1.5, 2.0];
+                              const speeds = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
                               final next =
                                   speeds[(speeds.indexOf(playbackSpeed) + 1) %
                                       speeds.length];
-                              await playerProvider.audioHandler.setSpeed(next);
-                              if (mounted) setState(() {});
+                              await playerProvider.setSpeed(next);
                             },
                           ),
 
-                          IconButton(
-                            iconSize: 36,
-                            icon: const Icon(Icons.skip_previous_rounded),
-                            onPressed: playerProvider.skipToPrevious,
-                          ),
+                          // Podcasts: jump within the episode instead.
+                          isPodcast
+                              ? IconButton(
+                                  iconSize: 36,
+                                  tooltip: 'Back 10 seconds',
+                                  icon: const Icon(Icons.replay_10_rounded),
+                                  onPressed: () => playerProvider.seekBy(
+                                    const Duration(seconds: -10),
+                                  ),
+                                )
+                              : IconButton(
+                                  iconSize: 36,
+                                  icon: const Icon(Icons.skip_previous_rounded),
+                                  onPressed: playerProvider.skipToPrevious,
+                                ),
 
                           // Floating Play/Pause Action Button with Buffering state
                           GestureDetector(
@@ -626,11 +661,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             ),
                           ),
 
-                          IconButton(
-                            iconSize: 36,
-                            icon: const Icon(Icons.skip_next_rounded),
-                            onPressed: playerProvider.skipToNext,
-                          ),
+                          isPodcast
+                              ? IconButton(
+                                  iconSize: 36,
+                                  tooltip: 'Forward 30 seconds',
+                                  icon: const Icon(Icons.forward_30_rounded),
+                                  onPressed: () => playerProvider.seekBy(
+                                    const Duration(seconds: 30),
+                                  ),
+                                )
+                              : IconButton(
+                                  iconSize: 36,
+                                  icon: const Icon(Icons.skip_next_rounded),
+                                  onPressed: playerProvider.skipToNext,
+                                ),
 
                           IconButton(
                             icon: const Icon(
@@ -762,13 +806,41 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Playing Queue',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Expanded(
+                    child: Text(
+                      'Playing Queue · ${queueProvider.queue.length}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                  Text(
-                    '${queueProvider.queue.length} tracks',
-                    style: const TextStyle(fontSize: 12, color: Colors.white54),
+                  IconButton(
+                    tooltip: 'Save as playlist',
+                    icon: const Icon(Icons.playlist_add_rounded),
+                    onPressed: queueProvider.queue.isEmpty
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final name = await promptForPlaylistName(
+                              context,
+                              title: 'Save queue as playlist',
+                            );
+                            if (name == null) return;
+                            await queueProvider.saveQueueAsPlaylist(name);
+                            showCompactSnack(
+                              messenger,
+                              'Saved playlist: $name',
+                              icon: Icons.playlist_add_check_rounded,
+                            );
+                          },
+                  ),
+                  IconButton(
+                    tooltip: 'Clear up next',
+                    icon: const Icon(Icons.clear_all_rounded),
+                    onPressed: queueProvider.queue.length < 2
+                        ? null
+                        : queueProvider.clearUpNext,
                   ),
                 ],
               ),
@@ -789,51 +861,67 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       itemBuilder: (_, index) {
                         final item = queueProvider.queue[index];
                         final isCurrent = index == queueProvider.currentIndex;
-                        return ListTile(
-                          key: ValueKey('${item.id}_$index'),
-                          leading: Icon(
-                            isCurrent ? Icons.volume_up : Icons.music_note,
-                            color: isCurrent ? AppTheme.accent : Colors.white38,
+                        // Swipe either way to remove. The queue never holds
+                        // a song twice, so its id is a stable key.
+                        return Dismissible(
+                          key: ValueKey(item.id),
+                          onDismissed: (_) =>
+                              queueProvider.removeFromQueue(index),
+                          background: Container(
+                            color: Colors.red.withValues(alpha: 0.3),
                           ),
-                          title: Text(
-                            item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: isCurrent ? AppTheme.accent : Colors.white,
+                          child: ListTile(
+                            leading: Icon(
+                              isCurrent ? Icons.volume_up : Icons.music_note,
+                              color: isCurrent
+                                  ? AppTheme.accent
+                                  : Colors.white38,
                             ),
-                          ),
-                          subtitle: Text(
-                            item.artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.close_rounded, size: 18),
-                                color: Colors.white38,
-                                tooltip: 'Remove from queue',
-                                onPressed: () =>
-                                    queueProvider.removeFromQueue(index),
+                            title: Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isCurrent
+                                    ? AppTheme.accent
+                                    : Colors.white,
                               ),
-                              ReorderableDragStartListener(
-                                index: index,
-                                child: const Padding(
-                                  padding: EdgeInsets.only(right: 4),
-                                  child: Icon(
-                                    Icons.drag_handle_rounded,
-                                    color: Colors.white38,
+                            ),
+                            subtitle: Text(
+                              item.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                  ),
+                                  color: Colors.white38,
+                                  tooltip: 'Remove from queue',
+                                  onPressed: () =>
+                                      queueProvider.removeFromQueue(index),
+                                ),
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(right: 4),
+                                    child: Icon(
+                                      Icons.drag_handle_rounded,
+                                      color: Colors.white38,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                            onTap: () {
+                              queueProvider.playQueueItem(index);
+                              Navigator.pop(context);
+                            },
                           ),
-                          onTap: () {
-                            queueProvider.playQueueItem(index);
-                            Navigator.pop(context);
-                          },
                         );
                       },
                     ),

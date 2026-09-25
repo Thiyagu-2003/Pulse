@@ -4,6 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/platform_bridge.dart';
+import '../../services/saavn_service.dart';
+import '../screens/artist_screen.dart';
 import '../theme/app_theme.dart';
 import 'add_to_playlist_sheet.dart';
 import 'playing_indicator.dart';
@@ -215,103 +218,169 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
   // use the navigator's context, which lives as long as the app, and the
   // sheet styles itself from its own context.
   final rootContext = Navigator.of(context).context;
+  final artistId = item.extras?[SaavnService.artistIdKey] as String?;
+  final albumId = item.extras?[SaavnService.albumIdKey] as String?;
+  final link = shareLinkFor(item);
+  void open(BuildContext sheetContext, SaavnKind kind, String id, String name) {
+    Navigator.pop(sheetContext);
+    openCollection(
+      rootContext,
+      SaavnCollection(kind: kind, id: id, title: name, subtitle: '', image: ''),
+    );
+  }
+
   showModalBottomSheet(
     context: context,
+    // Scrolls rather than overflows on a short screen.
+    isScrollControlled: true,
     backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (sheetContext) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              item.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
             ),
-          ),
-          ListTile(
-            leading: Icon(
-              Icons.playlist_play_rounded,
-              color: sheetContext.colors.accent,
+            ListTile(
+              leading: Icon(
+                Icons.playlist_play_rounded,
+                color: sheetContext.colors.accent,
+              ),
+              title: const Text('Play next'),
+              onTap: () {
+                final added = provider.playNext(item);
+                Navigator.pop(sheetContext);
+                _confirm(
+                  rootContext,
+                  added
+                      ? 'Playing next: ${item.title}'
+                      : 'Already playing: ${item.title}',
+                );
+              },
             ),
-            title: const Text('Play next'),
-            onTap: () {
-              final added = provider.playNext(item);
-              Navigator.pop(sheetContext);
-              _confirm(
-                rootContext,
-                added
-                    ? 'Playing next: ${item.title}'
-                    : 'Already playing: ${item.title}',
-              );
-            },
-          ),
-          ListTile(
-            leading: Icon(
-              Icons.queue_music_rounded,
-              color: sheetContext.colors.accent,
+            ListTile(
+              leading: Icon(
+                Icons.queue_music_rounded,
+                color: sheetContext.colors.accent,
+              ),
+              title: const Text('Add to queue'),
+              onTap: () {
+                final added = provider.addToQueue(item);
+                Navigator.pop(sheetContext);
+                _confirm(
+                  rootContext,
+                  added
+                      ? 'Added to queue: ${item.title}'
+                      : 'Already playing: ${item.title}',
+                );
+              },
             ),
-            title: const Text('Add to queue'),
-            onTap: () {
-              final added = provider.addToQueue(item);
-              Navigator.pop(sheetContext);
-              _confirm(
-                rootContext,
-                added
-                    ? 'Added to queue: ${item.title}'
-                    : 'Already playing: ${item.title}',
-              );
-            },
-          ),
-          ListTile(
-            leading: Icon(
-              Icons.playlist_add_rounded,
-              color: sheetContext.colors.accent,
+            ListTile(
+              leading: Icon(
+                Icons.playlist_add_rounded,
+                color: sheetContext.colors.accent,
+              ),
+              title: const Text('Add to playlist'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                showAddToPlaylistSheet(rootContext, item);
+              },
             ),
-            title: const Text('Add to playlist'),
-            onTap: () {
-              Navigator.pop(sheetContext);
-              showAddToPlaylistSheet(rootContext, item);
-            },
-          ),
-          if (item.sourceType.isOnline)
-            provider.isDownloaded(item.id)
-                ? ListTile(
-                    leading: Icon(
-                      Icons.download_done_rounded,
-                      color: sheetContext.colors.accent,
+            if (item.sourceType.isOnline)
+              provider.isDownloaded(item.id)
+                  ? ListTile(
+                      leading: Icon(
+                        Icons.download_done_rounded,
+                        color: sheetContext.colors.accent,
+                      ),
+                      title: const Text('Remove download'),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        removeDownload(rootContext, item);
+                      },
+                    )
+                  : ListTile(
+                      leading: Icon(
+                        Icons.download_rounded,
+                        color: sheetContext.colors.accent,
+                      ),
+                      title: Text(
+                        provider.isDownloading(item.id)
+                            ? 'Downloading…'
+                            : 'Download',
+                      ),
+                      enabled: !provider.isDownloading(item.id),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        startDownload(rootContext, item);
+                      },
                     ),
-                    title: const Text('Remove download'),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      removeDownload(rootContext, item);
-                    },
-                  )
-                : ListTile(
-                    leading: Icon(
-                      Icons.download_rounded,
-                      color: sheetContext.colors.accent,
-                    ),
-                    title: Text(
-                      provider.isDownloading(item.id)
-                          ? 'Downloading…'
-                          : 'Download',
-                    ),
-                    enabled: !provider.isDownloading(item.id),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      startDownload(rootContext, item);
-                    },
-                  ),
-        ],
+            if (artistId != null)
+              ListTile(
+                leading: Icon(
+                  Icons.person_rounded,
+                  color: sheetContext.colors.accent,
+                ),
+                title: const Text('Go to artist'),
+                onTap: () => open(
+                  sheetContext,
+                  SaavnKind.artist,
+                  artistId,
+                  item.artist.split(',').first.trim(),
+                ),
+              ),
+            if (albumId != null)
+              ListTile(
+                leading: Icon(
+                  Icons.album_rounded,
+                  color: sheetContext.colors.accent,
+                ),
+                title: const Text('Go to album'),
+                onTap: () =>
+                    open(sheetContext, SaavnKind.album, albumId, item.album),
+              ),
+            if (link != null)
+              ListTile(
+                leading: Icon(
+                  Icons.share_rounded,
+                  color: sheetContext.colors.accent,
+                ),
+                title: const Text('Share'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  PlatformBridge.share('${item.title} – ${item.artist}\n$link');
+                },
+              ),
+          ],
+        ),
       ),
     ),
   );
+}
+
+/// A link anyone can open for [item], or null for device songs and podcasts.
+String? shareLinkFor(AppMediaItem item) {
+  final perma = item.extras?[SaavnService.permaUrlKey] as String?;
+  if (perma != null && perma.startsWith('http')) return perma;
+  final origin = item.extras?[MusicPlayerProvider.originKey];
+  if (item.sourceType == MediaSourceType.youtube ||
+      origin == MediaSourceType.youtube.name) {
+    return 'https://music.youtube.com/watch?v=${item.id}';
+  }
+  return null;
 }
 
 void _confirm(BuildContext context, String message) {

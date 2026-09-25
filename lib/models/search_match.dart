@@ -10,9 +10,31 @@ import 'media_item_model.dart';
 
 /// Words people add to a search that are never part of a song's name.
 const _filler = {
-  'song', 'songs', 'lyrics', 'lyric', 'video', 'videos', 'audio', 'official',
-  'full', 'hd', 'mp3', 'new', 'latest', 'movie', 'film', 'tamil', 'hindi',
-  'telugu', 'malayalam', 'kannada', 'from', 'the', 'a', 'of', 'by',
+  'song',
+  'songs',
+  'lyrics',
+  'lyric',
+  'video',
+  'videos',
+  'audio',
+  'official',
+  'full',
+  'hd',
+  'mp3',
+  'new',
+  'latest',
+  'movie',
+  'film',
+  'tamil',
+  'hindi',
+  'telugu',
+  'malayalam',
+  'kannada',
+  'from',
+  'the',
+  'a',
+  'of',
+  'by',
 };
 
 /// [query] without filler words ("kamatchi song lyrics" → "kamatchi").
@@ -60,8 +82,11 @@ int _distance(String a, String b, int cap) {
     var rowMin = cur[0];
     for (var j = 1; j <= b.length; j++) {
       final cost = a[i - 1] == b[j - 1] ? 0 : 1;
-      cur[j] = [prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost]
-          .reduce((x, y) => x < y ? x : y);
+      cur[j] = [
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + cost,
+      ].reduce((x, y) => x < y ? x : y);
       if (cur[j] < rowMin) rowMin = cur[j];
     }
     if (rowMin > cap) return cap + 1;
@@ -82,8 +107,11 @@ bool wordsMatch(String typed, String candidate) {
   return _distance(a, b, cap) <= cap;
 }
 
-List<String> _words(String s) =>
-    s.toLowerCase().split(RegExp(r'[\s\-_,|/()"\[\]:.!?]+')).where((w) => w.length >= 2).toList();
+List<String> _words(String s) => s
+    .toLowerCase()
+    .split(RegExp(r'[\s\-_,|/()"\[\]:.!?]+'))
+    .where((w) => w.length >= 2)
+    .toList();
 
 /// Whether [results] look like answers to [query]: at least half of the
 /// typed words (filler aside) appear — typos allowed — in the title, album
@@ -97,9 +125,13 @@ bool looksRelevant(String query, List<AppMediaItem> results, {int top = 5}) {
     final text = '${r.title} ${r.album} ${r.artist}';
     final words = _words(text);
     final glued = foldWord(text.replaceAll(' ', ''));
-    final hits = typed.where((t) =>
-        words.any((w) => wordsMatch(t, w)) ||
-        (foldWord(t).length >= 4 && glued.contains(foldWord(t)))).length;
+    final hits = typed
+        .where(
+          (t) =>
+              words.any((w) => wordsMatch(t, w)) ||
+              (foldWord(t).length >= 4 && glued.contains(foldWord(t))),
+        )
+        .length;
     if (hits * 2 >= typed.length) return true;
   }
   return false;
@@ -112,8 +144,11 @@ String songNameFromVideoTitle(String title) {
   var t = title.replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), ' ');
   t = t.split(RegExp(r'\s[|\-–—]\s|\|')).first;
   t = t.replaceAll(
-      RegExp(r'\b(official|lyric|lyrical|video|audio|full|song|hd|4k)\b',
-          caseSensitive: false),
-      ' ');
+    RegExp(
+      r'\b(official|lyric|lyrical|video|audio|full|song|hd|4k)\b',
+      caseSensitive: false,
+    ),
+    ' ',
+  );
   return t.replaceAll(RegExp(r'\s+'), ' ').trim();
 }

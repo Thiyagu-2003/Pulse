@@ -17,8 +17,10 @@ class MediaFolder {
 
   /// Last path segment — "Recordings" out of "/storage/emulated/0/Recordings".
   String get name {
-    final segments =
-        path.split('/').where((segment) => segment.isNotEmpty).toList();
+    final segments = path
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .toList();
     return segments.isEmpty ? path : segments.last;
   }
 

@@ -1,7 +1,11 @@
 package com.pulse.music
 
+import android.app.ActivityManager
 import android.content.ComponentName
+import android.graphics.BitmapFactory
+import android.os.Build
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaScannerConnection
 import com.ryanheise.audioservice.AudioServiceActivity
@@ -23,6 +27,7 @@ class MainActivity : AudioServiceActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         engineReady = true
+        applyTaskIcon()
         // Application context: the engine can outlive this activity while
         // audio keeps playing in the background.
         val app = applicationContext
@@ -40,6 +45,25 @@ class MainActivity : AudioServiceActivity() {
                         PulseWidgetProvider.refresh(app)
                         result.success(null)
                     }
+                    "appVersion" -> {
+                        result.success(packageManager.getPackageInfo(packageName, 0).versionName)
+                    }
+                    "openUrl" -> {
+                        val url = call.argument<String>("url")
+                        if (url != null) {
+                            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                        }
+                        result.success(null)
+                    }
+                    "share" -> {
+                        // The activity, not the app context: the chooser is a
+                        // screen of its own.
+                        val send = Intent(Intent.ACTION_SEND)
+                            .setType("text/plain")
+                            .putExtra(Intent.EXTRA_TEXT, call.argument<String>("text") ?: "")
+                        startActivity(Intent.createChooser(send, null))
+                        result.success(null)
+                    }
                     "scanFile" -> {
                         val path = call.argument<String>("path")
                         if (path != null) {
@@ -51,6 +75,14 @@ class MainActivity : AudioServiceActivity() {
                         DownloadKeepAliveService.setRunning(app, call.argument<Boolean>("running") ?: false)
                         result.success(null)
                     }
+                    "setIconStyle" -> {
+                        // Applied at once to everything Pulse draws; the
+                        // launcher entry itself switches on leaving the app.
+                        IconStyle.setDark(app, call.argument<Boolean>("dark") ?: false)
+                        applyTaskIcon()
+                        PulseWidgetProvider.refresh(app)
+                        result.success(null)
+                    }
                     "setLauncherIcon" -> {
                         setLauncherIcon(app, call.argument<Boolean>("dark") ?: false)
                         result.success(null)
@@ -58,6 +90,18 @@ class MainActivity : AudioServiceActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /** The recent-apps entry shows the chosen icon too. */
+    private fun applyTaskIcon() {
+        val res = IconStyle.imageRes(this)
+        @Suppress("DEPRECATION")
+        val description = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ActivityManager.TaskDescription("Pulse", res)
+        } else {
+            ActivityManager.TaskDescription("Pulse", BitmapFactory.decodeResource(resources, res))
+        }
+        setTaskDescription(description)
     }
 
     /**

@@ -31,14 +31,20 @@ class SaavnService {
     return 'L=${(language ?? 'hindi,english').toLowerCase()}';
   }
 
-  Future<dynamic> _call(String endpoint, Map<String, String> params) async {
+  /// [ctx] is the client JioSaavn thinks it's talking to; radio only
+  /// answers the Android app ("android"), everything else the web one.
+  Future<dynamic> _call(
+    String endpoint,
+    Map<String, String> params, {
+    String ctx = 'web6dot0',
+  }) async {
     final uri = Uri.parse(_base).replace(
       queryParameters: {
         '__call': endpoint,
         '_format': 'json',
         '_marker': '0',
         'api_version': '4',
-        'ctx': 'web6dot0',
+        'ctx': ctx,
         ...params,
       },
     );
@@ -141,6 +147,112 @@ class SaavnService {
     return entry == null ? null : toItem(entry);
   }
 
+  /// Replaces [radio] in tests (no network).
+  @visibleForTesting
+  static Future<List<AppMediaItem>> Function(String songId)? debugRadioOverride;
+
+  /// Extras keys set by [toItem].
+  static const albumIdKey = 'saavnAlbumId';
+  static const artistIdKey = 'saavnArtistId';
+  static const permaUrlKey = 'permaUrl';
+
+  /// Songs like [songId] — JioSaavn's radio station seeded with it, for
+  /// autoplay when the queue runs out. Empty if the station can't be made.
+  Future<List<AppMediaItem>> radio(String songId, {int count = 20}) async {
+    if (debugRadioOverride case final fake?) return fake(songId);
+    final station = await _call('webradio.createEntityStation', {
+      'entity_id': '["$songId"]',
+      'entity_type': 'queue',
+    }, ctx: 'android');
+    final id = _str(_map(station)?['stationid']);
+    if (id.isEmpty) return const [];
+    final res = await _call('webradio.getSong', {
+      'stationid': id,
+      'k': '$count',
+      'next': '1',
+    }, ctx: 'android');
+    // {"0": {"song": {...}}, "1": ..., "stationid": ...}
+    final entries = _map(res)?.values.map((v) => _map(v)?['song']).toList();
+    return _songs(entries).where((s) => s.id != songId).toList();
+  }
+
+  /// Album [id]: its songs, plus name and artwork.
+  Future<SaavnCollection?> album(String id) async {
+    final res = _map(await _call('content.getAlbumDetails', {'albumid': id}));
+    if (res == null) return null;
+    return _collection(res, 'album')?.withSongs(_songs(_list(res['list'])));
+  }
+
+  /// Playlist [id]'s songs.
+  Future<List<AppMediaItem>> playlist(String id) async {
+    final res = await _call('playlist.getDetails', {
+      'listid': id,
+      'n': '100',
+      'p': '1',
+    });
+    return _songs(_list(_map(res)?['list']));
+  }
+
+  /// Artist [id]: top songs and albums.
+  Future<SaavnArtist?> artist(String id) async {
+    final res = _map(
+      await _call('artist.getArtistPageDetails', {
+        'artistId': id,
+        'n_song': '50',
+        'n_album': '30',
+      }),
+    );
+    if (res == null || _str(res['name']).isEmpty) return null;
+    return SaavnArtist(
+      id: id,
+      name: unescape(_str(res['name'])),
+      image: _bigImage(_str(res['image'])),
+      topSongs: _songs(_list(res['topSongs'])),
+      albums: _collections(_list(res['topAlbums']), 'album'),
+    );
+  }
+
+  /// Search tabs: albums, playlists or artists matching [query].
+  Future<List<SaavnCollection>> searchCollections(
+    String query,
+    SaavnKind kind,
+  ) async {
+    final res = await _call(
+      switch (kind) {
+        SaavnKind.album => 'search.getAlbumResults',
+        SaavnKind.playlist => 'search.getPlaylistResults',
+        SaavnKind.artist => 'search.getArtistResults',
+      },
+      {'q': query, 'p': '1', 'n': '20'},
+    );
+    return _collections(_list(_map(res)?['results']), kind.name);
+  }
+
+  static List<SaavnCollection> _collections(List? raw, String kind) => [
+    for (final e in raw ?? const []) ?_collection(_map(e), kind),
+  ];
+
+  static SaavnCollection? _collection(Map? json, String fallbackKind) {
+    final id = _str(json?['id']);
+    if (json == null || id.isEmpty) return null;
+    final kind = SaavnKind.values.firstWhere(
+      (k) => k.name == _str(json['type']),
+      orElse: () => SaavnKind.values.byName(fallbackKind),
+    );
+    return SaavnCollection(
+      kind: kind,
+      id: id,
+      title: unescape(_str(json['title']).ifEmpty(_str(json['name']))),
+      subtitle: unescape(
+        _str(json['subtitle']).ifEmpty(_str(json['description'])),
+      ),
+      image: _bigImage(_str(json['image'])),
+    );
+  }
+
+  static String _bigImage(String url) =>
+      url.replaceAll('150x150', '500x500').replaceAll('50x50', '500x500');
+
   List<AppMediaItem> _songs(List? raw) {
     final out = <AppMediaItem>[];
     for (final e in raw ?? const []) {
@@ -191,6 +303,16 @@ class SaavnService {
       streamUrl: url,
       duration: seconds == null ? null : Duration(seconds: seconds),
       sourceType: MediaSourceType.saavn,
+      // For the artist/album pages and Share. Kept in extras so they survive
+      // playback, favorites and history.
+      extras: {
+        if (_str(more['album_id']).isNotEmpty)
+          albumIdKey: _str(more['album_id']),
+        if (primary.isNotEmpty && _str(_map(primary.first)?['id']).isNotEmpty)
+          artistIdKey: _str(_map(primary.first)?['id']),
+        if (_str(json['perma_url']).isNotEmpty)
+          permaUrlKey: _str(json['perma_url']),
+      },
     );
   }
 
@@ -234,4 +356,52 @@ class SaavnService {
 
 extension on String {
   String ifEmpty(String other) => isEmpty ? other : this;
+}
+
+enum SaavnKind { album, playlist, artist }
+
+/// An album, playlist or artist as listed in search results.
+class SaavnCollection {
+  final SaavnKind kind;
+  final String id;
+  final String title;
+  final String subtitle;
+  final String image;
+
+  /// Filled in for a fetched album; empty in search results.
+  final List<AppMediaItem> songs;
+
+  const SaavnCollection({
+    required this.kind,
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.image,
+    this.songs = const [],
+  });
+
+  SaavnCollection withSongs(List<AppMediaItem> songs) => SaavnCollection(
+    kind: kind,
+    id: id,
+    title: title,
+    subtitle: subtitle,
+    image: image,
+    songs: songs,
+  );
+}
+
+class SaavnArtist {
+  final String id;
+  final String name;
+  final String image;
+  final List<AppMediaItem> topSongs;
+  final List<SaavnCollection> albums;
+
+  const SaavnArtist({
+    required this.id,
+    required this.name,
+    required this.image,
+    required this.topSongs,
+    required this.albums,
+  });
 }

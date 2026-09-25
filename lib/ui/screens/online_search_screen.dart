@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 import '../../models/home_sections.dart';
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/saavn_service.dart';
 import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/track_tile.dart';
+import 'artist_screen.dart';
 
 /// Online search. Empty box: recent searches. While typing: YouTube's own
 /// query suggestions and the top matching songs, like YouTube Music.
@@ -103,8 +105,12 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
           .cachedSearch(typed)
           .catchError((Object _) => <AppMediaItem>[]);
       if (mounted && request == _suggestRequest) {
-        setState(() => _songPreview =
-            songs.where((t) => isSongLength(t.duration)).take(4).toList());
+        setState(
+          () => _songPreview = songs
+              .where((t) => isSongLength(t.duration))
+              .take(4)
+              .toList(),
+        );
       }
     });
   }
@@ -144,7 +150,9 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
             style: TextStyle(color: context.colors.mist),
             decoration: InputDecoration(
               hintText: 'Songs, artists, albums...',
-              hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.4)),
+              hintStyle: TextStyle(
+                color: context.colors.mist.withValues(alpha: 0.4),
+              ),
               filled: true,
               fillColor: context.colors.lift,
               prefixIcon: Icon(
@@ -174,14 +182,15 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
       body: _query != null
           ? _buildResults()
           : _typed.isEmpty
-              ? _buildRecent()
-              : _buildSuggestions(),
+          ? _buildRecent()
+          : _buildSuggestions(),
     );
   }
 
   Widget _buildRecent() {
-    final recent =
-        context.select<MusicPlayerProvider, List<String>>((p) => p.recentSearches);
+    final recent = context.select<MusicPlayerProvider, List<String>>(
+      (p) => p.recentSearches,
+    );
     if (recent.isEmpty) {
       return Center(
         child: Text(
@@ -199,10 +208,9 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
               Expanded(
                 child: Text(
                   'Recent searches',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               TextButton(
@@ -247,10 +255,9 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text(
               'Songs',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
           for (final song in _songPreview)
@@ -290,7 +297,42 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
     );
   }
 
+  /// Songs, plus album / playlist / artist tabs (each fetched when opened).
   Widget _buildResults() {
+    final query = _query!;
+    return DefaultTabController(
+      length: 4,
+      child: Column(
+        children: [
+          const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(text: 'Songs'),
+              Tab(text: 'Albums'),
+              Tab(text: 'Playlists'),
+              Tab(text: 'Artists'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildSongs(),
+                for (final kind in SaavnKind.values)
+                  _CollectionResults(
+                    key: ValueKey('$query/${kind.name}'),
+                    query: query,
+                    kind: kind,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSongs() {
     if (_isLoading) {
       return const Center(
         child: SpinKitDoubleBounce(color: AppTheme.primary, size: 50),
@@ -308,6 +350,59 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
       itemCount: _results.length,
       itemBuilder: (context, index) =>
           TrackTile(item: _results[index], playlist: _results),
+    );
+  }
+}
+
+class _CollectionResults extends StatefulWidget {
+  final String query;
+  final SaavnKind kind;
+  const _CollectionResults({
+    super.key,
+    required this.query,
+    required this.kind,
+  });
+
+  @override
+  State<_CollectionResults> createState() => _CollectionResultsState();
+}
+
+class _CollectionResultsState extends State<_CollectionResults>
+    with AutomaticKeepAliveClientMixin {
+  late final Future<List<SaavnCollection>> _results = SaavnService.instance
+      .searchCollections(widget.query, widget.kind)
+      .catchError((Object _) => <SaavnCollection>[]);
+
+  @override
+  bool get wantKeepAlive => true; // swiping back must not refetch
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return FutureBuilder<List<SaavnCollection>>(
+      future: _results,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: SpinKitDoubleBounce(color: AppTheme.primary, size: 50),
+          );
+        }
+        final found = snapshot.data ?? const <SaavnCollection>[];
+        if (found.isEmpty) {
+          return Center(
+            child: Text(
+              'Nothing found.',
+              style: TextStyle(
+                color: context.colors.mist.withValues(alpha: 0.54),
+              ),
+            ),
+          );
+        }
+        return ListView.builder(
+          itemCount: found.length,
+          itemBuilder: (context, i) => CollectionTile(collection: found[i]),
+        );
+      },
     );
   }
 }

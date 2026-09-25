@@ -71,6 +71,7 @@ class DownloadKeepAliveService : Service() {
         }
         return builder
             .setSmallIcon(R.drawable.ic_stat_download)
+            .setLargeIcon(android.graphics.BitmapFactory.decodeResource(resources, IconStyle.imageRes(this)))
             .setContentTitle("Downloading songs")
             .setContentText("Pulse keeps going in the background")
             .setContentIntent(open)

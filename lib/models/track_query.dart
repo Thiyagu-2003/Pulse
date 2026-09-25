@@ -7,11 +7,11 @@ enum TrackSort { title, artist, album, longest }
 
 extension TrackSortLabel on TrackSort {
   String get label => switch (this) {
-        TrackSort.title => 'Title',
-        TrackSort.artist => 'Artist',
-        TrackSort.album => 'Album',
-        TrackSort.longest => 'Longest first',
-      };
+    TrackSort.title => 'Title',
+    TrackSort.artist => 'Artist',
+    TrackSort.album => 'Album',
+    TrackSort.longest => 'Longest first',
+  };
 }
 
 /// Case-insensitive match across title, artist and album. An empty or
@@ -39,16 +39,16 @@ List<AppMediaItem> sortTracks(List<AppMediaItem> tracks, TrackSort sort) {
     // Grouping sorts fall back to title so an artist's or album's tracks come
     // out in a stable, readable order rather than whatever order they loaded.
     TrackSort.artist => (AppMediaItem a, AppMediaItem b) {
-        final result =
-            a.artist.toLowerCase().compareTo(b.artist.toLowerCase());
-        return result != 0 ? result : byTitle(a, b);
-      },
+      final result = a.artist.toLowerCase().compareTo(b.artist.toLowerCase());
+      return result != 0 ? result : byTitle(a, b);
+    },
     TrackSort.album => (AppMediaItem a, AppMediaItem b) {
-        final result = a.album.toLowerCase().compareTo(b.album.toLowerCase());
-        return result != 0 ? result : byTitle(a, b);
-      },
-    TrackSort.longest => (AppMediaItem a, AppMediaItem b) =>
-        (b.duration ?? Duration.zero).compareTo(a.duration ?? Duration.zero),
+      final result = a.album.toLowerCase().compareTo(b.album.toLowerCase());
+      return result != 0 ? result : byTitle(a, b);
+    },
+    TrackSort.longest =>
+      (AppMediaItem a, AppMediaItem b) =>
+          (b.duration ?? Duration.zero).compareTo(a.duration ?? Duration.zero),
   };
 
   return [...tracks]..sort(comparator);

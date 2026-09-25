@@ -10,21 +10,14 @@ class Playlist {
   final String name;
   final List<AppMediaItem> items;
 
-  const Playlist({
-    required this.id,
-    required this.name,
-    this.items = const [],
-  });
+  const Playlist({required this.id, required this.name, this.items = const []});
 
   int get length => items.length;
 
   bool contains(String trackId) => items.any((t) => t.id == trackId);
 
-  Playlist copyWith({String? name, List<AppMediaItem>? items}) => Playlist(
-        id: id,
-        name: name ?? this.name,
-        items: items ?? this.items,
-      );
+  Playlist copyWith({String? name, List<AppMediaItem>? items}) =>
+      Playlist(id: id, name: name ?? this.name, items: items ?? this.items);
 
   /// Adding a track already in the playlist is a no-op rather than a
   /// duplicate — re-tapping "add to playlist" should be harmless.
@@ -35,17 +28,18 @@ class Playlist {
       copyWith(items: items.where((t) => t.id != trackId).toList());
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'items': items.map((t) => t.toJson()).toList(),
-      };
+    'id': id,
+    'name': name,
+    'items': items.map((t) => t.toJson()).toList(),
+  };
 
   factory Playlist.fromJson(Map<String, dynamic> json) => Playlist(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        items: (json['items'] as List?)
-                ?.map((t) => AppMediaItem.fromJson(t as Map<String, dynamic>))
-                .toList() ??
-            const [],
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    items:
+        (json['items'] as List?)
+            ?.map((t) => AppMediaItem.fromJson(t as Map<String, dynamic>))
+            .toList() ??
+        const [],
+  );
 }

@@ -8,19 +8,31 @@ import '../theme/app_theme.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/track_tile.dart';
 
-/// The songs behind a home-page playlist card.
+/// The songs behind a home-page playlist card, an album or a playlist.
 class TrackListScreen extends StatefulWidget {
   final String title;
+
+  /// A search (home cards) — or give [load] instead.
   final String query;
-  const TrackListScreen({super.key, required this.title, required this.query});
+  final Future<List<AppMediaItem>> Function()? load;
+
+  const TrackListScreen({
+    super.key,
+    required this.title,
+    this.query = '',
+    this.load,
+  });
 
   @override
   State<TrackListScreen> createState() => _TrackListScreenState();
 }
 
 class _TrackListScreenState extends State<TrackListScreen> {
-  late Future<List<AppMediaItem>> _tracks =
-      YoutubeService().cachedSearch(widget.query);
+  late Future<List<AppMediaItem>> _tracks = _fetch();
+
+  Future<List<AppMediaItem>> _fetch() =>
+      (widget.load?.call() ?? YoutubeService().cachedSearch(widget.query))
+          .catchError((Object _) => <AppMediaItem>[]);
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +52,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
           if (tracks.isEmpty) {
             return Center(
               child: TextButton(
-                onPressed: () => setState(
-                  () => _tracks = YoutubeService().cachedSearch(widget.query),
-                ),
+                onPressed: () => setState(() => _tracks = _fetch()),
                 child: const Text("Couldn't load these songs. Tap to retry."),
               ),
             );
@@ -53,18 +63,22 @@ class _TrackListScreenState extends State<TrackListScreen> {
               if (index == 0) {
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
+                  child: Row(
+                    children: [
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                        ),
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text('Play all'),
+                        onPressed: () => context
+                            .read<MusicPlayerProvider>()
+                            .playTrack(tracks.first, playlist: tracks),
                       ),
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('Play all'),
-                      onPressed: () => context
-                          .read<MusicPlayerProvider>()
-                          .playTrack(tracks.first, playlist: tracks),
-                    ),
+                      const Spacer(),
+                      // The whole playlist, for offline.
+                      DownloadAllButton(items: tracks),
+                    ],
                   ),
                 );
               }

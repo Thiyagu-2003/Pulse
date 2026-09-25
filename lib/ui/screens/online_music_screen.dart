@@ -1,12 +1,16 @@
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/home_sections.dart';
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/network_status.dart';
 import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
+import 'customize_home_screen.dart';
 import 'online_search_screen.dart';
 import 'settings_screen.dart';
 import 'track_list_screen.dart';
@@ -59,9 +63,11 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
       ...recent,
       // JioSaavn songs carry their link already; only YouTube ones need it.
       ...top
-          .where((t) =>
-              t.sourceType == MediaSourceType.youtube &&
-              isSongLength(t.duration))
+          .where(
+            (t) =>
+                t.sourceType == MediaSourceType.youtube &&
+                isSongLength(t.duration),
+          )
           .take(4),
     ]) {
       if (!mounted) return;
@@ -74,7 +80,15 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
     final language = context.select<MusicPlayerProvider, String?>(
       (p) => p.homeLanguage,
     );
+    final layout = context.select<MusicPlayerProvider, String>(
+      (p) => jsonEncode(p.homeLayout.toJson()),
+    );
     final sections = homeSectionsFor(language);
+    final arranged = arrangeHome(
+      language,
+      HomeLayout.fromJson(jsonDecode(layout)),
+      personal: context.read<MusicPlayerProvider>().madeForYouSections,
+    );
     final page = '$language/$_refreshCount';
     if (widget.prefetch && _prefetchedFor != page) {
       _prefetchedFor = page;
@@ -84,25 +98,110 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          color: context.colors.accent,
-          child: ListView(
-            key: ValueKey(page),
-            // Room for the floating mini player.
-            padding: const EdgeInsets.only(bottom: 110),
-            children: [
-              const _Header(),
-              _QuickPicks(fallbackQuery: sections.first.query),
-              _LanguageChips(selected: language),
-              for (final section in sections)
-                section.style == HomeSectionStyle.rows
-                    ? _RowsSection(section: section)
-                    : _CardsSection(section: section),
-            ],
+        child: ValueListenableBuilder<bool>(
+          valueListenable: NetworkStatus.instance.offline,
+          // Nothing online can load: the downloads, which still play.
+          // Back online, the rows are built afresh (failures aren't cached).
+          builder: (context, offline, onlineHome) =>
+              offline ? const _OfflineHome() : onlineHome!,
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            color: context.colors.accent,
+            child: ListView(
+              key: ValueKey(page),
+              // Room for the floating mini player.
+              padding: const EdgeInsets.only(bottom: 110),
+              children: [
+                const _Header(),
+                _LanguageChips(selected: language),
+                // In the user's order (Settings > Customize home). Keyed by
+                // id, so reordering moves each section's state with it.
+                for (final section in arranged)
+                  switch (section.style) {
+                    HomeSectionStyle.recent => _QuickPicks(
+                      key: ValueKey(section.id),
+                      fallbackQuery: sections.first.query,
+                    ),
+                    HomeSectionStyle.rows => _RowsSection(
+                      key: ValueKey(section.id),
+                      section: section,
+                    ),
+                    HomeSectionStyle.cards => _CardsSection(
+                      key: ValueKey(section.id),
+                      section: section,
+                    ),
+                  },
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.tune_rounded),
+                      label: const Text('Customize home'),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CustomizeHomeScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The Online tab with no connection: a notice, then the downloads.
+class _OfflineHome extends StatelessWidget {
+  const _OfflineHome();
+
+  @override
+  Widget build(BuildContext context) {
+    final downloads = context.watch<MusicPlayerProvider>().getDownloads();
+    final muted = context.colors.mist.withValues(alpha: 0.6);
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 110),
+      children: [
+        const _Header(),
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: context.colors.lift,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.wifi_off_rounded, color: context.colors.accent),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  "You're offline. Your downloaded songs still play.",
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (downloads.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              'Nothing downloaded yet. Tap the download button on any song '
+              'to keep it for offline.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: muted),
+            ),
+          )
+        else ...[
+          const _SectionTitle('Downloads'),
+          for (final song in downloads)
+            TrackTile(item: song, playlist: downloads),
+        ],
+      ],
     );
   }
 }
@@ -116,14 +215,18 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: AppTheme.waveGradient,
-              borderRadius: BorderRadius.circular(10),
+          // The app's own icon, in the style chosen in Settings.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(
+              context.select<MusicPlayerProvider, bool>(
+                    (p) => p.darkLauncherIcon,
+                  )
+                  ? 'icons/app_icon_dark.png'
+                  : 'icons/app_icon_light.png',
+              width: 40,
+              height: 40,
             ),
-            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -160,7 +263,7 @@ class _Header extends StatelessWidget {
 /// the top of the first section stands in so the page doesn't open empty.
 class _QuickPicks extends StatelessWidget {
   final String fallbackQuery;
-  const _QuickPicks({required this.fallbackQuery});
+  const _QuickPicks({super.key, required this.fallbackQuery});
 
   @override
   Widget build(BuildContext context) {
@@ -314,17 +417,25 @@ class _LanguageChips extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   final String title;
-  const _SectionTitle(this.title);
+  final Widget? trailing;
+  const _SectionTitle(this.title, {this.trailing});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-      child: Text(
-        title,
-        style: Theme.of(
-          context,
-        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+      padding: EdgeInsets.fromLTRB(16, 24, trailing == null ? 16 : 4, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          ?trailing,
+        ],
       ),
     );
   }
@@ -334,7 +445,7 @@ class _SectionTitle extends StatelessWidget {
 /// from the right so it's obvious there is more.
 class _RowsSection extends StatefulWidget {
   final HomeSection section;
-  const _RowsSection({required this.section});
+  const _RowsSection({super.key, required this.section});
 
   @override
   State<_RowsSection> createState() => _RowsSectionState();
@@ -365,45 +476,57 @@ class _RowsSectionState extends State<_RowsSection> {
       64.0,
       16 + scaler.scale(15) * 1.45 + 3 + scaler.scale(13) * 1.45,
     ].reduce((a, b) => a > b ? a : b);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionTitle(widget.section.title),
-        FutureBuilder<List<AppMediaItem>>(
-          future: _tracks,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return _RowsSkeleton(rows: _rowsPerPage, height: rowHeight);
-            }
-            final tracks = snapshot.data ?? const <AppMediaItem>[];
-            if (tracks.isEmpty) {
-              return _LoadFailed(
-                onRetry: () => setState(() => _tracks = _load()),
-              );
-            }
-            final pageCount = (tracks.length / _rowsPerPage).ceil();
-            return SizedBox(
-              height: _rowsPerPage * rowHeight,
-              child: PageView.builder(
-                controller: _pages,
-                padEnds: false,
-                itemCount: pageCount,
-                itemBuilder: (context, page) => Column(
-                  children: [
-                    for (final track
-                        in tracks.skip(page * _rowsPerPage).take(_rowsPerPage))
-                      _TrackRow(
-                        item: track,
-                        playlist: tracks,
-                        height: rowHeight,
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ],
+    return FutureBuilder<List<AppMediaItem>>(
+      future: _tracks,
+      builder: (context, snapshot) {
+        final loaded = snapshot.data ?? const <AppMediaItem>[];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionTitle(
+              widget.section.title,
+              trailing: loaded.isEmpty
+                  ? null
+                  : DownloadAllButton(items: loaded),
+            ),
+            Builder(
+              builder: (context) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return _RowsSkeleton(rows: _rowsPerPage, height: rowHeight);
+                }
+                final tracks = snapshot.data ?? const <AppMediaItem>[];
+                if (tracks.isEmpty) {
+                  return _LoadFailed(
+                    onRetry: () => setState(() => _tracks = _load()),
+                  );
+                }
+                final pageCount = (tracks.length / _rowsPerPage).ceil();
+                return SizedBox(
+                  height: _rowsPerPage * rowHeight,
+                  child: PageView.builder(
+                    controller: _pages,
+                    padEnds: false,
+                    itemCount: pageCount,
+                    itemBuilder: (context, page) => Column(
+                      children: [
+                        for (final track
+                            in tracks
+                                .skip(page * _rowsPerPage)
+                                .take(_rowsPerPage))
+                          _TrackRow(
+                            item: track,
+                            playlist: tracks,
+                            height: rowHeight,
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -486,7 +609,7 @@ class _TrackRow extends StatelessWidget {
 /// the first song it finds.
 class _CardsSection extends StatelessWidget {
   final HomeSection section;
-  const _CardsSection({required this.section});
+  const _CardsSection({super.key, required this.section});
 
   static const _cardSize = 150.0;
   static const _titleLineHeight = 1.25;

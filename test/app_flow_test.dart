@@ -59,6 +59,7 @@ void main() {
     yt.searchRetryDelay = Duration.zero;
     for (final section in [
       for (final l in [...homeLanguages, null]) ...homeSectionsFor(l),
+      ...provider.madeForYouSections,
     ]) {
       final queries = section.style == HomeSectionStyle.rows
           ? [section.query]

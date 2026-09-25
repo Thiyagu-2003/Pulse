@@ -57,4 +57,68 @@ void main() {
     expect(isSongLength(null), isTrue);
     expect(isSongLength(const Duration(minutes: 45)), isFalse);
   });
+
+  group('customizable home', () {
+    List<String> ids(List<HomeSection> s) => s.map((x) => x.id).toList();
+
+    test('standard page: recently played, then the catalogue', () {
+      final page = arrangeHome('Tamil', HomeLayout.standard);
+      expect(page.first.id, 'recent');
+      expect(ids(page).sublist(1), ids(homeSectionsFor('Tamil')));
+    });
+
+    test('moved sections come first; the rest keep their order', () {
+      final page = arrangeHome(
+          'Tamil', const HomeLayout(order: ['top_playlists', 'trending']));
+      expect(ids(page).take(3), ['top_playlists', 'trending', 'recent']);
+      expect(ids(page).toSet().length, page.length); // nothing duplicated
+    });
+
+    test('hidden sections are left out, but listed for the editor', () {
+      const layout = HomeLayout(hidden: {'recent', 'nineties'});
+      expect(ids(arrangeHome('Tamil', layout)), isNot(contains('recent')));
+      expect(ids(arrangeHome('Tamil', layout)), isNot(contains('nineties')));
+      expect(ids(arrangeHome('Tamil', layout, includeHidden: true)),
+          containsAll(['recent', 'nineties']));
+    });
+
+    test('added sections are rows of a playlist search, placeable anywhere', () {
+      const layout = HomeLayout(
+        custom: [('custom_1', 'Yuvan Shankar Raja')],
+        order: ['custom_1'],
+      );
+      final first = arrangeHome('Tamil', layout).first;
+      expect(first.id, 'custom_1');
+      expect(first.custom, isTrue);
+      expect(first.query, 'playlist:Yuvan Shankar Raja');
+    });
+
+    test('ids for another language, or unknown ones, are ignored', () {
+      // "anirudh" only exists on the Tamil page.
+      final page = arrangeHome('Hindi',
+          const HomeLayout(order: ['anirudh', 'gone', 'love']));
+      expect(page.first.id, 'love');
+    });
+
+    test('layout survives JSON; damaged settings give the standard page', () {
+      const layout = HomeLayout(
+        order: ['love'],
+        hidden: {'recent'},
+        custom: [('custom_9', 'Rainy day')],
+      );
+      final back = HomeLayout.fromJson(layout.toJson());
+      expect(back.order, ['love']);
+      expect(back.hidden, {'recent'});
+      expect(back.custom.single, ('custom_9', 'Rainy day'));
+      expect(HomeLayout.fromJson('nonsense').order, isEmpty);
+      expect(HomeLayout.fromJson({'order': 'x', 'custom': [1]}).custom, isEmpty);
+    });
+
+    test('section ids are unique on every page', () {
+      for (final language in [...homeLanguages, null]) {
+        final all = ids(arrangeHome(language, HomeLayout.standard));
+        expect(all.toSet().length, all.length, reason: '$language');
+      }
+    });
+  });
 }

@@ -17,6 +17,9 @@ class NetworkStatus {
   /// Ethernet alongside it (or not knowing) counts as not mobile.
   bool get onMobileData => _onMobileData;
 
+  /// No connection at all: the Online tab shows downloads instead.
+  final ValueNotifier<bool> offline = ValueNotifier(false);
+
   @visibleForTesting
   set onMobileData(bool value) => _onMobileData = value;
 
@@ -33,6 +36,8 @@ class NetworkStatus {
   }
 
   void _update(List<ConnectivityResult> results) {
+    offline.value =
+        results.every((r) => r == ConnectivityResult.none);
     _onMobileData = results.contains(ConnectivityResult.mobile) &&
         !results.contains(ConnectivityResult.wifi) &&
         !results.contains(ConnectivityResult.ethernet);

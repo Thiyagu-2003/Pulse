@@ -26,20 +26,26 @@ Future<CustomAudioHandler> initAudioService() async {
   );
 }
 
-class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
+class CustomAudioHandler extends BaseAudioHandler
+    with QueueHandler, SeekHandler {
   // Streams go through just_audio's local proxy, i.e. Dart's HTTP client —
   // the same stack that checks and downloads use, which works reliably.
   // Letting ExoPlayer fetch googlevideo directly was tried and songs then
   // often failed to play on real phones, while downloads kept working.
   // Start after 1s of audio instead of ExoPlayer's 2.5s: noticeably
   // quicker on a weak signal, at a small risk of an early stall.
-  final AudioPlayer _player = AudioPlayer(
+  late final AudioPlayer _player = AudioPlayer(
     audioLoadConfiguration: const AudioLoadConfiguration(
       androidLoadControl: AndroidLoadControl(
         bufferForPlaybackDuration: Duration(milliseconds: 1000),
       ),
     ),
+    // Settings > Equalizer. Android only; elsewhere these do nothing.
+    audioPipeline: AudioPipeline(androidAudioEffects: [equalizer, loudness]),
   );
+
+  final AndroidEqualizer equalizer = AndroidEqualizer();
+  final AndroidLoudnessEnhancer loudness = AndroidLoudnessEnhancer();
   final YoutubeService _ytService = YoutubeService();
 
   /// The queue lives in MusicPlayerProvider, not in audio_service's QueueHandler.
@@ -47,6 +53,23 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// completion all advance the same queue the UI shows.
   VoidCallback? onSkipNext;
   VoidCallback? onSkipPrevious;
+
+  /// Android Auto: the provider answers browsing and plays what's picked
+  /// (the handler has no library of its own).
+  Future<List<MediaItem>> Function(String parentMediaId)? onBrowse;
+  Future<void> Function(String mediaId)? onPlayFromMediaId;
+
+  @override
+  Future<List<MediaItem>> getChildren(
+    String parentMediaId, [
+    Map<String, dynamic>? options,
+  ]) async => await onBrowse?.call(parentMediaId) ?? const [];
+
+  @override
+  Future<void> playFromMediaId(
+    String mediaId, [
+    Map<String, dynamic>? extras,
+  ]) async => onPlayFromMediaId?.call(mediaId);
 
   /// Separate from [onSkipNext] so end-of-track advance can stop at the end of
   /// the queue while the skip button still wraps around.
@@ -110,34 +133,36 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   void _broadcastState() {
     final playing = _loading ? !_pauseRequested : _player.playing;
-    playbackState.add(playbackState.value.copyWith(
-      controls: [
-        MediaControl.skipToPrevious,
-        if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.skipToNext,
-        MediaControl.stop,
-      ],
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-      },
-      androidCompactActionIndices: const [0, 1, 2],
-      processingState: const {
-        ProcessingState.idle: AudioProcessingState.idle,
-        ProcessingState.loading: AudioProcessingState.loading,
-        ProcessingState.buffering: AudioProcessingState.buffering,
-        ProcessingState.ready: AudioProcessingState.ready,
-        ProcessingState.completed: AudioProcessingState.completed,
-      }[_loading ? ProcessingState.loading : _player.processingState]!,
-      playing: playing,
-      updatePosition: _player.position,
-      bufferedPosition: _player.bufferedPosition,
-      speed: _player.speed,
-      // No just_audio playlist is used — one source at a time — so there is no
-      // meaningful index into audio_service's (empty) queue.
-      queueIndex: null,
-    ));
+    playbackState.add(
+      playbackState.value.copyWith(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (playing) MediaControl.pause else MediaControl.play,
+          MediaControl.skipToNext,
+          MediaControl.stop,
+        ],
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.seekForward,
+          MediaAction.seekBackward,
+        },
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: const {
+          ProcessingState.idle: AudioProcessingState.idle,
+          ProcessingState.loading: AudioProcessingState.loading,
+          ProcessingState.buffering: AudioProcessingState.buffering,
+          ProcessingState.ready: AudioProcessingState.ready,
+          ProcessingState.completed: AudioProcessingState.completed,
+        }[_loading ? ProcessingState.loading : _player.processingState]!,
+        playing: playing,
+        updatePosition: _player.position,
+        bufferedPosition: _player.bufferedPosition,
+        speed: _player.speed,
+        // No just_audio playlist is used — one source at a time — so there is no
+        // meaningful index into audio_service's (empty) queue.
+        queueIndex: null,
+      ),
+    );
   }
 
   /// Play a specific AppMediaItem with fast non-blocking startup.
@@ -145,7 +170,10 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// [startAt] is applied as the source's initial position rather than a seek
   /// after the fact, which would race the asynchronous source loading.
   Future<void> playAppMediaItem(AppMediaItem item, {Duration? startAt}) async {
-    final attempt = PlaybackLog.instance.begin(item.title, item.sourceType.name);
+    final attempt = PlaybackLog.instance.begin(
+      item.title,
+      item.sourceType.name,
+    );
     _attempt = attempt;
     try {
       await _playAppMediaItem(item, startAt, attempt);
@@ -178,10 +206,12 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     mediaItem.add(item.toAudioServiceMediaItem());
 
     // Set state to loading immediately
-    playbackState.add(playbackState.value.copyWith(
-      processingState: AudioProcessingState.loading,
-      playing: true,
-    ));
+    playbackState.add(
+      playbackState.value.copyWith(
+        processingState: AudioProcessingState.loading,
+        playing: true,
+      ),
+    );
 
     try {
       // Silence the outgoing track, but don't stop(): on Android that
@@ -282,8 +312,11 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
               : await _ytService.getAudioStreamUrl(item.id);
           if (superseded()) return;
           if (url == null) rethrow;
-          await _player.setAudioSource(AudioSource.uri(Uri.parse(url)),
-              preload: true, initialPosition: startAt);
+          await _player.setAudioSource(
+            AudioSource.uri(Uri.parse(url)),
+            preload: true,
+            initialPosition: startAt,
+          );
         }
       } else {
         // HTTP stream (YouTube, podcast, etc.)
@@ -300,8 +333,8 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
           // through Dart's HTTP client, the path that works on real phones.
           // Not on mobile data: a save isn't cancelled when the user skips,
           // so skipping ten songs would download all ten in full.
-          final save = item.sourceType.isOnline &&
-              !NetworkStatus.instance.onMobileData;
+          final save =
+              item.sourceType.isOnline && !NetworkStatus.instance.onMobileData;
           final AudioSource source = save
               // Experimental in just_audio; if it misbehaves the load
               // fails and the fallback ladder in _loadYoutube takes over.
@@ -309,13 +342,16 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
               ? LockCachingAudioSource(
                   Uri.parse(url),
                   headers: headers,
-                  cacheFile: await PlaybackCache.instance.streamFileFor(item.id),
+                  cacheFile: await PlaybackCache.instance.streamFileFor(
+                    item.id,
+                  ),
                 )
               : AudioSource.uri(Uri.parse(url), headers: headers);
           await _player
               .setAudioSource(source, preload: true, initialPosition: startAt)
               .timeout(const Duration(seconds: 10));
         }
+
         if (item.sourceType == MediaSourceType.youtube) {
           await _loadYoutube(item, uri, load, superseded, startAt);
         } else if (item.sourceType == MediaSourceType.saavn) {
@@ -386,8 +422,11 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     }
     try {
       await _player
-          .setAudioSource(AudioSource.uri(Uri.parse(url)),
-              preload: true, initialPosition: startAt)
+          .setAudioSource(
+            AudioSource.uri(Uri.parse(url)),
+            preload: true,
+            initialPosition: startAt,
+          )
           .timeout(const Duration(seconds: 10));
       return;
     } catch (e) {
@@ -401,7 +440,8 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (freshUrl == null) throw lastError;
     try {
       await load(
-          SaavnService.withQuality(freshUrl, _ytService.playbackQuality()));
+        SaavnService.withQuality(freshUrl, _ytService.playbackQuality()),
+      );
     } catch (e) {
       if (superseded()) rethrow;
       // Last try: the smallest file, which starts on the weakest signal.
@@ -440,10 +480,14 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (await attempt(first)) return;
     _ytService.invalidateStreamUrl(item.id);
 
-    await for (final url
-        in _ytService.alternativeStreamUrls(item.id, exclude: tried)) {
+    await for (final url in _ytService.alternativeStreamUrls(
+      item.id,
+      exclude: tried,
+    )) {
       if (superseded()) return;
-      _attempt?.step('trying ${_ytService.lastSource[item.id] ?? 'alternative'}');
+      _attempt?.step(
+        'trying ${_ytService.lastSource[item.id] ?? 'alternative'}',
+      );
       if (await attempt(url)) return;
     }
     if (superseded()) return;
@@ -465,10 +509,12 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     // The previous track's source is still loaded (we only paused it), so
     // without this, Play would resume the old audio under the new title.
     _player.stop();
-    playbackState.add(playbackState.value.copyWith(
-      processingState: AudioProcessingState.idle,
-      playing: false,
-    ));
+    playbackState.add(
+      playbackState.value.copyWith(
+        processingState: AudioProcessingState.idle,
+        playing: false,
+      ),
+    );
     _errors.add(userMessage);
   }
 

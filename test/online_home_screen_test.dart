@@ -8,8 +8,10 @@ import 'package:music_player/models/home_sections.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/providers/music_player_provider.dart';
 import 'package:music_player/services/audio_handler.dart';
+import 'package:music_player/services/network_status.dart';
 import 'package:music_player/services/storage_service.dart';
 import 'package:music_player/services/youtube_service.dart';
+import 'package:music_player/ui/screens/customize_home_screen.dart';
 import 'package:music_player/ui/screens/online_music_screen.dart';
 import 'package:music_player/ui/screens/settings_screen.dart';
 import 'package:music_player/ui/theme/app_theme.dart';
@@ -61,6 +63,7 @@ void main() {
     final yt = YoutubeService();
     for (final section in [
       for (final l in [...homeLanguages, null]) ...homeSectionsFor(l),
+      ...provider.madeForYouSections,
     ]) {
       final queries = section.style == HomeSectionStyle.rows
           ? [section.query]
@@ -127,6 +130,78 @@ void main() {
     }
   });
 
+  testWidgets('the home page follows the saved layout', (tester) async {
+    await tester.runAsync(() => provider.setHomeLayout(const HomeLayout(
+          order: ['top_playlists', 'custom_1'],
+          hidden: {'trending'},
+          custom: [('custom_1', 'Yuvan hits')],
+        )));
+    YoutubeService().seedSearch('playlist:Yuvan hits',
+        [for (var i = 0; i < 5; i++) _song('yuvan$i')]);
+    await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
+
+    expect(find.text('Trending in Tamil'), findsNothing); // hidden
+    final top = tester.getTopLeft(find.text('Top playlists')).dy;
+    final mine = tester.getTopLeft(find.text('Yuvan hits')).dy;
+    expect(top, lessThan(mine));
+    // The standard sections follow, further down.
+    await tester.scrollUntilVisible(find.text('Tamil hits'), 300,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.getTopLeft(find.text('Tamil hits')).dy,
+        greaterThan(tester.getTopLeft(find.text('Yuvan hits')).dy));
+
+    await tester.runAsync(() => provider.setHomeLayout(HomeLayout.standard));
+    await tester.pump();
+  });
+
+  testWidgets('the editor lists every section, hidden ones too',
+      (tester) async {
+    await tester.runAsync(() => provider.setHomeLayout(
+        const HomeLayout(hidden: {'recent'})));
+    await pumpHome(tester, const CustomizeHomeScreen());
+    expect(find.text('Recently played'), findsOneWidget);
+    expect(find.text('Trending in Tamil'), findsOneWidget);
+    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+    expect(switches.first.value, isFalse); // Recently played, hidden
+    expect(find.text('Add section'), findsOneWidget);
+    await tester.runAsync(() => provider.setHomeLayout(HomeLayout.standard));
+    await tester.pump();
+  });
+
+  testWidgets('the header logo follows the app icon setting', (tester) async {
+    bool shows(String asset) => tester
+        .widgetList<Image>(find.byType(Image))
+        .any((i) => i.image is AssetImage && (i.image as AssetImage).assetName == asset);
+
+    await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
+    expect(shows('icons/app_icon_light.png'), isTrue);
+
+    await tester.runAsync(() => provider.setDarkLauncherIcon(true));
+    await tester.pump();
+    expect(shows('icons/app_icon_dark.png'), isTrue);
+
+    await tester.runAsync(() => provider.setDarkLauncherIcon(false));
+    await tester.pump();
+  });
+
+  testWidgets('offline, the home shows downloads; back online, the rows',
+      (tester) async {
+    await tester.runAsync(() => storage.saveDownload(
+        _song('d1', title: 'Saved song')));
+    NetworkStatus.instance.offline.value = true;
+    addTearDown(() => NetworkStatus.instance.offline.value = false);
+    await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
+    expect(find.textContaining("You're offline"), findsOneWidget);
+    expect(find.text('Saved song'), findsOneWidget);
+    expect(find.text('Trending in Tamil'), findsNothing);
+
+    NetworkStatus.instance.offline.value = false;
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining("You're offline"), findsNothing);
+    expect(find.text('Trending in Tamil'), findsOneWidget);
+  });
+
   testWidgets('picking a language chip switches the sections',
       (tester) async {
     await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
@@ -142,7 +217,11 @@ void main() {
     await pumpHome(tester, const SettingsScreen());
     expect(find.text('Audio quality'), findsOneWidget);
     expect(find.text('Tamil rows on the home screen'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('1 entry'), 200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('1 entry'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Home language'), -200,
+        scrollable: find.byType(Scrollable).first);
 
     await tester.tap(find.text('Home language'));
     await tester.pump(); // sheet route starts

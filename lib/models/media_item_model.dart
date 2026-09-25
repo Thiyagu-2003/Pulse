@@ -23,11 +23,11 @@ extension MediaSourceLabel on MediaSourceType {
   /// device, what's online, and podcasts — and naming the provider tells them
   /// nothing useful about a track.
   String get label => switch (this) {
-        MediaSourceType.local => 'Local',
-        MediaSourceType.youtube => 'Online',
-        MediaSourceType.saavn => 'Online',
-        MediaSourceType.podcast => 'Podcast',
-      };
+    MediaSourceType.local => 'Local',
+    MediaSourceType.youtube => 'Online',
+    MediaSourceType.saavn => 'Online',
+    MediaSourceType.podcast => 'Podcast',
+  };
 }
 
 extension MediaSourceOnline on MediaSourceType {
@@ -71,7 +71,9 @@ class AppMediaItem {
       title: title,
       artist: artist,
       duration: duration,
-      artUri: artUri != null && artUri!.isNotEmpty ? Uri.tryParse(artUri!) : null,
+      artUri: artUri != null && artUri!.isNotEmpty
+          ? Uri.tryParse(artUri!)
+          : null,
       // Canonical fields last: extras copied from an earlier MediaItem carry
       // their own stale 'streamUrl', which must not override the resolved one.
       extras: {
@@ -100,17 +102,17 @@ class AppMediaItem {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'artist': artist,
-        'album': album,
-        'artUri': artUri,
-        'streamUrl': streamUrl,
-        'durationMs': duration?.inMilliseconds,
-        'sourceType': sourceType.name,
-        'lyrics': lyrics,
-        'extras': extras,
-      };
+    'id': id,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'artUri': artUri,
+    'streamUrl': streamUrl,
+    'durationMs': duration?.inMilliseconds,
+    'sourceType': sourceType.name,
+    'lyrics': lyrics,
+    'extras': extras,
+  };
 
   /// Favorites, playlists, history and downloads saved before the UI stopped
   /// naming the provider still carry the old album label in their stored
@@ -122,20 +124,20 @@ class AppMediaItem {
   }
 
   factory AppMediaItem.fromJson(Map<String, dynamic> json) => AppMediaItem(
-        id: json['id'] as String,
-        title: json['title'] as String,
-        artist: json['artist'] as String,
-        album: _displayAlbum(json['album'] as String?),
-        artUri: json['artUri'] as String?,
-        streamUrl: json['streamUrl'] as String?,
-        duration: json['durationMs'] != null
-            ? Duration(milliseconds: json['durationMs'] as int)
-            : null,
-        sourceType: MediaSourceType.values.firstWhere(
-          (e) => e.name == json['sourceType'],
-          orElse: () => MediaSourceType.local,
-        ),
-        lyrics: json['lyrics'] as String?,
-        extras: json['extras'] as Map<String, dynamic>?,
-      );
+    id: json['id'] as String,
+    title: json['title'] as String,
+    artist: json['artist'] as String,
+    album: _displayAlbum(json['album'] as String?),
+    artUri: json['artUri'] as String?,
+    streamUrl: json['streamUrl'] as String?,
+    duration: json['durationMs'] != null
+        ? Duration(milliseconds: json['durationMs'] as int)
+        : null,
+    sourceType: MediaSourceType.values.firstWhere(
+      (e) => e.name == json['sourceType'],
+      orElse: () => MediaSourceType.local,
+    ),
+    lyrics: json['lyrics'] as String?,
+    extras: json['extras'] as Map<String, dynamic>?,
+  );
 }

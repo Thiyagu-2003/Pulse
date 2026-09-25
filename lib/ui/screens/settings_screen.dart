@@ -1,14 +1,69 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/home_sections.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/storage_service.dart';
 import '../../services/playback_cache.dart';
+import '../../services/platform_bridge.dart';
+import '../../services/update_service.dart';
 import '../theme/app_theme.dart';
+import 'customize_home_screen.dart';
 import 'diagnostics_screen.dart';
+import 'equalizer_screen.dart';
+import 'stats_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  static Future<void> _backUp(
+    BuildContext context,
+    MusicPlayerProvider provider,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final day = DateTime.now().toIso8601String().substring(0, 10);
+    try {
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Save backup',
+        fileName: 'pulse-backup-$day.json',
+        mimeType: 'application/json',
+        bytes: utf8.encode(jsonEncode(provider.exportBackup())),
+      );
+      if (saved != null) {
+        messenger.showSnackBar(const SnackBar(content: Text('Backup saved')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+    }
+  }
+
+  static Future<void> _restore(
+    BuildContext context,
+    MusicPlayerProvider provider,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final picked = await FilePicker.pickFiles(
+        dialogTitle: 'Choose a Pulse backup',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+      );
+      if (picked.isEmpty) return;
+      final backup = jsonDecode(await picked.first.xFile.readAsString());
+      final count = await provider.restoreBackup(
+        backup as Map<String, dynamic>,
+      );
+      messenger.showSnackBar(
+        SnackBar(content: Text('Restored $count items from the backup')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("That file isn't a Pulse backup")),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,18 +83,32 @@ class SettingsScreen extends StatelessWidget {
             subtitle: Text(_themeLabel(provider.themeMode)),
             onTap: () => _pick<ThemeMode>(
               context,
-              options: const [ThemeMode.system, ThemeMode.light, ThemeMode.dark],
+              options: const [
+                ThemeMode.system,
+                ThemeMode.light,
+                ThemeMode.dark,
+              ],
               selected: provider.themeMode,
               label: _themeLabel,
               onPicked: provider.setThemeMode,
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.apps_rounded),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                provider.darkLauncherIcon
+                    ? 'icons/app_icon_dark.png'
+                    : 'icons/app_icon_light.png',
+                width: 32,
+                height: 32,
+              ),
+            ),
             title: const Text('App icon'),
             subtitle: Text(
-              '${provider.darkLauncherIcon ? 'Dark' : 'Light'} · '
-              'changes on your home screen when you leave the app',
+              '${provider.darkLauncherIcon ? 'Dark' : 'Light'} · widget and '
+              'notifications change now, the home-screen icon when you '
+              'leave the app',
             ),
             onTap: () => _pick<bool>(
               context,
@@ -47,6 +116,17 @@ class SettingsScreen extends StatelessWidget {
               selected: provider.darkLauncherIcon,
               label: (dark) => dark ? 'Dark' : 'Light',
               onPicked: provider.setDarkLauncherIcon,
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.tune_rounded),
+            title: const Text('Customize home'),
+            subtitle: const Text(
+              'Order, hide or add sections on the Online page',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CustomizeHomeScreen()),
             ),
           ),
           const _Heading('Playback'),
@@ -78,15 +158,81 @@ class SettingsScreen extends StatelessWidget {
               onPicked: provider.setHomeLanguage,
             ),
           ),
+          ListTile(
+            leading: const Icon(Icons.equalizer_rounded),
+            title: const Text('Equalizer'),
+            subtitle: Text(
+              provider.equalizerSettings.enabled
+                  ? 'On'
+                  : 'Off · bass boost, vocal, treble, loudness',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const EqualizerScreen()),
+            ),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.all_inclusive_rounded),
+            title: const Text('Autoplay'),
+            subtitle: const Text(
+              'When the queue ends, keep playing similar songs',
+            ),
+            value: provider.autoplay,
+            onChanged: provider.setAutoplay,
+          ),
           SwitchListTile(
             secondary: const Icon(Icons.signal_cellular_alt_rounded),
             title: const Text('Data saver on mobile data'),
             subtitle: const Text(
-                'Lower quality on mobile data, so songs start sooner'),
+              'Lower quality on mobile data, so songs start sooner',
+            ),
             value: provider.dataSaverOnMobile,
             onChanged: provider.setDataSaverOnMobile,
           ),
+          ListTile(
+            leading: const Icon(Icons.system_update_rounded),
+            title: const Text('Check for updates'),
+            subtitle: FutureBuilder<String?>(
+              future: PlatformBridge.appVersion(),
+              builder: (_, v) => Text('Pulse ${v.data ?? ''}'.trim()),
+            ),
+            onTap: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              final update = await UpdateService.check();
+              if (!context.mounted) return;
+              if (update == null) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text("You're on the latest version")),
+                );
+              } else {
+                showUpdateDialog(context, update);
+              }
+            },
+          ),
           const _Heading('Library'),
+          ListTile(
+            leading: const Icon(Icons.backup_rounded),
+            title: const Text('Back up'),
+            subtitle: const Text(
+              'Save favorites, playlists, history and settings to a file',
+            ),
+            onTap: () => _backUp(context, provider),
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings_backup_restore_rounded),
+            title: const Text('Restore'),
+            subtitle: const Text('Add everything from a backup file'),
+            onTap: () => _restore(context, provider),
+          ),
+          ListTile(
+            leading: const Icon(Icons.insights_rounded),
+            title: const Text('Listening stats'),
+            subtitle: const Text('Most played songs and artists'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StatsScreen()),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.delete_sweep_rounded),
             title: const Text('Clear listening history'),
@@ -141,10 +287,10 @@ class SettingsScreen extends StatelessWidget {
   static String _mb(int bytes) => '${(bytes / (1024 * 1024)).round()} MB';
 
   static String _themeLabel(ThemeMode mode) => switch (mode) {
-        ThemeMode.system => 'Follow system',
-        ThemeMode.light => 'Light',
-        ThemeMode.dark => 'Dark',
-      };
+    ThemeMode.system => 'Follow system',
+    ThemeMode.light => 'Light',
+    ThemeMode.dark => 'Dark',
+  };
 
   /// A bottom sheet of options with the current one marked.
   void _pick<T>(
@@ -273,4 +419,31 @@ class _SavedSongsTileState extends State<_SavedSongsTile> {
       ),
     );
   }
+}
+
+/// "Pulse 1.2.0 is available" with its release notes and a Download button
+/// (opens the APK in the browser; Android then offers to install it).
+void showUpdateDialog(BuildContext context, AppUpdate update) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Pulse ${update.version} is available'),
+      content: update.notes.isEmpty
+          ? null
+          : SingleChildScrollView(child: Text(update.notes)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Later'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            PlatformBridge.openUrl(update.url);
+          },
+          child: const Text('Download'),
+        ),
+      ],
+    ),
+  );
 }

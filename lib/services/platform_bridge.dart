@@ -25,6 +25,27 @@ class PlatformBridge {
   static Future<void> setLauncherIcon({required bool dark}) =>
       _call('setLauncherIcon', {'dark': dark});
 
+  /// The icon style for everything Pulse draws natively — widget
+  /// placeholder, notification large icons, the recent-apps entry. Applied
+  /// at once (the launcher entry waits until the app is left).
+  static Future<void> setIconStyle({required bool dark}) =>
+      _call('setIconStyle', {'dark': dark});
+
+  /// The installed version ("1.0.0"), or null off Android.
+  static Future<String?> appVersion() async {
+    try {
+      return await _channel.invokeMethod<String>('appVersion');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Open [url] in the browser (e.g. an update's download).
+  static Future<void> openUrl(String url) => _call('openUrl', {'url': url});
+
+  /// Android's share sheet with [text].
+  static Future<void> share(String text) => _call('share', {'text': text});
+
   /// Tell Android's media index about a new file. Only matters for a custom
   /// download folder (e.g. Music/): the default folder is app-private, which
   /// Android 11+ never indexes, so other apps won't list those files.

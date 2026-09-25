@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'storage_service.dart';
+
 /// Download progress in the notification shade: visible after leaving the
 /// app, and it doesn't cover the song list the way a SnackBar did.
 ///
@@ -43,6 +45,13 @@ class DownloadNotifications {
         importance: Importance.low, // no sound or pop-up for progress
         priority: Priority.low,
         icon: icon,
+        // The app icon in the style chosen in Settings (the small icon
+        // beside it is always a one-colour silhouette on Android).
+        largeIcon: DrawableResourceAndroidBitmap(
+          StorageService().getDarkLauncherIcon()
+              ? 'app_icon_dark'
+              : 'app_icon_light',
+        ),
         onlyAlertOnce: true,
         // Never pinned: if Android kills the app mid-download, a pinned
         // "Downloading" notification could not be swiped away.

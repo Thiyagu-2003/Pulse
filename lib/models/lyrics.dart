@@ -16,15 +16,19 @@ class Lyrics {
   /// Where they came from, for the small credit under the panel.
   final String source;
 
-  const Lyrics({required this.lines, required this.plain, required this.source});
+  const Lyrics({
+    required this.lines,
+    required this.plain,
+    required this.source,
+  });
 
   bool get isSynced => lines.isNotEmpty;
 
   factory Lyrics.synced(List<LyricLine> lines, String source) => Lyrics(
-        lines: lines,
-        plain: lines.map((l) => l.text).join('\n'),
-        source: source,
-      );
+    lines: lines,
+    plain: lines.map((l) => l.text).join('\n'),
+    source: source,
+  );
 
   factory Lyrics.plainText(String text, String source) =>
       Lyrics(lines: const [], plain: text, source: source);
@@ -62,14 +66,16 @@ class Lyrics {
         final ms = fraction == null
             ? 0
             : int.parse(fraction.padRight(3, '0').substring(0, 3));
-        out.add(LyricLine(
-          Duration(
-            minutes: int.parse(m.group(1)!),
-            seconds: int.parse(m.group(2)!),
-            milliseconds: ms,
+        out.add(
+          LyricLine(
+            Duration(
+              minutes: int.parse(m.group(1)!),
+              seconds: int.parse(m.group(2)!),
+              milliseconds: ms,
+            ),
+            text,
           ),
-          text,
-        ));
+        );
       }
     }
     out.sort((a, b) => a.time.compareTo(b.time));

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart' show ThemeMode, debugPrint;
 import 'package:hive_ce_flutter/hive_flutter.dart';
+import '../models/home_sections.dart';
 import '../models/media_item_model.dart';
 import '../models/playlist.dart';
 
@@ -38,6 +39,7 @@ class StorageService {
   static const String recentSearchesKey = 'recent_searches';
   static const String themeModeKey = 'theme_mode';
   static const String dataSaverOnMobileKey = 'data_saver_on_mobile';
+  static const String homeLayoutKey = 'home_layout';
   static const String darkLauncherIconKey = 'dark_launcher_icon';
   static const String defaultHomeLanguage = 'Tamil';
   static const int recentSearchLimit = 10;
@@ -102,6 +104,20 @@ class StorageService {
   Future<void> setThemeMode(ThemeMode mode) =>
       _settingsBox.put(themeModeKey, mode.name);
 
+  /// The user's home page arrangement (order, hidden, added sections).
+  HomeLayout getHomeLayout() {
+    final raw = _settingsBox.get(homeLayoutKey);
+    if (raw == null) return HomeLayout.standard;
+    try {
+      return HomeLayout.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return HomeLayout.standard;
+    }
+  }
+
+  Future<void> setHomeLayout(HomeLayout layout) =>
+      _settingsBox.put(homeLayoutKey, jsonEncode(layout.toJson()));
+
   /// On mobile data, stream at Data saver quality whatever the chosen
   /// quality — about a third of the bytes, so songs start sooner on a weak
   /// signal. On by default.
@@ -110,6 +126,90 @@ class StorageService {
 
   Future<void> setDataSaverOnMobile(bool on) =>
       _settingsBox.put(dataSaverOnMobileKey, '$on');
+
+  static const String autoplayKey = 'autoplay';
+  static const String equalizerKey = 'equalizer';
+  static const String updateCheckedKey = 'update_checked';
+
+  /// True at most once a day: time for the quiet update check.
+  Future<bool> updateCheckDue() async {
+    final last = int.tryParse(_settingsBox.get(updateCheckedKey) ?? '') ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - last < const Duration(days: 1).inMilliseconds) return false;
+    await _settingsBox.put(updateCheckedKey, '$now');
+    return true;
+  }
+
+  /// Settings > Backup: favorites, playlists, history, settings and podcast
+  /// positions as one JSON-able map. Downloads are left out — their files
+  /// are on this phone only — and so are the caches.
+  Map<String, dynamic> exportBackup() => {
+        'app': 'pulse',
+        'version': 1,
+        'exportedAt': DateTime.now().toIso8601String(),
+        for (final name in _backedUp) name: Map.of(Hive.box<String>(name).toMap()),
+        positionsBox: Map.of(_posBox.toMap()),
+      };
+
+  static const _backedUp = [favoritesBox, playlistsBox, historyBox, settingsBox];
+
+  /// Merge a backup into what's here (nothing is deleted). Returns how many
+  /// entries were restored; throws [FormatException] if it isn't a Pulse
+  /// backup.
+  Future<int> importBackup(Map<String, dynamic> backup) async {
+    if (backup['app'] != 'pulse') {
+      throw const FormatException('Not a Pulse backup');
+    }
+    var count = 0;
+    for (final name in _backedUp) {
+      final entries = backup[name];
+      if (entries is! Map) continue;
+      final valid = {
+        for (final e in entries.entries)
+          if (e.value is String) '${e.key}': e.value as String,
+      };
+      await Hive.box<String>(name).putAll(valid);
+      count += valid.length;
+    }
+    final positions = backup[positionsBox];
+    if (positions is Map) {
+      final valid = {
+        for (final e in positions.entries)
+          if (e.value is int) '${e.key}': e.value as int,
+      };
+      await _posBox.putAll(valid);
+      count += valid.length;
+    }
+    return count;
+  }
+
+  /// Playback speed chosen for one podcast show; null until chosen.
+  double? getPodcastSpeed(String show) =>
+      double.tryParse(_settingsBox.get('podcast_speed:$show') ?? '');
+
+  Future<void> setPodcastSpeed(String show, double speed) =>
+      _settingsBox.put('podcast_speed:$show', '$speed');
+
+  EqSettings getEqualizer() {
+    try {
+      return EqSettings.fromJson(jsonDecode(_settingsBox.get(equalizerKey)!));
+    } catch (_) {
+      return const EqSettings();
+    }
+  }
+
+  Future<void> setEqualizer(EqSettings eq) =>
+      _settingsBox.put(equalizerKey, jsonEncode(eq.toJson()));
+
+  /// A yes/no setting stored as 'true'/'false'; [fallback] until set.
+  bool getFlag(String key, {required bool fallback}) =>
+      switch (_settingsBox.get(key)) {
+        'true' => true,
+        'false' => false,
+        _ => fallback,
+      };
+
+  Future<void> setFlag(String key, bool on) => _settingsBox.put(key, '$on');
 
   /// The launcher shows the light icon (logo on white) unless chosen.
   bool getDarkLauncherIcon() => _settingsBox.get(darkLauncherIconKey) == 'true';
@@ -255,12 +355,36 @@ class StorageService {
 
   Future<void> clearHistory() => _histBox.clear();
 
+  /// History with how often each song was played, newest first.
+  List<HistoryEntry> getHistoryEntries() {
+    final entries = <HistoryEntry>[];
+    for (final str in _histBox.values) {
+      try {
+        final json = jsonDecode(str) as Map<String, dynamic>;
+        entries.add((
+          item: AppMediaItem.fromJson(json),
+          plays: (json['plays'] as int?) ?? 1,
+          playedAt: (json['playedAt'] as int?) ?? 0,
+        ));
+      } catch (_) {}
+    }
+    entries.sort((a, b) => b.playedAt.compareTo(a.playedAt));
+    return entries;
+  }
+
   Future<void> addToHistory(AppMediaItem item) async {
+    // Counted per song, for Stats and the "Made for you" rows.
+    var plays = 0;
+    try {
+      final old = _histBox.get(item.id);
+      if (old != null) plays = (jsonDecode(old)['plays'] as int?) ?? 1;
+    } catch (_) {}
     await _histBox.put(
       item.id,
       jsonEncode({
         ...item.toJson(),
         'playedAt': DateTime.now().millisecondsSinceEpoch,
+        'plays': plays + 1,
       }),
     );
 
@@ -287,3 +411,38 @@ class StorageService {
     return items;
   }
 }
+
+/// Settings > Equalizer: on/off, a gain per band (dB, in the phone's band
+/// order), and extra loudness (dB).
+class EqSettings {
+  final bool enabled;
+  final List<double> gains;
+  final double loudness;
+
+  const EqSettings({
+    this.enabled = false,
+    this.gains = const [],
+    this.loudness = 0,
+  });
+
+  EqSettings copyWith({bool? enabled, List<double>? gains, double? loudness}) =>
+      EqSettings(
+        enabled: enabled ?? this.enabled,
+        gains: gains ?? this.gains,
+        loudness: loudness ?? this.loudness,
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'enabled': enabled, 'gains': gains, 'loudness': loudness};
+
+  factory EqSettings.fromJson(Map<String, dynamic> json) => EqSettings(
+        enabled: json['enabled'] == true,
+        gains: [
+          for (final g in (json['gains'] as List? ?? const []))
+            (g as num).toDouble(),
+        ],
+        loudness: (json['loudness'] as num? ?? 0).toDouble(),
+      );
+}
+
+typedef HistoryEntry = ({AppMediaItem item, int plays, int playedAt});

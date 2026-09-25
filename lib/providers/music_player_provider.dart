@@ -3,12 +3,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
+import '../models/home_sections.dart';
+import '../models/listening_stats.dart';
 import '../models/lyrics.dart';
 import '../models/media_item_model.dart';
 import '../models/playback_mode.dart';
 import '../models/playlist.dart';
 import '../models/queue_state.dart';
 import '../services/audio_handler.dart';
+import '../services/saavn_service.dart';
 import '../services/storage_service.dart';
 import '../services/lyrics_service.dart';
 import '../services/youtube_service.dart';
@@ -44,6 +47,8 @@ class MusicPlayerProvider extends ChangeNotifier {
     _audioHandler.onSkipNext = skipToNext;
     _audioHandler.onSkipPrevious = skipToPrevious;
     _audioHandler.onTrackCompleted = _advanceOnCompletion;
+    _audioHandler.onBrowse = browseForAuto;
+    _audioHandler.onPlayFromMediaId = playFromAuto;
     // A reload after Stop or an error resumes a podcast where it was.
     _audioHandler.resumePositionFor = (track) {
       final at = _resumePositionFor(track);
@@ -51,12 +56,14 @@ class MusicPlayerProvider extends ChangeNotifier {
       return at;
     };
     _initListeners();
+    if (Platform.isAndroid) applyEqualizer(equalizerSettings);
   }
 
   CustomAudioHandler get audioHandler => _audioHandler;
   List<AppMediaItem> get queue => _queueState.items;
   int get currentIndex => _queueState.currentIndex;
   AppMediaItem? get currentTrack => _currentTrack;
+
   /// Null once loaded means no lyrics were found.
   Lyrics? get currentLyrics => _currentLyrics;
   bool get isLoadingLyrics => _isLoadingLyrics;
@@ -116,8 +123,8 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   /// Cycles off → repeat queue → repeat one track.
   void cycleRepeat() {
-    _repeat = QueueRepeat
-        .values[(_repeat.index + 1) % QueueRepeat.values.length];
+    _repeat =
+        QueueRepeat.values[(_repeat.index + 1) % QueueRepeat.values.length];
     // Repeat-one is handled by the player itself so the loop is seamless.
     // Repeat-all needs our own queue, so the player stays unlooped for it.
     _audioHandler.setLoopOne(_repeat == QueueRepeat.one);
@@ -190,8 +197,9 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   Future<String?> _fetchWidgetArt(String url) async {
     try {
-      final response =
-          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return null;
       final dir = await getTemporaryDirectory();
       // One file per image, so the widget never reads a half-written one.
@@ -234,7 +242,8 @@ class MusicPlayerProvider extends ChangeNotifier {
           // Repaint at most four times a second: every notify rebuilds the
           // Library (decoding all favorites) and every visible tile, and a
           // download-all runs two of these at once.
-          if (now.difference(lastRepaint) >= const Duration(milliseconds: 250)) {
+          if (now.difference(lastRepaint) >=
+              const Duration(milliseconds: 250)) {
             lastRepaint = now;
             notifyListeners();
           }
@@ -261,6 +270,7 @@ class MusicPlayerProvider extends ChangeNotifier {
             // Where it came from, so a copy whose file is later deleted can
             // go back to streaming from that same source.
             extras: {
+              ...?item.extras,
               originKey: item.sourceType.name,
               if (item.streamUrl?.startsWith('http') ?? false)
                 originUrlKey: item.streamUrl,
@@ -286,10 +296,12 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   /// Online tracks in [items] not yet downloaded (or downloading).
   List<AppMediaItem> notDownloaded(List<AppMediaItem> items) => items
-      .where((t) =>
-          t.sourceType.isOnline &&
-          !isDownloaded(t.id) &&
-          !isDownloading(t.id))
+      .where(
+        (t) =>
+            t.sourceType.isOnline &&
+            !isDownloaded(t.id) &&
+            !isDownloading(t.id),
+      )
       .toList();
 
   /// Download every online track in [items] that isn't on disk yet, two at a
@@ -332,6 +344,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   void _releaseKeepAlive() {
     if (--_keepAliveHolds == 0) PlatformBridge.setDownloadsRunning(false);
   }
+
   bool isDownloaded(String id) => _storageService.isDownloaded(id);
 
   /// 0.0–1.0 while downloading, null otherwise.
@@ -404,6 +417,13 @@ class MusicPlayerProvider extends ChangeNotifier {
     final resumeAt = _resumePositionFor(track);
     _lastSavedPosition = resumeAt ?? Duration.zero;
 
+    // Each podcast show keeps its own speed; songs keep the song speed.
+    _audioHandler.setSpeed(
+      track.sourceType == MediaSourceType.podcast
+          ? _storageService.getPodcastSpeed(track.album) ?? 1.0
+          : _songSpeed,
+    );
+
     // Fire-and-forget the audio handler — it handles errors internally
     _audioHandler.playAppMediaItem(track, startAt: resumeAt);
 
@@ -411,7 +431,145 @@ class MusicPlayerProvider extends ChangeNotifier {
     // working once the download is removed.
     _storageService.addToHistory(online);
 
+    _extendWithRadio(online);
     _prefetchUpcoming();
+  }
+
+  /// Android Auto's library: folders at the root, songs inside. A song's
+  /// id is `folder|trackId`, so playing it queues its whole folder.
+  @visibleForTesting
+  Future<List<MediaItem>> browseForAuto(String parent) async {
+    if (parent == AudioService.browsableRootId) {
+      return [
+        const MediaItem(
+          id: 'auto_recent',
+          title: 'Recently played',
+          playable: false,
+        ),
+        const MediaItem(
+          id: 'auto_favorites',
+          title: 'Favorites',
+          playable: false,
+        ),
+        const MediaItem(
+          id: 'auto_downloads',
+          title: 'Downloads',
+          playable: false,
+        ),
+        for (final p in getPlaylists())
+          MediaItem(
+            id: 'auto_playlist:${p.id}',
+            title: p.name,
+            playable: false,
+          ),
+      ];
+    }
+    // The car's "recent" slot: what played last.
+    final folder = parent == AudioService.recentRootId ? 'auto_recent' : parent;
+    final songs = _autoFolder(folder);
+    return [
+      for (final t
+          in parent == AudioService.recentRootId ? songs.take(1) : songs)
+        t.toAudioServiceMediaItem().copyWith(id: '$folder|${t.id}'),
+    ];
+  }
+
+  @visibleForTesting
+  Future<void> playFromAuto(String mediaId) async {
+    final bar = mediaId.indexOf('|');
+    if (bar < 0) return;
+    final songs = _autoFolder(mediaId.substring(0, bar));
+    final id = mediaId.substring(bar + 1);
+    final track = songs.where((t) => t.id == id).firstOrNull;
+    if (track != null) await playTrack(track, playlist: songs);
+  }
+
+  List<AppMediaItem> _autoFolder(String folder) => switch (folder) {
+    'auto_recent' => getHistory().take(50).toList(),
+    'auto_favorites' => getFavorites(),
+    'auto_downloads' => getDownloads(),
+    _ when folder.startsWith('auto_playlist:') =>
+      getPlaylist(folder.substring('auto_playlist:'.length))?.items ?? const [],
+    _ => const [],
+  };
+
+  /// Keep playing similar songs after the queue's last one (Settings >
+  /// Autoplay).
+  bool get autoplay =>
+      _storageService.getFlag(StorageService.autoplayKey, fallback: true);
+
+  Future<void> setAutoplay(bool on) async {
+    await _storageService.setFlag(StorageService.autoplayKey, on);
+    notifyListeners();
+  }
+
+  String? _radioSeed;
+
+  /// When the last queued song starts, queue songs like it (JioSaavn radio)
+  /// behind it — fetched now, so the ending runs straight on and Next has
+  /// somewhere to go. Only for online songs, and not while repeating.
+  Future<void> _extendWithRadio(AppMediaItem track) async {
+    final online =
+        track.sourceType.isOnline || track.extras?[originKey] != null;
+    if (!autoplay || !online || _repeat != QueueRepeat.off) return;
+    if (_queueState.orderPos != _queueState.length - 1) return;
+    if (_radioSeed == track.id) return; // already fetching for this one
+    _radioSeed = track.id;
+    try {
+      final saavn = SaavnService.instance;
+      // YouTube songs seed from their JioSaavn match.
+      final seed = track.sourceType == MediaSourceType.youtube
+          ? (await saavn.searchSongs(
+              '${track.title} ${track.artist}',
+              count: 1,
+            )).firstOrNull?.id
+          : track.id;
+      if (seed == null) return;
+      final songs = await saavn.radio(seed);
+      // Still the last song? The user may have queued or skipped meanwhile.
+      if (_queueState.currentTrack?.id != track.id ||
+          _queueState.orderPos != _queueState.length - 1) {
+        return;
+      }
+      final queued = _queueState.items.map((t) => t.id).toSet();
+      for (final song in songs) {
+        if (!queued.contains(song.id)) _queueState.append(song);
+      }
+      notifyListeners();
+      _prefetchUpcoming();
+    } catch (e) {
+      debugPrint('Autoplay: no radio for ${track.title}: $e');
+    } finally {
+      if (_radioSeed == track.id) _radioSeed = null;
+    }
+  }
+
+  double _songSpeed = 1.0;
+
+  double get speed => _audioHandler.player.speed;
+
+  /// For a podcast, remembered for its show (Settings-free: just pick it
+  /// once); for songs, until the app closes.
+  Future<void> setSpeed(double speed) async {
+    final track = _currentTrack;
+    if (track?.sourceType == MediaSourceType.podcast) {
+      await _storageService.setPodcastSpeed(track!.album, speed);
+    } else {
+      _songSpeed = speed;
+    }
+    await _audioHandler.setSpeed(speed);
+    notifyListeners();
+  }
+
+  /// Jump [by] (negative = back) within the current track — the podcast
+  /// −10s / +30s buttons.
+  Future<void> seekBy(Duration by) async {
+    final player = _audioHandler.player;
+    final end = player.duration ?? _currentTrack?.duration;
+    var to = player.position + by;
+    if (to < Duration.zero) to = Duration.zero;
+    if (end != null && to > end) to = end;
+    await _audioHandler.seek(to);
   }
 
   /// Resolve the next track's stream URL while this one plays, so pressing
@@ -449,8 +607,8 @@ class MusicPlayerProvider extends ChangeNotifier {
     final source = origin == MediaSourceType.saavn.name
         ? MediaSourceType.saavn
         : origin == MediaSourceType.youtube.name
-            ? MediaSourceType.youtube
-            : null;
+        ? MediaSourceType.youtube
+        : null;
     if (source == null) return item;
     return AppMediaItem(
       id: item.id,
@@ -519,6 +677,22 @@ class MusicPlayerProvider extends ChangeNotifier {
       return;
     }
     await _play(next);
+  }
+
+  /// Empty the queue except the song playing ("Clear up next").
+  void clearUpNext() {
+    for (var i = _queueState.length - 1; i >= 0; i--) {
+      if (i != _queueState.currentIndex) _queueState.removeAt(i);
+    }
+    notifyListeners();
+  }
+
+  /// A new playlist holding the whole queue, in queue order.
+  Future<Playlist> saveQueueAsPlaylist(String name) async {
+    final playlist = (await createPlaylist(name)).copyWith(items: queue);
+    await _storageService.savePlaylist(playlist);
+    notifyListeners();
+    return playlist;
   }
 
   /// Queue [item] directly after whatever is playing. False if [item] is
@@ -635,6 +809,62 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// launcher entry while the app is open closes it on some phones.
   Future<void> setDarkLauncherIcon(bool dark) async {
     await _storageService.setDarkLauncherIcon(dark);
+    // Widget, notifications and recent-apps follow straight away.
+    PlatformBridge.setIconStyle(dark: dark);
+    notifyListeners();
+  }
+
+  Map<String, dynamic> exportBackup() => _storageService.exportBackup();
+
+  /// Merge a backup in; returns how many entries it restored.
+  Future<int> restoreBackup(Map<String, dynamic> backup) async {
+    final count = await _storageService.importBackup(backup);
+    if (Platform.isAndroid) applyEqualizer(equalizerSettings);
+    PlatformBridge.setIconStyle(dark: darkLauncherIcon);
+    notifyListeners();
+    return count;
+  }
+
+  EqSettings get equalizerSettings => _storageService.getEqualizer();
+
+  /// Save and apply. The band gains need the phone's equalizer, which exists
+  /// once the player has started — so they're applied when it's ready.
+  Future<void> setEqualizer(EqSettings eq) async {
+    await _storageService.setEqualizer(eq);
+    applyEqualizer(eq);
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  Future<void> applyEqualizer(EqSettings eq) async {
+    final equalizer = _audioHandler.equalizer;
+    final loudness = _audioHandler.loudness;
+    try {
+      await equalizer.setEnabled(eq.enabled);
+      await loudness.setEnabled(eq.enabled && eq.loudness > 0);
+      await loudness.setTargetGain(eq.loudness);
+      final bands = (await equalizer.parameters).bands;
+      for (var i = 0; i < bands.length && i < eq.gains.length; i++) {
+        await bands[i].setGain(eq.gains[i]);
+      }
+    } catch (e) {
+      debugPrint('Equalizer unavailable: $e');
+    }
+  }
+
+  /// Worked out once per launch from history: rows that changed with every
+  /// song would reshuffle the home page under the user's thumb.
+  late final List<HomeSection> madeForYouSections = madeForYou(
+    _storageService.getHistoryEntries(),
+  );
+
+  ListeningStats get stats =>
+      ListeningStats.from(_storageService.getHistoryEntries());
+
+  HomeLayout get homeLayout => _storageService.getHomeLayout();
+
+  Future<void> setHomeLayout(HomeLayout layout) async {
+    await _storageService.setHomeLayout(layout);
     notifyListeners();
   }
 
@@ -740,7 +970,8 @@ class MusicPlayerProvider extends ChangeNotifier {
         track.title,
         track.artist,
         duration: track.duration,
-        saavnId: track.sourceType == MediaSourceType.saavn ||
+        saavnId:
+            track.sourceType == MediaSourceType.saavn ||
                 track.extras?[originKey] == MediaSourceType.saavn.name
             ? track.id
             : null,

@@ -201,6 +201,36 @@ void main() {
       expect(lyrics, isNot(contains('<br')));
     });
 
+    test('radio, artist, album and search tabs', () async {
+      final song = (await saavn.searchSongs('vaseegara')).first;
+      expect(song.extras?[SaavnService.albumIdKey], isNotNull);
+      expect(song.extras?[SaavnService.artistIdKey], isNotNull);
+      expect(song.extras?[SaavnService.permaUrlKey], startsWith('https://'));
+
+      final radio = await saavn.radio(song.id);
+      print('  radio ${radio.length}: ${radio.take(4).map((s) => s.title).toList()}');
+      expect(radio.length, greaterThanOrEqualTo(5));
+      expect(radio.every((s) => s.streamUrl!.startsWith('https://')), isTrue);
+
+      final album = await saavn.album(song.extras![SaavnService.albumIdKey]);
+      print('  album ${album?.title}: ${album?.songs.length} songs');
+      expect(album!.songs, isNotEmpty);
+
+      final artist = await saavn.artist(song.extras![SaavnService.artistIdKey]);
+      print('  artist ${artist?.name}: ${artist?.topSongs.length} songs, '
+          '${artist?.albums.length} albums');
+      expect(artist!.topSongs, isNotEmpty);
+
+      for (final kind in SaavnKind.values) {
+        final found = await saavn.searchCollections('anirudh', kind);
+        print('  ${kind.name}s: ${found.take(3).map((c) => c.title).toList()}');
+        expect(found, isNotEmpty);
+        expect(found.first.kind, kind);
+      }
+      final list = (await saavn.searchCollections('anirudh', SaavnKind.playlist)).first;
+      expect(await saavn.playlist(list.id), isNotEmpty);
+    });
+
     test('trending Tamil songs get time-synced lyrics', () async {
       final songs = (await saavn.trending('tamil')).take(6).toList();
       var synced = 0;

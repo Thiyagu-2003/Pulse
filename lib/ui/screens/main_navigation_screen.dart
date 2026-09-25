@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/platform_bridge.dart';
+import '../../services/storage_service.dart';
+import '../../services/update_service.dart';
+import 'settings_screen.dart';
 import 'online_music_screen.dart';
 import 'local_songs_screen.dart';
 import 'podcasts_screen.dart';
@@ -45,12 +48,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Native parts (widget, notifications) read the icon style from their
+    // own store; keep it in step with the setting on every start.
+    PlatformBridge.setIconStyle(
+      dark: context.read<MusicPlayerProvider>().darkLauncherIcon,
+    );
     // This shell outlives every tab and the Now Playing route, so it is the
     // one place guaranteed to be mounted whenever playback fails.
     _errorSubscription = context
         .read<MusicPlayerProvider>()
         .playbackErrors
         .listen(_showPlaybackError);
+    _checkForUpdate();
+  }
+
+  /// Once a day, quietly: a newer release only shows as a SnackBar.
+  Future<void> _checkForUpdate() async {
+    // Off Android (tests) there's no version to compare: skip, and write
+    // nothing.
+    if (await PlatformBridge.appVersion() == null) return;
+    if (!await StorageService().updateCheckDue()) return;
+    final update = await UpdateService.check();
+    if (update == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Pulse ${update.version} is available'),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(left: 12, right: 12, bottom: 140),
+        action: SnackBarAction(
+          label: 'Update',
+          onPressed: () => showUpdateDialog(context, update),
+        ),
+      ),
+    );
   }
 
   void _showPlaybackError(String message) {
@@ -79,18 +109,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     return Scaffold(
       body: Stack(
         children: [
-          IndexedStack(
-            index: _currentIndex,
-            children: _screens,
-          ),
+          IndexedStack(index: _currentIndex, children: _screens),
 
           // Floating MiniPlayer resting above bottom navigation bar
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: MiniPlayer(),
-          ),
+          const Positioned(left: 0, right: 0, bottom: 0, child: MiniPlayer()),
         ],
       ),
       // Material 3 NavigationBar: the selection pill slides between

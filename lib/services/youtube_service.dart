@@ -58,6 +58,8 @@ class YoutubeService {
     // JioSaavn first: its results carry their playable URL, so nothing needs
     // resolving or prefetching.
     final viaSaavn = await catalog(query);
+    // Radio rows ("Made for you") are JioSaavn's alone.
+    if (query.startsWith('radio:')) return viaSaavn;
     final isHomeRow =
         query.startsWith('trending:') || query.startsWith('playlist:');
     if (isHomeRow) {
@@ -165,6 +167,9 @@ class YoutubeService {
       }
       if (query.startsWith('playlist:')) {
         return await saavn.playlistSongs(query.substring('playlist:'.length));
+      }
+      if (query.startsWith('radio:')) {
+        return await saavn.radio(query.substring('radio:'.length));
       }
       return await saavn.searchSongs(query);
     } catch (e) {
