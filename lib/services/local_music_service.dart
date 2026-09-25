@@ -43,6 +43,16 @@ class LocalMusicService {
     }
   }
 
+  /// Whether audio can be read, without asking.
+  Future<bool> hasPermission() async {
+    try {
+      return (await Permission.audio.status).isGranted ||
+          (await Permission.storage.status).isGranted;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Scan local device for audio tracks
   Future<List<AppMediaItem>> fetchLocalSongs() async {
     try {

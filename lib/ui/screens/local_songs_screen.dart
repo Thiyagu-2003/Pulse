@@ -65,8 +65,12 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
   /// view stays up although access was just granted.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Only *check* here: asking again would pop the system dialog every
+    // time the user switches back to the app after saying no.
     if (state == AppLifecycleState.resumed && !_hasPermission && !_isLoading) {
-      _initLocalMusic();
+      _localService.hasPermission().then((granted) {
+        if (granted && mounted) _initLocalMusic();
+      });
     }
   }
 

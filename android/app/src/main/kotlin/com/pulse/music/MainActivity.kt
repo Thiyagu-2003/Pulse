@@ -3,6 +3,7 @@ package com.pulse.music
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.MediaScannerConnection
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -37,6 +38,17 @@ class MainActivity : AudioServiceActivity() {
                             .putBoolean("playing", call.argument<Boolean>("playing") ?: false)
                             .apply()
                         PulseWidgetProvider.refresh(app)
+                        result.success(null)
+                    }
+                    "scanFile" -> {
+                        val path = call.argument<String>("path")
+                        if (path != null) {
+                            MediaScannerConnection.scanFile(app, arrayOf(path), null, null)
+                        }
+                        result.success(null)
+                    }
+                    "setDownloadsRunning" -> {
+                        DownloadKeepAliveService.setRunning(app, call.argument<Boolean>("running") ?: false)
                         result.success(null)
                     }
                     "setLauncherIcon" -> {

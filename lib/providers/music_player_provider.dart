@@ -37,6 +37,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   Duration _lastSavedPosition = Duration.zero;
 
   MusicPlayerProvider(this._audioHandler, this._storageService) {
+    ytService.pruneCaches();
     // The handler receives notification/headset/completion events but has no
     // queue of its own — route them back into this queue.
     _audioHandler.onSkipNext = skipToNext;
@@ -213,28 +214,30 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<String?> downloadTrack(AppMediaItem item) async {
     if (_downloadingIds.contains(item.id)) return null;
     _downloadingIds.add(item.id);
+    _holdKeepAlive();
     _downloadProgress[item.id] = 0;
     notifyListeners();
     final notifications = DownloadNotifications.instance;
     notifications.progress(item.id, item.title, null);
     var lastNotified = DateTime.now();
+    var lastRepaint = DateTime.now();
 
     String? path;
     try {
       path = await ytService.downloadAudioTrack(
         item,
         onProgress: (value) {
-          // Repaint per percent, not per chunk — a 5MB file arrives in
-          // hundreds of chunks and each notify rebuilds the list.
-          final percent = (value * 100).floor();
-          if (percent == ((_downloadProgress[item.id] ?? 0) * 100).floor()) {
-            return;
-          }
           _downloadProgress[item.id] = value;
-          notifyListeners();
-          // At most once a second: Android drops notification updates
-          // sent faster than that, and could drop the final "Downloaded".
           final now = DateTime.now();
+          // Repaint at most four times a second: every notify rebuilds the
+          // Library (decoding all favorites) and every visible tile, and a
+          // download-all runs two of these at once.
+          if (now.difference(lastRepaint) >= const Duration(milliseconds: 250)) {
+            lastRepaint = now;
+            notifyListeners();
+          }
+          // The shade at most once a second: Android drops notification
+          // updates sent faster than that, and could drop the final one.
           if (now.difference(lastNotified) >= const Duration(seconds: 1)) {
             lastNotified = now;
             notifications.progress(item.id, item.title, value);
@@ -264,12 +267,62 @@ class MusicPlayerProvider extends ChangeNotifier {
     } finally {
       notifications.finished(item.id, item.title, succeeded: path != null);
       _downloadingIds.remove(item.id);
+      _releaseKeepAlive();
       _downloadProgress.remove(item.id);
       notifyListeners();
     }
   }
 
   List<AppMediaItem> getDownloads() => _storageService.getDownloads();
+
+  /// Online tracks in [items] not yet downloaded (or downloading).
+  List<AppMediaItem> notDownloaded(List<AppMediaItem> items) => items
+      .where((t) =>
+          t.sourceType == MediaSourceType.youtube &&
+          !isDownloaded(t.id) &&
+          !isDownloading(t.id))
+      .toList();
+
+  /// Download every online track in [items] that isn't on disk yet, two at a
+  /// time — faster than one by one, without the burst that gets YouTube
+  /// refusing requests. Returns how many failed.
+  Future<int> downloadAll(List<AppMediaItem> items) async {
+    final queue = notDownloaded(items);
+    var failed = 0;
+    Future<void> worker() async {
+      while (queue.isNotEmpty) {
+        final item = queue.removeAt(0);
+        // Re-checked at its turn: another batch or a single download button
+        // may have got to it meanwhile — that's not a failure, and not a
+        // second download.
+        if (isDownloaded(item.id) || isDownloading(item.id)) continue;
+        if (await downloadTrack(item) == null) failed++;
+      }
+    }
+
+    // Held for the whole batch: between two songs no download is running,
+    // and a keep-alive dropped then can't be restarted from the background.
+    _holdKeepAlive();
+    try {
+      await Future.wait([worker(), worker()]);
+    } finally {
+      _releaseKeepAlive();
+    }
+    return failed;
+  }
+
+  /// Everything that needs the app alive in the background (each download,
+  /// a whole download-all batch) holds the keep-alive service; it stops
+  /// when the last one lets go.
+  int _keepAliveHolds = 0;
+
+  void _holdKeepAlive() {
+    if (_keepAliveHolds++ == 0) PlatformBridge.setDownloadsRunning(true);
+  }
+
+  void _releaseKeepAlive() {
+    if (--_keepAliveHolds == 0) PlatformBridge.setDownloadsRunning(false);
+  }
   bool isDownloaded(String id) => _storageService.isDownloaded(id);
 
   /// 0.0–1.0 while downloading, null otherwise.
@@ -358,6 +411,9 @@ class MusicPlayerProvider extends ChangeNotifier {
     final next = _queueState.peekNext(repeat: _repeat);
     if (next?.sourceType == MediaSourceType.youtube) {
       ytService.warmStreamUrl(next!.id);
+      // On Wi-Fi, fetch the whole next song too: Next and auto-advance then
+      // play it from disk with no network wait at all.
+      ytService.precacheForPlayback(next);
     }
   }
 
@@ -539,6 +595,14 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// launcher entry while the app is open closes it on some phones.
   Future<void> setDarkLauncherIcon(bool dark) async {
     await _storageService.setDarkLauncherIcon(dark);
+    notifyListeners();
+  }
+
+  bool get dataSaverOnMobile => _storageService.getDataSaverOnMobile();
+
+  Future<void> setDataSaverOnMobile(bool on) async {
+    await _storageService.setDataSaverOnMobile(on);
+    ytService.clearStreamCache(); // links were picked at the other quality
     notifyListeners();
   }
 

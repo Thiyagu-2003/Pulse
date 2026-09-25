@@ -435,3 +435,55 @@ class DownloadButton extends StatelessWidget {
     );
   }
 }
+
+/// Downloads every online song in [items] that isn't on the phone yet.
+/// Hidden when there's nothing left to download.
+class DownloadAllButton extends StatefulWidget {
+  final List<AppMediaItem> items;
+  const DownloadAllButton({super.key, required this.items});
+
+  @override
+  State<DownloadAllButton> createState() => _DownloadAllButtonState();
+}
+
+class _DownloadAllButtonState extends State<DownloadAllButton> {
+  bool _running = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<MusicPlayerProvider>();
+    final missing = provider.notDownloaded(widget.items).length;
+    if (_running) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (missing == 0) return const SizedBox.shrink();
+    return IconButton(
+      tooltip: 'Download all ($missing)',
+      icon: const Icon(Icons.download_for_offline_outlined),
+      onPressed: () async {
+        if (_running) return; // a second tap in the same frame
+        final messenger = ScaffoldMessenger.of(context);
+        setState(() => _running = true);
+        final failed = await provider.downloadAll(widget.items);
+        if (mounted) setState(() => _running = false);
+        showCompactSnack(
+          messenger,
+          failed == 0
+              ? 'Downloaded $missing ${missing == 1 ? 'song' : 'songs'}'
+              : "$failed couldn't download — tap again to retry",
+          icon: failed == 0
+              ? Icons.download_done_rounded
+              : Icons.error_outline_rounded,
+          error: failed > 0,
+        );
+      },
+    );
+  }
+}

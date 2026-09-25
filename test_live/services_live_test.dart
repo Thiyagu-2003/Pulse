@@ -7,7 +7,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hive/hive.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:music_player/models/home_sections.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/services/lyrics_service.dart';
@@ -102,6 +102,33 @@ void main() {
     final f = File(path!);
     expect(await f.length(), greaterThan(500 * 1024));
     await f.delete();
+  });
+
+  test('an interrupted download resumes and ends byte-identical', () async {
+    final item = AppMediaItem(
+      id: 'ew1fKCWb_M4',
+      title: 'Vaseegara',
+      artist: 'Harris Jayaraj',
+      sourceType: MediaSourceType.youtube,
+    );
+    final first = await yt.downloadAudioTrack(item);
+    expect(first, isNotNull);
+    final full = await File(first!).readAsBytes();
+
+    // Pretend the app died 1 MB in.
+    await File(first).delete();
+    final part = YoutubeService.partFileFor(File(first), full.length);
+    await part.writeAsBytes(full.sublist(0, 1024 * 1024));
+
+    final sw = Stopwatch()..start();
+    final second = await yt.downloadAudioTrack(item);
+    print('resumed download in ${sw.elapsedMilliseconds}ms');
+    expect(second, first);
+    final resumed = await File(second!).readAsBytes();
+    expect(resumed.length, full.length);
+    expect(resumed, full);
+    expect(part.existsSync(), isFalse);
+    await File(second).delete();
   });
 
   test('podcasts: search, then episodes from a real feed', () async {

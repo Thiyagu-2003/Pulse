@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart' show ThemeMode, debugPrint;
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../models/media_item_model.dart';
 import '../models/playlist.dart';
 
@@ -28,11 +28,16 @@ class StorageService {
   static const String positionsBox = 'positions';
   static const String downloadsBox = 'downloads';
   static const String settingsBox = 'settings';
+  // Caches: losing them only costs speed, so they are safe to clear.
+  static const String streamUrlsBox = 'stream_urls';
+  static const String searchCacheBox = 'search_cache';
+  static const String playbackLogBox = 'playback_log';
   static const String customDownloadPathKey = 'custom_download_path';
   static const String homeLanguageKey = 'home_language';
   static const String audioQualityKey = 'audio_quality';
   static const String recentSearchesKey = 'recent_searches';
   static const String themeModeKey = 'theme_mode';
+  static const String dataSaverOnMobileKey = 'data_saver_on_mobile';
   static const String darkLauncherIconKey = 'dark_launcher_icon';
   static const String defaultHomeLanguage = 'Tamil';
   static const int recentSearchLimit = 10;
@@ -46,7 +51,15 @@ class StorageService {
     await Hive.openBox<int>(positionsBox);
     await Hive.openBox<String>(downloadsBox);
     await Hive.openBox<String>(settingsBox);
+    await Hive.openBox<String>(streamUrlsBox);
+    await Hive.openBox<String>(searchCacheBox);
+    await Hive.openBox<String>(playbackLogBox);
   }
+
+  /// A cache box, or null where it isn't open (tests that only set up the
+  /// boxes they need). Callers treat null as "no cache".
+  static Box<String>? cacheBox(String name) =>
+      Hive.isBoxOpen(name) ? Hive.box<String>(name) : null;
 
   /// Settings
   Box<String> get _settingsBox => Hive.box<String>(settingsBox);
@@ -88,6 +101,15 @@ class StorageService {
 
   Future<void> setThemeMode(ThemeMode mode) =>
       _settingsBox.put(themeModeKey, mode.name);
+
+  /// On mobile data, stream at Data saver quality whatever the chosen
+  /// quality — about a third of the bytes, so songs start sooner on a weak
+  /// signal. On by default.
+  bool getDataSaverOnMobile() =>
+      _settingsBox.get(dataSaverOnMobileKey) != 'false';
+
+  Future<void> setDataSaverOnMobile(bool on) =>
+      _settingsBox.put(dataSaverOnMobileKey, '$on');
 
   /// The launcher shows the light icon (logo on white) unless chosen.
   bool getDarkLauncherIcon() => _settingsBox.get(darkLauncherIconKey) == 'true';

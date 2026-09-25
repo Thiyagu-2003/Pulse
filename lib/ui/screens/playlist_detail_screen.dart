@@ -36,6 +36,7 @@ class PlaylistDetailScreen extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          DownloadAllButton(items: playlist.items),
           IconButton(
             icon: Icon(Icons.edit_rounded, color: context.colors.mist.withValues(alpha: 0.70)),
             tooltip: 'Rename',

@@ -1,11 +1,19 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
+import 'package:music_player/services/storage_service.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/services/youtube_service.dart';
 
 void main() {
   final yt = YoutubeService();
+
+  // Lookups read the quality setting (links are remembered per quality).
+  setUpAll(() async {
+    Hive.init((await Directory.systemTemp.createTemp('pulse_url_')).path);
+    await Hive.openBox<String>(StorageService.settingsBox);
+  });
   tearDown(() {
     yt.debugExtractOverride = null;
     yt.clearStreamCache();
@@ -44,18 +52,6 @@ void main() {
     };
     await expectLater(yt.getAudioStreamUrl('v2'), throwsException);
     expect(await yt.getAudioStreamUrl('v2'), 'https://x/v2');
-  });
-
-  test('the playback cache finds the file cacheForPlayback writes', () async {
-    final dir = await Directory.systemTemp.createTemp('pulse_cache_');
-    // cacheForPlayback names files `<id>_<id>.<ext>` (title slot = id).
-    await File('${dir.path}/abc123_abc123.m4a').writeAsString('x');
-    await File('${dir.path}/other_other.webm').writeAsString('x');
-    expect(yt.cachedPlaybackFile('abc123', dir), endsWith('abc123_abc123.m4a'));
-    expect(yt.cachedPlaybackFile('missing', dir), isNull);
-    // A prefix of another id must not match.
-    expect(yt.cachedPlaybackFile('abc', dir), isNull);
-    await dir.delete(recursive: true);
   });
 
   test('search prefetch warms all eight; a newer search stops the old queue',

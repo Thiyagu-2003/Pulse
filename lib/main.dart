@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/audio_handler.dart';
+import 'services/network_status.dart';
 import 'services/storage_service.dart';
 import 'providers/music_player_provider.dart';
 import 'ui/theme/app_theme.dart';
@@ -12,6 +13,9 @@ void main() async {
   // Initialize persistent local storage (Hive)
   final storageService = StorageService();
   await storageService.init();
+
+  // Wi-Fi vs mobile data decides stream quality and pre-caching.
+  await NetworkStatus.instance.start();
 
   // Initialize background AudioService
   final audioHandler = await initAudioService();

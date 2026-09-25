@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hive/hive.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:music_player/models/home_sections.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/providers/music_player_provider.dart';

@@ -25,6 +25,17 @@ class PlatformBridge {
   static Future<void> setLauncherIcon({required bool dark}) =>
       _call('setLauncherIcon', {'dark': dark});
 
+  /// Tell Android's media index about a new file. Only matters for a custom
+  /// download folder (e.g. Music/): the default folder is app-private, which
+  /// Android 11+ never indexes, so other apps won't list those files.
+  static Future<void> scanFile(String path) => _call('scanFile', {'path': path});
+
+  /// Keep the app process alive while downloads run, via a foreground
+  /// service with its own notification — otherwise Android may kill the
+  /// app, and the download with it, soon after the user leaves.
+  static Future<void> setDownloadsRunning(bool running) =>
+      _call('setDownloadsRunning', {'running': running});
+
   static Future<void> _call(String method, Map<String, Object?> args) async {
     try {
       await _channel.invokeMethod<void>(method, args);

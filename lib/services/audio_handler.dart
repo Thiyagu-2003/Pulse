@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/media_item_model.dart';
+import 'network_status.dart';
+import 'playback_cache.dart';
+import 'playback_log.dart';
 import 'youtube_service.dart';
 
 Future<CustomAudioHandler> initAudioService() async {
@@ -26,7 +29,15 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   // the same stack that checks and downloads use, which works reliably.
   // Letting ExoPlayer fetch googlevideo directly was tried and songs then
   // often failed to play on real phones, while downloads kept working.
-  final AudioPlayer _player = AudioPlayer();
+  // Start after 1s of audio instead of ExoPlayer's 2.5s: noticeably
+  // quicker on a weak signal, at a small risk of an early stall.
+  final AudioPlayer _player = AudioPlayer(
+    audioLoadConfiguration: const AudioLoadConfiguration(
+      androidLoadControl: AndroidLoadControl(
+        bufferForPlaybackDuration: Duration(milliseconds: 1000),
+      ),
+    ),
+  );
   final YoutubeService _ytService = YoutubeService();
 
   /// The queue lives in MusicPlayerProvider, not in audio_service's QueueHandler.
@@ -132,6 +143,27 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// [startAt] is applied as the source's initial position rather than a seek
   /// after the fact, which would race the asynchronous source loading.
   Future<void> playAppMediaItem(AppMediaItem item, {Duration? startAt}) async {
+    final attempt = PlaybackLog.instance.begin(item.title, item.sourceType.name);
+    _attempt = attempt;
+    try {
+      await _playAppMediaItem(item, startAt, attempt);
+    } finally {
+      // Still "loading" here means a newer tap took over.
+      PlaybackLog.instance.finish(
+        attempt,
+        attempt.outcome == 'loading' ? 'superseded' : attempt.outcome,
+      );
+    }
+  }
+
+  /// The attempt being loaded, for [_failPlayback] to mark.
+  PlaybackAttempt? _attempt;
+
+  Future<void> _playAppMediaItem(
+    AppMediaItem item,
+    Duration? startAt,
+    PlaybackAttempt attempt,
+  ) async {
     String? uri = item.streamUrl;
     // Tapping B while A's YouTube URL is still resolving must not let A take
     // over (or report an error) once its resolution finally lands.
@@ -162,15 +194,17 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       // is still fresh.
       // Fetched in full before (see _loadYoutube): play the file, instantly.
       final cachedFile = item.sourceType == MediaSourceType.youtube
-          ? await _ytService.cachedPlaybackPath(item.id)
+          ? await PlaybackCache.instance.find(item.id)
           : null;
       if (superseded()) return;
 
       if (cachedFile != null) {
         uri = cachedFile;
+        attempt.step('saved copy on this phone');
       } else if (item.sourceType == MediaSourceType.youtube) {
         try {
           uri = await _ytService.getAudioStreamUrl(item.id);
+          attempt.step('link via ${_ytService.lastSource[item.id] ?? 'cache'}');
         } catch (e) {
           if (superseded()) return;
           _failPlayback('Couldn\'t load "${item.title}". Tap to try again.', e);
@@ -212,25 +246,51 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
         );
       } else if (!uri.startsWith('http')) {
         // Local file path
-        await _player.setFilePath(uri, initialPosition: startAt);
+        try {
+          await _player.setFilePath(uri, initialPosition: startAt);
+        } catch (e) {
+          if (superseded() || cachedFile == null) rethrow;
+          // A saved copy that won't play (cut short, corrupt): throw it away
+          // and stream instead, or every later tap would fail the same way.
+          attempt.step('saved copy unplayable, streaming');
+          await PlaybackCache.instance.remove(item.id);
+          final url = await _ytService.getAudioStreamUrl(item.id);
+          if (superseded()) return;
+          if (url == null) rethrow;
+          await _player.setAudioSource(AudioSource.uri(Uri.parse(url)),
+              preload: true, initialPosition: startAt);
+        }
       } else {
         // HTTP stream (YouTube, podcast, etc.)
         // A stalled load counts as failed after 10s, so the fallbacks get a
         // turn instead of the song spinning indefinitely. (The next load
         // interrupts the stalled one.)
-        Future<void> load(String url) => _player
-            .setAudioSource(
-              AudioSource.uri(
-                Uri.parse(url),
-                headers: {
-                  'User-Agent':
-                      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                },
-              ),
-              preload: true,
-              initialPosition: startAt,
-            )
-            .timeout(const Duration(seconds: 10));
+        const headers = {
+          'User-Agent':
+              'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        };
+        Future<void> load(String url) async {
+          // YouTube songs are saved while they stream, so a replay starts
+          // from disk (PlaybackCache keeps the folder bounded). Both go
+          // through Dart's HTTP client, the path that works on real phones.
+          // Not on mobile data: a save isn't cancelled when the user skips,
+          // so skipping ten songs would download all ten in full.
+          final save = item.sourceType == MediaSourceType.youtube &&
+              !NetworkStatus.instance.onMobileData;
+          final AudioSource source = save
+              // Experimental in just_audio; if it misbehaves the load
+              // fails and the fallback ladder in _loadYoutube takes over.
+              // ignore: experimental_member_use
+              ? LockCachingAudioSource(
+                  Uri.parse(url),
+                  headers: headers,
+                  cacheFile: await PlaybackCache.instance.streamFileFor(item.id),
+                )
+              : AudioSource.uri(Uri.parse(url), headers: headers);
+          await _player
+              .setAudioSource(source, preload: true, initialPosition: startAt)
+              .timeout(const Duration(seconds: 10));
+        }
         if (item.sourceType == MediaSourceType.youtube) {
           await _loadYoutube(item, uri, load, superseded, startAt);
         } else {
@@ -245,6 +305,12 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       // Checked right before play(): no await may sit between this and it.
       if (superseded()) return;
 
+      attempt.step('player ready');
+      attempt.outcome = 'playing';
+      PlaybackCache.instance.playingId = item.id;
+      if (item.sourceType == MediaSourceType.youtube) {
+        PlaybackCache.instance.trim(keep: item.id);
+      }
       _loading = false;
       if (_pauseRequested) {
         _broadcastState(); // loaded, but the user paused while waiting
@@ -281,6 +347,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       } catch (e) {
         if (superseded()) rethrow; // interrupted by a newer tap
         debugPrint('Stream failed for ${item.id}: $e');
+        _attempt?.step('stream failed: ${e.runtimeType}');
         lastError = e;
         return false;
       }
@@ -292,11 +359,13 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     await for (final url
         in _ytService.alternativeStreamUrls(item.id, exclude: tried)) {
       if (superseded()) return;
+      _attempt?.step('trying ${_ytService.lastSource[item.id] ?? 'alternative'}');
       if (await attempt(url)) return;
     }
     if (superseded()) return;
 
     debugPrint('No stream would play for ${item.id}; fetching the file');
+    _attempt?.step('fetching the whole song');
     final path = await _ytService.cacheForPlayback(item);
     if (superseded()) return;
     if (path == null) throw lastError ?? StateError('no playable source');
@@ -306,6 +375,8 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// Reset to idle so the UI doesn't hang on "loading", and tell the user.
   void _failPlayback(String userMessage, [Object? cause]) {
     if (cause != null) debugPrint('Playback failed: $cause');
+    _attempt?.outcome = 'failed';
+    _attempt?.step('error: ${cause ?? userMessage}');
     _loading = false;
     // The previous track's source is still loaded (we only paused it), so
     // without this, Play would resume the old audio under the new title.

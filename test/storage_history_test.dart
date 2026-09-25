@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hive/hive.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/services/storage_service.dart';
 

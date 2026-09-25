@@ -117,6 +117,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   ),
                   emptyMessage: 'No favorite songs added yet.',
                   emptyIcon: Icons.favorite_border,
+                  withDownloadAll: true,
                 ),
                 _buildTrackList(
                   filterTracks(playerProvider.getHistory(), _query),
@@ -485,6 +486,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     List<AppMediaItem> tracks, {
     required String emptyMessage,
     required IconData emptyIcon,
+    bool withDownloadAll = false,
   }) {
     if (tracks.isEmpty) {
       return _buildEmpty(
@@ -495,8 +497,20 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      itemCount: tracks.length,
+      itemCount: tracks.length + (withDownloadAll ? 1 : 0),
       itemBuilder: (context, index) {
+        if (withDownloadAll) {
+          if (index == 0) {
+            return Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: DownloadAllButton(items: tracks),
+              ),
+            );
+          }
+          index--;
+        }
         return TrackTile(item: tracks[index], playlist: tracks);
       },
     );

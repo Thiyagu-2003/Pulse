@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../../models/home_sections.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/storage_service.dart';
+import '../../services/playback_cache.dart';
 import '../theme/app_theme.dart';
+import 'diagnostics_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -76,6 +78,14 @@ class SettingsScreen extends StatelessWidget {
               onPicked: provider.setHomeLanguage,
             ),
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.signal_cellular_alt_rounded),
+            title: const Text('Data saver on mobile data'),
+            subtitle: const Text(
+                'Lower quality on mobile data, so songs start sooner'),
+            value: provider.dataSaverOnMobile,
+            onChanged: provider.setDataSaverOnMobile,
+          ),
           const _Heading('Library'),
           ListTile(
             leading: const Icon(Icons.delete_sweep_rounded),
@@ -104,6 +114,16 @@ class SettingsScreen extends StatelessWidget {
                 );
             },
           ),
+          _SavedSongsTile(key: ValueKey(historyCount)),
+          ListTile(
+            leading: const Icon(Icons.monitor_heart_outlined),
+            title: const Text('Diagnostics'),
+            subtitle: const Text('How recent songs started, step by step'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
+            ),
+          ),
           const _Heading('About'),
           const ListTile(
             leading: Icon(Icons.info_outline_rounded),
@@ -117,6 +137,8 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
+
+  static String _mb(int bytes) => '${(bytes / (1024 * 1024)).round()} MB';
 
   static String _themeLabel(ThemeMode mode) => switch (mode) {
         ThemeMode.system => 'Follow system',
@@ -213,6 +235,41 @@ class _Heading extends StatelessWidget {
           fontWeight: FontWeight.bold,
           color: context.colors.accent,
         ),
+      ),
+    );
+  }
+}
+
+/// Size of the instant-replay cache, with tap-to-clear. Re-measures after
+/// clearing (and, via its key, after more songs are played).
+class _SavedSongsTile extends StatefulWidget {
+  const _SavedSongsTile({super.key});
+
+  @override
+  State<_SavedSongsTile> createState() => _SavedSongsTileState();
+}
+
+class _SavedSongsTileState extends State<_SavedSongsTile> {
+  late Future<int> _size = PlaybackCache.instance.sizeBytes();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<int>(
+      future: _size,
+      builder: (context, snapshot) => ListTile(
+        leading: const Icon(Icons.offline_bolt_outlined),
+        title: const Text('Saved songs for instant replay'),
+        subtitle: Text(
+          '${SettingsScreen._mb(snapshot.data ?? 0)} · up to '
+          '${SettingsScreen._mb(PlaybackCache.maxBytes)}, oldest removed '
+          'first. Tap to clear.',
+        ),
+        onTap: () async {
+          await PlaybackCache.instance.clear();
+          if (mounted) {
+            setState(() => _size = PlaybackCache.instance.sizeBytes());
+          }
+        },
       ),
     );
   }
