@@ -57,7 +57,16 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
     final provider = context.watch<MusicPlayerProvider>();
     final eq = provider.equalizerSettings;
     return Scaffold(
-      appBar: AppBar(title: const Text('Equalizer')),
+      appBar: AppBar(
+        title: const Text('Equalizer'),
+        actions: [
+          // Everything back to off and flat, loudness included.
+          TextButton(
+            onPressed: () => provider.setEqualizer(const EqSettings()),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
       body: _parameters == null
           ? const Center(child: Text('The equalizer needs Android.'))
           : FutureBuilder<AndroidEqualizerParameters>(

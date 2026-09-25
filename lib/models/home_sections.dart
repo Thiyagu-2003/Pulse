@@ -251,13 +251,6 @@ List<HomeSection> homeSectionsFor(String? language) {
   ];
 }
 
-/// "Good morning" / "Good afternoon" / "Good evening" for [hour] (0–23).
-String greetingFor(int hour) {
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
-}
-
 /// Home rows are for songs: drop hour-long jukeboxes and mixes, which search
 /// happily returns for queries like "90s hits".
 bool isSongLength(Duration? duration) =>

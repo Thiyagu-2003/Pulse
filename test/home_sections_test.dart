@@ -43,14 +43,6 @@ void main() {
         isFalse);
   });
 
-  test('greeting follows the time of day', () {
-    expect(greetingFor(0), 'Good morning');
-    expect(greetingFor(11), 'Good morning');
-    expect(greetingFor(12), 'Good afternoon');
-    expect(greetingFor(16), 'Good afternoon');
-    expect(greetingFor(17), 'Good evening');
-    expect(greetingFor(23), 'Good evening');
-  });
 
   test('home rows skip jukeboxes but keep songs and unknown lengths', () {
     expect(isSongLength(const Duration(minutes: 4)), isTrue);

@@ -108,7 +108,7 @@ void main() {
   for (final mode in [ThemeMode.dark, ThemeMode.light]) {
     testWidgets('every tab renders ($mode)', (tester) async {
       await launch(tester, mode);
-      expect(find.textContaining('Good '), findsOneWidget);
+      expect(find.byTooltip('Customize home'), findsOneWidget);
 
       await tabTo(tester, Icons.folder_outlined);
       await tabTo(tester, Icons.podcasts_outlined);
@@ -186,7 +186,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
     await settle(tester);
-    expect(find.textContaining('Good '), findsOneWidget);
+    expect(find.byTooltip('Customize home'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

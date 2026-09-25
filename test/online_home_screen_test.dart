@@ -95,7 +95,7 @@ void main() {
     });
     await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
 
-    expect(find.textContaining('Good '), findsOneWidget);
+    expect(find.byTooltip('Customize home'), findsOneWidget);
     expect(find.text('Recent 0'), findsOneWidget); // quick picks
     expect(find.text('Tamil'), findsOneWidget); // language chips
     expect(find.text('Trending in Tamil'), findsOneWidget);
@@ -200,6 +200,14 @@ void main() {
     await tester.pump();
     expect(find.textContaining("You're offline"), findsNothing);
     expect(find.text('Trending in Tamil'), findsOneWidget);
+  });
+
+  testWidgets('the header opens Customize home', (tester) async {
+    await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
+    expect(find.text('Pulse'), findsOneWidget); // the name, not a greeting
+    await tester.tap(find.byTooltip('Customize home'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add section'), findsOneWidget);
   });
 
   testWidgets('picking a language chip switches the sections',

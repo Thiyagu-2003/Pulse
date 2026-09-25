@@ -131,21 +131,6 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
                       section: section,
                     ),
                   },
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Center(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.tune_rounded),
-                      label: const Text('Customize home'),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CustomizeHomeScreen(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -231,10 +216,19 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              greetingFor(DateTime.now().hour),
+              'Pulse',
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          // Up here rather than at the foot of a long page.
+          IconButton(
+            tooltip: 'Customize home',
+            icon: const Icon(Icons.tune_rounded, size: 26),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CustomizeHomeScreen()),
             ),
           ),
           IconButton(
