@@ -7,6 +7,7 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'package:newpipeextractor_dart/newpipeextractor_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/media_item_model.dart';
+import '../models/search_match.dart';
 import 'network_status.dart';
 import 'platform_bridge.dart';
 import 'playback_cache.dart';
@@ -55,12 +56,82 @@ class YoutubeService {
     bool prefetch = true,
   }) async {
     // JioSaavn first: its results carry their playable URL, so nothing needs
-    // resolving or prefetching. YouTube only if it has nothing.
+    // resolving or prefetching.
     final viaSaavn = await catalog(query);
-    if (viaSaavn.isNotEmpty) return viaSaavn;
-    // A home row's "playlist:Love Tamil" searched on YouTube as literal text
-    // gave junk that was then cached for a day: search the words instead.
-    final text = youtubeFallbackQuery(query);
+    final isHomeRow =
+        query.startsWith('trending:') || query.startsWith('playlist:');
+    if (isHomeRow) {
+      if (viaSaavn.isNotEmpty) return viaSaavn;
+      // A home row's "playlist:Love Tamil" searched on YouTube as literal
+      // text gave junk that was then cached for a day: search the words.
+      return _youtubeSearch(youtubeFallbackQuery(query), prefetch: prefetch);
+    }
+    // Typed searches: JioSaavn matches titles literally, so a typo, an extra
+    // word or a description can return *something* that isn't the song.
+    if (looksRelevant(query, viaSaavn)) return viaSaavn;
+    return _forgivingSearch(query, viaSaavn, prefetch: prefetch);
+  }
+
+  /// When JioSaavn's answer doesn't match what was typed, try — stopping at
+  /// the first that finds the song:
+  /// 1. without filler words ("kamatchi song" → "kamatchi");
+  /// 2. YouTube's spelling correction (its autocomplete fixes typos);
+  /// 3. YouTube search, which understands descriptions ("vijay beast arabic
+  ///    song"): its top video's song name, looked up on JioSaavn;
+  /// 4. the YouTube results themselves.
+  /// A correctly spelled search never gets here, so it costs nothing extra.
+  Future<List<AppMediaItem>> _forgivingSearch(
+    String query,
+    List<AppMediaItem> direct, {
+    required bool prefetch,
+  }) async {
+    final cleaned = stripFiller(query);
+    if (cleaned != query.trim().toLowerCase()) {
+      final r = await catalog(cleaned);
+      if (looksRelevant(cleaned, r)) return r;
+    }
+
+    final corrected = await _spellingFix(cleaned);
+    if (corrected != null) {
+      final r = await catalog(stripFiller(corrected));
+      if (looksRelevant(corrected, r)) return r;
+    }
+
+    final youtube = await _youtubeSearch(corrected ?? cleaned, prefetch: false);
+    if (youtube.isNotEmpty) {
+      final name = songNameFromVideoTitle(youtube.first.title);
+      if (name.isNotEmpty) {
+        final r = await catalog(name);
+        if (looksRelevant(name, r)) return r;
+      }
+      if (prefetch) prefetchStreams(youtube.take(8).map((e) => e.id).toList());
+      return youtube;
+    }
+    return direct;
+  }
+
+  /// YouTube's autocomplete top suggestion for [query] when it differs —
+  /// in effect a spelling fix ("vasegara" → "vaseegara").
+  Future<String?> _spellingFix(String query) async {
+    List<String> suggestions = const [];
+    try {
+      suggestions = await SearchExtractor.getSearchSuggestions(query)
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {}
+    if (suggestions.isEmpty) {
+      try {
+        suggestions = await _yt.search
+            .getQuerySuggestions(query)
+            .timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    if (suggestions.isEmpty) return null;
+    final top = suggestions.first.trim();
+    return top.toLowerCase() == query.toLowerCase() ? null : top;
+  }
+
+  Future<List<AppMediaItem>> _youtubeSearch(String text,
+      {required bool prefetch}) async {
     final viaNewPipe = await _searchWithNewPipe(text);
     final results =
         viaNewPipe.isNotEmpty ? viaNewPipe : await _searchWithExplode(text);

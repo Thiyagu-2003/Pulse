@@ -214,6 +214,31 @@ void main() {
       expect(synced, greaterThanOrEqualTo(songs.length ~/ 2));
     });
 
+    test('misspelled and descriptive searches still find the song', () async {
+      const cases = {
+        'vaseegara': 'vaseegara', // correct: must stay fast
+        'vaseegra': 'vaseegara',
+        'kamatchi song': 'kaamaatchi',
+        'kannu kulla': 'kannukulla',
+        'hukkum': 'hukum',
+        'dippam dapam': 'dippam dappam',
+        'thalapathi vijay beast song arabic': 'arabic kuthu',
+      };
+      var found = 0;
+      for (final e in cases.entries) {
+        final sw = Stopwatch()..start();
+        final r = await yt.searchMusic(e.key, prefetch: false);
+        final ok = r.take(3).any((t) => t.title
+            .toLowerCase()
+            .replaceAll(' ', '')
+            .contains(e.value.replaceAll(' ', '')));
+        if (ok) found++;
+        print('  search ${ok ? 'OK  ' : 'MISS'} ${e.key.padRight(36)} '
+            '${sw.elapsedMilliseconds}ms -> ${r.take(2).map((t) => t.title).toList()}');
+      }
+      expect(found, greaterThanOrEqualTo(cases.length - 1));
+    });
+
     test('every Tamil home section fills from JioSaavn', () async {
       final empty = <String>[];
       for (final s in homeSectionsFor('Tamil')) {
