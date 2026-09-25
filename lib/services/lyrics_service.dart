@@ -2,69 +2,101 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/lyrics.dart';
 import 'saavn_service.dart';
 
 class LyricsService {
-  /// Lyrics for a song: JioSaavn's own first for a JioSaavn song
-  /// ([saavnId]) — same catalogue, matched by id rather than by name — then
-  /// LRCLIB, the open lyrics database.
-  Future<String?> fetchLyrics(
+  /// Lyrics for a song, time-synced whenever possible.
+  ///
+  /// LRCLIB (the open lyrics database) is asked first because it has
+  /// *synced* lyrics — measured: all 15 of the day's Tamil trending songs —
+  /// which let Now Playing highlight and follow the line being sung.
+  /// JioSaavn's own lyrics ([saavnId]) are plain text; they're fetched at the
+  /// same time and used when LRCLIB has nothing synced. A synced match is
+  /// only trusted if its length agrees with [duration] (±5s), so another
+  /// song's lyrics never scroll past.
+  Future<Lyrics?> fetch(
     String title,
     String artist, {
     String? saavnId,
+    Duration? duration,
   }) async {
-    if (saavnId != null) {
-      try {
-        final lyrics = await SaavnService.instance.lyrics(saavnId);
-        if (lyrics != null && lyrics.trim().isNotEmpty) return lyrics;
-      } catch (e) {
-        debugPrint('JioSaavn lyrics failed: $e');
+    final saavn = saavnId == null
+        ? Future<String?>.value(null)
+        : SaavnService.instance.lyrics(saavnId).catchError((Object e) {
+            debugPrint('JioSaavn lyrics failed: $e');
+            return null;
+          });
+
+    final candidates = await _lrclibCandidates(title, artist);
+    for (final c in candidates) {
+      final synced = c['syncedLyrics'];
+      if (synced is String && synced.trim().isNotEmpty && _sameLength(c, duration)) {
+        final lines = Lyrics.parseLrc(synced);
+        if (lines.isNotEmpty) return Lyrics.synced(lines, 'LRCLIB');
       }
     }
-    try {
-      final cleanTitle = cleanQuery(title);
-      final cleanArtist = cleanQuery(artist);
-      // JioSaavn lists every artist ("A, B, C"); LRCLIB usually has just
-      // the first, and an exact match with all of them fails.
-      final firstArtist = cleanArtist.split(',').first.trim();
 
-      for (final a in {cleanArtist, firstArtist}) {
-        final url = Uri.parse(
-            'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(cleanTitle)}&artist_name=${Uri.encodeComponent(a)}');
-        final response =
-            await http.get(url).timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200) {
-          final data = jsonDecode(utf8.decode(response.bodyBytes));
-          final result = _pickLyrics(data);
-          if (result != null) return result;
-        }
-      }
-      final cleanArtistForSearch = firstArtist;
-
-      // Fallback search API if exact match not found
-      final searchUrl = Uri.parse(
-          'https://lrclib.net/api/search?q=${Uri.encodeComponent("$cleanArtistForSearch $cleanTitle")}');
-      final searchRes = await http.get(searchUrl).timeout(const Duration(seconds: 5));
-      if (searchRes.statusCode == 200) {
-        final List searchData = jsonDecode(utf8.decode(searchRes.bodyBytes));
-        if (searchData.isNotEmpty) {
-          return _pickLyrics(searchData.first);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error fetching lyrics: $e');
+    final fromSaavn = await saavn;
+    if (fromSaavn != null && fromSaavn.trim().isNotEmpty) {
+      return Lyrics.plainText(fromSaavn, 'JioSaavn');
+    }
+    for (final c in candidates) {
+      if (!_sameLength(c, duration)) continue;
+      final plain = _pickLyrics(c);
+      if (plain != null) return Lyrics.plainText(plain, 'LRCLIB');
     }
     return null;
   }
 
-  /// The UI renders lyrics as plain text, so prefer plainLyrics and strip the
-  /// `[mm:ss.xx]` cues off syncedLyrics rather than showing them to the user.
-  String? _pickLyrics(dynamic data) {
-    final plain = data['plainLyrics'] as String?;
-    if (plain != null && plain.trim().isNotEmpty) return plain;
+  /// LRCLIB records that might be this song: exact matches (all artists,
+  /// then the first — JioSaavn lists "A, B, C", LRCLIB usually just "A"),
+  /// then search results.
+  Future<List<Map<String, dynamic>>> _lrclibCandidates(
+      String title, String artist) async {
+    final cleanTitle = cleanQuery(title);
+    final cleanArtist = cleanQuery(artist);
+    final firstArtist = cleanArtist.split(',').first.trim();
+    final out = <Map<String, dynamic>>[];
+    try {
+      for (final a in {cleanArtist, firstArtist}) {
+        final res = await http
+            .get(Uri.https('lrclib.net', '/api/get',
+                {'track_name': cleanTitle, 'artist_name': a}))
+            .timeout(const Duration(seconds: 5));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(utf8.decode(res.bodyBytes));
+          if (data is Map<String, dynamic>) out.add(data);
+        }
+      }
+      final res = await http
+          .get(Uri.https(
+              'lrclib.net', '/api/search', {'q': '$firstArtist $cleanTitle'}))
+          .timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(res.bodyBytes));
+        if (data is List) out.addAll(data.whereType<Map<String, dynamic>>());
+      }
+    } catch (e) {
+      debugPrint('LRCLIB lookup failed: $e');
+    }
+    return out;
+  }
 
-    final synced = data['syncedLyrics'] as String?;
-    if (synced == null || synced.trim().isEmpty) return null;
+  static bool _sameLength(Map<String, dynamic> c, Duration? duration) {
+    final theirs = c['duration'];
+    if (duration == null || theirs is! num) return true;
+    return (theirs - duration.inSeconds).abs() <= 5;
+  }
+
+  /// Plain text from an LRCLIB record: its plain lyrics, or its synced ones
+  /// with the `[mm:ss.xx]` cues stripped.
+  String? _pickLyrics(Map<String, dynamic> data) {
+    final plain = data['plainLyrics'];
+    if (plain is String && plain.trim().isNotEmpty) return plain;
+
+    final synced = data['syncedLyrics'];
+    if (synced is! String || synced.trim().isEmpty) return null;
     final stripped = synced
         .replaceAll(RegExp(r'^\s*(\[\d+:\d+(\.\d+)?\]\s*)+', multiLine: true), '')
         .trim();

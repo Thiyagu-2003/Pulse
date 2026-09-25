@@ -186,15 +186,32 @@ void main() {
       await File(again).delete();
     });
 
-    test('lyrics for a JioSaavn song come from JioSaavn', () async {
+    test('a JioSaavn song gets lyrics', () async {
       final song = (await saavn.searchSongs('vaseegara')).first;
       final sw = Stopwatch()..start();
-      final lyrics = await LyricsService()
-          .fetchLyrics(song.title, song.artist, saavnId: song.id);
+      final lyrics = (await LyricsService().fetch(song.title, song.artist,
+              saavnId: song.id, duration: song.duration))
+          ?.plain;
       print('saavn lyrics ${sw.elapsedMilliseconds}ms: '
           '${lyrics?.split('\n').take(2).join(' / ')}');
-      expect(lyrics, contains('Vaseegara'));
+      // Synced (LRCLIB) when available, else JioSaavn's plain text;
+      // either way real lines, in any script, with no HTML left in.
+      expect(lyrics, isNotNull);
+      expect(lyrics!.split('\n').length, greaterThan(5));
       expect(lyrics, isNot(contains('<br')));
+    });
+
+    test('trending Tamil songs get time-synced lyrics', () async {
+      final songs = (await saavn.trending('tamil')).take(6).toList();
+      var synced = 0;
+      for (final song in songs) {
+        final lyrics = await LyricsService().fetch(song.title, song.artist,
+            saavnId: song.id, duration: song.duration);
+        print('  lyrics ${lyrics == null ? 'none  ' : lyrics.isSynced ? 'SYNCED' : 'plain '} '
+            '${lyrics?.lines.length ?? 0} lines  ${song.title}');
+        if (lyrics?.isSynced ?? false) synced++;
+      }
+      expect(synced, greaterThanOrEqualTo(songs.length ~/ 2));
     });
 
     test('every Tamil home section fills from JioSaavn', () async {
@@ -233,7 +250,7 @@ void main() {
   });
 
   test('lyrics found for a well-known song', () async {
-    final lyrics = await LyricsService().fetchLyrics('Shape of You', 'Ed Sheeran');
+    final lyrics = (await LyricsService().fetch('Shape of You', 'Ed Sheeran'))?.plain;
     print('lyrics: ${lyrics?.length ?? 0} chars');
     expect(lyrics, isNotNull);
   });

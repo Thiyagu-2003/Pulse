@@ -8,6 +8,7 @@ import '../../models/playback_mode.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
+import '../widgets/lyrics_view.dart';
 import '../widgets/track_tile.dart';
 import 'dart:async';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
@@ -253,19 +254,22 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       child: GlassContainer(
                         child: playerProvider.isLoadingLyrics
                             ? const Center(child: CircularProgressIndicator())
-                            : SingleChildScrollView(
-                                child: Text(
-                                  playerProvider.currentLyrics ??
-                                      'No lyrics for this track yet.',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    height: 1.9,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppTheme.mist,
+                            : playerProvider.currentLyrics == null
+                                ? const Center(
+                                    child: Text(
+                                      'No lyrics found for this song.',
+                                      style: TextStyle(color: Colors.white60),
+                                    ),
+                                  )
+                                : LyricsView(
+                                    // A new song starts a fresh view.
+                                    key: ValueKey(playerProvider.currentLyrics),
+                                    lyrics: playerProvider.currentLyrics!,
+                                    positions: playerProvider.positionStream,
+                                    duration: () =>
+                                        playerProvider.currentDuration,
+                                    onSeek: playerProvider.audioHandler.seek,
                                   ),
-                                ),
-                              ),
                       ),
                     ),
                   )

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
+import '../models/lyrics.dart';
 import '../models/media_item_model.dart';
 import '../models/playback_mode.dart';
 import '../models/playlist.dart';
@@ -26,7 +27,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   QueueRepeat _repeat = QueueRepeat.off;
 
   AppMediaItem? _currentTrack;
-  String? _currentLyrics;
+  Lyrics? _currentLyrics;
   String? _lyricsKey;
   bool _isLoadingLyrics = false;
   final Set<String> _downloadingIds = {};
@@ -56,7 +57,8 @@ class MusicPlayerProvider extends ChangeNotifier {
   List<AppMediaItem> get queue => _queueState.items;
   int get currentIndex => _queueState.currentIndex;
   AppMediaItem? get currentTrack => _currentTrack;
-  String? get currentLyrics => _currentLyrics;
+  /// Null once loaded means no lyrics were found.
+  Lyrics? get currentLyrics => _currentLyrics;
   bool get isLoadingLyrics => _isLoadingLyrics;
 
   Stream<PlaybackState> get playbackState => _audioHandler.playbackState;
@@ -734,9 +736,10 @@ class MusicPlayerProvider extends ChangeNotifier {
 
     try {
       final track = _currentTrack!;
-      final lyrics = await _lyricsService.fetchLyrics(
+      final lyrics = await _lyricsService.fetch(
         track.title,
         track.artist,
+        duration: track.duration,
         saavnId: track.sourceType == MediaSourceType.saavn ||
                 track.extras?[originKey] == MediaSourceType.saavn.name
             ? track.id
@@ -744,10 +747,10 @@ class MusicPlayerProvider extends ChangeNotifier {
       );
 
       if (_lyricsKey != key) return; // track changed while fetching
-      _currentLyrics = lyrics ?? 'Lyrics not available for this track.';
+      _currentLyrics = lyrics;
     } catch (_) {
       if (_lyricsKey != key) return;
-      _currentLyrics = 'Lyrics not available for this track.';
+      _currentLyrics = null;
     }
     _isLoadingLyrics = false;
     notifyListeners();
