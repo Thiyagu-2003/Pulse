@@ -2,48 +2,25 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import 'saavn_service.dart';
-
 class LyricsService {
-  /// Lyrics for a song: JioSaavn's own first for a JioSaavn song
-  /// ([saavnId]) — same catalogue, matched by id rather than by name — then
-  /// LRCLIB, the open lyrics database.
-  Future<String?> fetchLyrics(
-    String title,
-    String artist, {
-    String? saavnId,
-  }) async {
-    if (saavnId != null) {
-      try {
-        final lyrics = await SaavnService.instance.lyrics(saavnId);
-        if (lyrics != null && lyrics.trim().isNotEmpty) return lyrics;
-      } catch (e) {
-        debugPrint('JioSaavn lyrics failed: $e');
-      }
-    }
+  /// Fetch synced or plain lyrics from open LRCLIB API
+  Future<String?> fetchLyrics(String title, String artist) async {
     try {
       final cleanTitle = cleanQuery(title);
       final cleanArtist = cleanQuery(artist);
-      // JioSaavn lists every artist ("A, B, C"); LRCLIB usually has just
-      // the first, and an exact match with all of them fails.
-      final firstArtist = cleanArtist.split(',').first.trim();
+      final url = Uri.parse(
+          'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(cleanTitle)}&artist_name=${Uri.encodeComponent(cleanArtist)}');
 
-      for (final a in {cleanArtist, firstArtist}) {
-        final url = Uri.parse(
-            'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(cleanTitle)}&artist_name=${Uri.encodeComponent(a)}');
-        final response =
-            await http.get(url).timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200) {
-          final data = jsonDecode(utf8.decode(response.bodyBytes));
-          final result = _pickLyrics(data);
-          if (result != null) return result;
-        }
+      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        final result = _pickLyrics(data);
+        if (result != null) return result;
       }
-      final cleanArtistForSearch = firstArtist;
 
       // Fallback search API if exact match not found
       final searchUrl = Uri.parse(
-          'https://lrclib.net/api/search?q=${Uri.encodeComponent("$cleanArtistForSearch $cleanTitle")}');
+          'https://lrclib.net/api/search?q=${Uri.encodeComponent("$cleanArtist $cleanTitle")}');
       final searchRes = await http.get(searchUrl).timeout(const Duration(seconds: 5));
       if (searchRes.statusCode == 200) {
         final List searchData = jsonDecode(utf8.decode(searchRes.bodyBytes));

@@ -10,7 +10,6 @@ import '../models/media_item_model.dart';
 import 'network_status.dart';
 import 'platform_bridge.dart';
 import 'playback_cache.dart';
-import 'saavn_service.dart';
 import 'storage_service.dart';
 import '../util/first_success.dart';
 
@@ -54,52 +53,11 @@ class YoutubeService {
     String query, {
     bool prefetch = true,
   }) async {
-    // JioSaavn first: its results carry their playable URL, so nothing needs
-    // resolving or prefetching. YouTube only if it has nothing.
-    final viaSaavn = await catalog(query);
-    if (viaSaavn.isNotEmpty) return viaSaavn;
-    // A home row's "playlist:Love Tamil" searched on YouTube as literal text
-    // gave junk that was then cached for a day: search the words instead.
-    final text = youtubeFallbackQuery(query);
-    final viaNewPipe = await _searchWithNewPipe(text);
+    final viaNewPipe = await _searchWithNewPipe(query);
     final results =
-        viaNewPipe.isNotEmpty ? viaNewPipe : await _searchWithExplode(text);
+        viaNewPipe.isNotEmpty ? viaNewPipe : await _searchWithExplode(query);
     if (prefetch) prefetchStreams(results.take(8).map((e) => e.id).toList());
     return results;
-  }
-
-  /// [query] as a YouTube search: the catalog prefixes become words.
-  @visibleForTesting
-  static String youtubeFallbackQuery(String query) {
-    if (query.startsWith('trending:')) {
-      return '${query.substring('trending:'.length)} trending songs'.trim();
-    }
-    if (query.startsWith('playlist:')) {
-      return '${query.substring('playlist:'.length)} songs';
-    }
-    return query;
-  }
-
-  /// A JioSaavn listing for [query]. Home rows use two prefixes:
-  /// `trending:<language>` (JioSaavn's trending songs) and
-  /// `playlist:<text>` (the best-matching editorial playlist — curated and
-  /// in one language, unlike an artist search). Anything else is a song
-  /// search. Never throws: an empty list means "try YouTube".
-  static Future<List<AppMediaItem>> catalog(String query) async {
-    final saavn = SaavnService.instance;
-    try {
-      if (query.startsWith('trending:')) {
-        final language = query.substring('trending:'.length);
-        return await saavn.trending(language.isEmpty ? null : language);
-      }
-      if (query.startsWith('playlist:')) {
-        return await saavn.playlistSongs(query.substring('playlist:'.length));
-      }
-      return await saavn.searchSongs(query);
-    } catch (e) {
-      debugPrint('JioSaavn listing failed for "$query": $e');
-      return const [];
-    }
   }
 
   final Map<String, Future<List<AppMediaItem>>> _searchCache = {};
@@ -336,12 +294,6 @@ class YoutubeService {
     final override = debugSuggestionsOverride;
     if (override != null) return override(q);
     try {
-      final viaSaavn = await SaavnService.instance.suggestions(q);
-      if (viaSaavn.isNotEmpty) return viaSaavn;
-    } catch (e) {
-      debugPrint('JioSaavn suggestions failed: $e');
-    }
-    try {
       final viaNewPipe = await SearchExtractor.getSearchSuggestions(q)
           .timeout(const Duration(seconds: 4));
       if (viaNewPipe.isNotEmpty) return viaNewPipe.take(8).toList();
@@ -556,19 +508,11 @@ class YoutubeService {
     if (existing != null) return existing;
     return _caching[item.id] ??= () async {
       try {
-        final path = item.sourceType == MediaSourceType.saavn
-            // At the quality it would stream at, not the 320 of a download.
-            ? await _downloadSaavn(
-                item,
-                await PlaybackCache.instance.fetchFileFor(item.id, 'm4a'),
-                null,
-                qualities: [playbackQuality()],
-              )
-            : await _downloadViaExplode(
-                item,
-                (ext) => PlaybackCache.instance.fetchFileFor(item.id, ext),
-                null,
-              );
+        final path = await _downloadViaExplode(
+          item,
+          (ext) => PlaybackCache.instance.fetchFileFor(item.id, ext),
+          null,
+        );
         if (path != null) await PlaybackCache.instance.trim(keep: item.id);
         return path;
       } catch (e) {
@@ -584,7 +528,7 @@ class YoutubeService {
   /// Fetch [item] in the background so pressing Next plays it from disk.
   /// Wi-Fi only: a whole song ahead is data the user may never use.
   void precacheForPlayback(AppMediaItem item) {
-    if (!item.sourceType.isOnline) return;
+    if (item.sourceType != MediaSourceType.youtube) return;
     if (NetworkStatus.instance.onMobileData) return;
     cacheForPlayback(item).catchError((Object _) => null);
   }
@@ -768,12 +712,6 @@ class YoutubeService {
       Future<File> nameFor(String ext) async =>
           File('${dir.path}/${downloadFileName(item)}.$ext');
 
-      if (item.sourceType == MediaSourceType.saavn) {
-        final path = await _downloadSaavn(item, await nameFor('m4a'), onProgress);
-        if (path != null) PlatformBridge.scanFile(path);
-        return path;
-      }
-
       // 1. Try youtube_explode first — unthrottled InnerTube streaming (1-2s total)
       final path = await _downloadViaExplode(item, nameFor, onProgress) ??
           // 2. Fall back to NewPipe with browser headers
@@ -868,70 +806,6 @@ class YoutubeService {
     }
     client.close(force: true);
     return null;
-  }
-
-  /// A JioSaavn song is one plain file on its CDN: fetched at 320 kbps
-  /// (falling back to 160 where a song has no 320 version), resumable.
-  Future<String?> _downloadSaavn(
-    AppMediaItem item,
-    File target,
-    void Function(double)? onProgress, {
-    List<AudioQuality> qualities = const [
-      AudioQuality.best,
-      AudioQuality.balanced,
-      AudioQuality.dataSaver,
-    ],
-  }) async {
-    var url = item.streamUrl;
-    if (url == null || !url.startsWith('http')) {
-      url = (await SaavnService.instance.song(item.id))?.streamUrl;
-    }
-    if (url == null) return null;
-    for (final quality in qualities) {
-      final path = await _downloadHttp(
-          SaavnService.withQuality(url, quality), target, onProgress);
-      if (path != null) return path;
-    }
-    return null;
-  }
-
-  /// Download [url] to [target] — resuming an earlier `.part` when there is
-  /// one and the server honours ranges.
-  Future<String?> _downloadHttp(
-    String url,
-    File target,
-    void Function(double)? onProgress,
-  ) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-    try {
-      final head = await (await client.headUrl(Uri.parse(url)))
-          .close()
-          .timeout(const Duration(seconds: 15));
-      await head.drain<void>().catchError((_) {});
-      if (head.statusCode != 200) return null;
-      final total = head.contentLength;
-
-      final part = partFileFor(target, total);
-      final have = part.existsSync() ? part.lengthSync() : 0;
-      final request = await client.getUrl(Uri.parse(url));
-      if (have > 0 && have < total) {
-        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$have-');
-      }
-      final response =
-          await request.close().timeout(const Duration(seconds: 15));
-      final resumed = response.statusCode == 206;
-      if (response.statusCode != 200 && !resumed) {
-        await response.drain<void>().catchError((_) {});
-        return null;
-      }
-      return await _writeAudioFile(response, target, total, onProgress,
-          resumeFrom: resumed ? have : 0);
-    } catch (e) {
-      debugPrint('Download failed for $url: $e');
-      return null;
-    } finally {
-      client.close(force: true);
-    }
   }
 
   /// Download using NewPipe extractor with unthrottled headers.

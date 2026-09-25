@@ -12,6 +12,7 @@ import 'package:music_player/models/home_sections.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/services/lyrics_service.dart';
 import 'package:music_player/services/podcast_service.dart';
+import 'package:music_player/services/saavn_service.dart';
 import 'package:music_player/services/storage_service.dart';
 import 'package:music_player/services/youtube_service.dart';
 
@@ -129,6 +130,88 @@ void main() {
     expect(resumed, full);
     expect(part.existsSync(), isFalse);
     await File(second).delete();
+  });
+
+  group('JioSaavn (the Online source)', () {
+    final saavn = SaavnService.instance;
+
+    test('search, trending, playlist and suggestions answer fast', () async {
+      final sw = Stopwatch()..start();
+      final songs = await saavn.searchSongs('vaseegara');
+      final tSearch = sw.elapsedMilliseconds;
+      final trending = await saavn.trending('tamil');
+      final playlist = await saavn.playlistSongs('Love Tamil');
+      final suggestions = await saavn.suggestions('anir');
+      print('saavn: search ${songs.length} in ${tSearch}ms, trending ${trending.length}, '
+          'playlist ${playlist.length}, suggestions $suggestions');
+      expect(songs, isNotEmpty);
+      expect(trending, isNotEmpty);
+      expect(playlist.length, greaterThan(10));
+      expect(suggestions, isNotEmpty);
+      expect(songs.first.streamUrl, startsWith('https://'));
+    });
+
+    test('every quality plays from the start and from 80% in', () async {
+      final song = (await saavn.searchSongs('kannukulla')).first;
+      for (final q in AudioQuality.values) {
+        final url = SaavnService.withQuality(song.streamUrl!, q);
+        final c = HttpClient();
+        final head = await (await c.headUrl(Uri.parse(url))).close();
+        await head.drain<void>();
+        final at80 = (head.contentLength * 0.8).round();
+        final req = await c.getUrl(Uri.parse(url));
+        req.headers.set('Range', 'bytes=$at80-${at80 + 65535}');
+        final res = await req.close();
+        final got = await res.fold<int>(0, (n, b) => n + b.length);
+        c.close(force: true);
+        print('saavn ${q.name}: ${(head.contentLength / 1048576).toStringAsFixed(1)} MB, '
+            '80% -> HTTP ${res.statusCode} $got bytes');
+        expect(res.statusCode, 206);
+        expect(got, 65536);
+      }
+    });
+
+    test('a JioSaavn song downloads, and resumes byte-identical', () async {
+      final song = (await saavn.searchSongs('vaseegara')).first;
+      final sw = Stopwatch()..start();
+      final path = await yt.downloadAudioTrack(song);
+      print('saavn download ${sw.elapsedMilliseconds}ms -> $path');
+      expect(path, isNotNull);
+      final full = await File(path!).readAsBytes();
+      await File(path).delete();
+      final part = YoutubeService.partFileFor(File(path), full.length);
+      await part.writeAsBytes(full.sublist(0, full.length ~/ 3));
+      final again = await yt.downloadAudioTrack(song);
+      expect(await File(again!).readAsBytes(), full);
+      await File(again).delete();
+    });
+
+    test('lyrics for a JioSaavn song come from JioSaavn', () async {
+      final song = (await saavn.searchSongs('vaseegara')).first;
+      final sw = Stopwatch()..start();
+      final lyrics = await LyricsService()
+          .fetchLyrics(song.title, song.artist, saavnId: song.id);
+      print('saavn lyrics ${sw.elapsedMilliseconds}ms: '
+          '${lyrics?.split('\n').take(2).join(' / ')}');
+      expect(lyrics, contains('Vaseegara'));
+      expect(lyrics, isNot(contains('<br')));
+    });
+
+    test('every Tamil home section fills from JioSaavn', () async {
+      final empty = <String>[];
+      for (final s in homeSectionsFor('Tamil')) {
+        final queries = s.style == HomeSectionStyle.rows
+            ? [s.query]
+            : s.cards.map((c) => c.query);
+        for (final q in queries) {
+          final r = await YoutubeService.catalog(q);
+          final tamil = r.where((t) => t.sourceType == MediaSourceType.saavn).length;
+          print('  ${q.padRight(40)} ${r.length} songs ($tamil from JioSaavn)');
+          if (r.isEmpty) empty.add(q);
+        }
+      }
+      expect(empty, isEmpty);
+    });
   });
 
   test('podcasts: search, then episodes from a real feed', () async {

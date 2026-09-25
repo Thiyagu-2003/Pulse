@@ -57,12 +57,7 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
         .catchError((Object _) => <AppMediaItem>[]);
     for (final track in [
       ...recent,
-      // JioSaavn songs carry their link already; only YouTube ones need it.
-      ...top
-          .where((t) =>
-              t.sourceType == MediaSourceType.youtube &&
-              isSongLength(t.duration))
-          .take(4),
+      ...top.where((t) => isSongLength(t.duration)).take(4),
     ]) {
       if (!mounted) return;
       await yt.warmStreamUrlNow(track.id);

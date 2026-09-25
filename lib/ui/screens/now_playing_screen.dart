@@ -388,7 +388,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       ),
                       // A track played from its download is a local copy of
                       // an online one; show its state so it can be removed.
-                      if (track.sourceType == MediaSourceType.youtube ||
+                      if (track.sourceType.isOnline ||
                           playerProvider.isDownloaded(track.id))
                         DownloadButton(item: track, size: 26),
                       IconButton(

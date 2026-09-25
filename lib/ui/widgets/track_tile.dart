@@ -122,8 +122,7 @@ class TrackTile extends StatelessWidget {
             children: [
               // Downloads go through YouTube extraction; a podcast id is a
               // hash of its URL, so that could only ever fail.
-              if (item.sourceType == MediaSourceType.youtube)
-                DownloadButton(item: item),
+              if (item.sourceType.isOnline) DownloadButton(item: item),
               IconButton(
                 // Scales up as it fills in, so the tap has a result you can see
                 // without moving your eyes to a toast.
@@ -172,6 +171,7 @@ class TrackTile extends StatelessWidget {
     String label;
     switch (type) {
       case MediaSourceType.youtube:
+      case MediaSourceType.saavn:
         // Violet, not the provider's red — the badge says where the track
         // lives, not which service it came from.
         // The soft violet and bright orange are unreadable on light
@@ -279,7 +279,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
               showAddToPlaylistSheet(rootContext, item);
             },
           ),
-          if (item.sourceType == MediaSourceType.youtube)
+          if (item.sourceType.isOnline)
             provider.isDownloaded(item.id)
                 ? ListTile(
                     leading: Icon(

@@ -51,65 +51,65 @@ class HomeSection {
 /// Artist and era rows that only make sense for one language.
 const Map<String, List<HomeSection>> _languageExtras = {
   'Tamil': [
-    HomeSection.rows('Anirudh', 'playlist:Anirudh Ravichander Tamil'),
-    HomeSection.rows('Ilaiyaraaja classics', 'playlist:Ilaiyaraaja 90s Hits'),
-    HomeSection.rows('Kollywood dance', 'playlist:Kuthu Tamil'),
+    HomeSection.rows('Anirudh', 'Anirudh Ravichander hit songs'),
+    HomeSection.rows('Ilaiyaraaja classics', 'Ilaiyaraaja songs lyric video'),
+    HomeSection.rows('Kollywood dance', 'Tamil kuthu dance songs'),
   ],
   'Telugu': [
-    HomeSection.rows('Tollywood dance', 'playlist:Dance Telugu'),
+    HomeSection.rows('Tollywood dance', 'Telugu mass dance songs'),
   ],
   'Hindi': [
-    HomeSection.rows('Arijit Singh', 'playlist:Arijit Singh'),
-    HomeSection.rows('Bollywood dance', 'playlist:Dance Hindi'),
+    HomeSection.rows('Arijit Singh', 'Arijit Singh hit songs'),
+    HomeSection.rows('Bollywood dance', 'Bollywood dance songs'),
+  ],
+  'Malayalam': [
+    HomeSection.rows('Mollywood hits', 'Malayalam movie hit songs'),
   ],
 };
 
 /// The home page for [language], or the language-neutral page when it is
 /// null.
-///
-/// Each query is a JioSaavn listing (see `YoutubeService.catalog`):
-/// `trending:<language>`, `playlist:<name>` — JioSaavn's editorial
-/// playlists, measured 20–50 songs each and all in the right language for
-/// Tamil/Hindi/Telugu/Malayalam — or a plain song search.
 List<HomeSection> homeSectionsFor(String? language) {
   if (language == null) {
     return const [
-      HomeSection.rows('Trending now', 'trending:'),
-      HomeSection.rows('Global hits', 'playlist:Hits English'),
-      HomeSection.rows('Chill', 'playlist:Chill English'),
-      HomeSection.rows('Workout', 'playlist:Workout English'),
+      HomeSection.rows('Trending now', 'trending songs this week official audio'),
+      HomeSection.rows('Global hits', 'top global hit songs official audio'),
+      HomeSection.rows('Chill', 'chill songs official audio'),
+      HomeSection.rows('Workout', 'workout songs official audio'),
       HomeSection.cards('Top playlists', [
-        HomeCard('Top 50', 'playlist:Top 50 English'),
-        HomeCard('Party', 'playlist:Party English'),
-        HomeCard('Romance', 'playlist:Romantic English'),
-        HomeCard('Lo-fi', 'playlist:Lofi'),
-        HomeCard('Road trip', 'playlist:Road Trip English'),
+        HomeCard('Top 50', 'top 50 songs official audio'),
+        HomeCard('Party', 'party songs official audio'),
+        HomeCard('Romance', 'romantic songs official audio'),
+        HomeCard('Lo-fi', 'lofi songs'),
+        HomeCard('Road trip', 'road trip songs official audio'),
       ]),
     ];
   }
 
   final l = language;
   return [
-    HomeSection.rows('Trending in $l', 'trending:${l.toLowerCase()}'),
-    HomeSection.rows('$l hits', 'playlist:Hits $l'),
-    HomeSection.rows('Latest $l', 'playlist:Latest $l'),
-    HomeSection.rows('$l melodies', 'playlist:Melody $l'),
-    HomeSection.rows('$l love songs', 'playlist:Love $l'),
+    HomeSection.rows('Trending in $l', '$l trending songs this week'),
+    // "lyric video" steers search to single songs rather than hour-long
+    // compilations (measured: melodies went from 7/20 to 16/20 songs).
+    HomeSection.rows('$l hits', '$l hit songs lyric video'),
+    HomeSection.rows('Latest $l', 'latest $l songs'),
+    HomeSection.rows('$l melodies', '$l melody songs lyric video'),
+    HomeSection.rows('$l love songs', '$l love songs'),
     ...?_languageExtras[l],
-    HomeSection.rows('90s $l', 'playlist:1990s $l'),
+    HomeSection.rows('90s $l', '90s $l hit songs'),
     HomeSection.cards('Trending now', [
-      HomeCard('$l Top 50', 'playlist:Top 50 $l'),
-      HomeCard('$l viral hits', 'playlist:Viral $l'),
-      HomeCard('New $l releases', 'playlist:New Releases $l'),
-      HomeCard('$l party', 'playlist:Party $l'),
+      HomeCard('$l Top 50', 'top 50 $l songs'),
+      HomeCard('$l viral hits', 'viral $l songs'),
+      HomeCard('New $l releases', 'new $l songs'),
+      HomeCard('$l party', '$l party songs'),
     ]),
     HomeSection.cards('Top playlists', [
-      HomeCard('$l romance', 'playlist:Romantic $l'),
-      HomeCard('$l chill', 'playlist:Chill $l'),
-      HomeCard('$l workout', 'playlist:Workout $l'),
-      HomeCard('$l road trip', 'playlist:Road Trip $l'),
-      HomeCard('$l devotional', 'playlist:Devotional $l'),
-      HomeCard('$l sad songs', 'playlist:Sad $l'),
+      HomeCard('$l romance', '$l romantic songs'),
+      HomeCard('$l chill', '$l chill songs'),
+      HomeCard('$l workout', '$l workout songs'),
+      HomeCard('$l road trip', '$l road trip songs'),
+      HomeCard('$l devotional', '$l devotional songs'),
+      HomeCard('$l sad songs', '$l sad songs'),
     ]),
   ];
 }

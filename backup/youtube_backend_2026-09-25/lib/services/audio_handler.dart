@@ -7,8 +7,6 @@ import '../models/media_item_model.dart';
 import 'network_status.dart';
 import 'playback_cache.dart';
 import 'playback_log.dart';
-import 'saavn_service.dart';
-import 'storage_service.dart' show AudioQuality;
 import 'youtube_service.dart';
 
 Future<CustomAudioHandler> initAudioService() async {
@@ -195,7 +193,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       // kept failing on its old link. The service's cache knows when a URL
       // is still fresh.
       // Fetched in full before (see _loadYoutube): play the file, instantly.
-      final cachedFile = item.sourceType.isOnline
+      final cachedFile = item.sourceType == MediaSourceType.youtube
           ? await PlaybackCache.instance.find(item.id)
           : null;
       if (superseded()) return;
@@ -203,25 +201,6 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       if (cachedFile != null) {
         uri = cachedFile;
         attempt.step('saved copy on this phone');
-      } else if (item.sourceType == MediaSourceType.saavn) {
-        // The URL came with the song and doesn't expire; only the bitrate
-        // is chosen now (Settings, or Data saver on mobile data).
-        uri = item.streamUrl;
-        // Anything but a web link (e.g. a temp-file path an older build
-        // saved into favorites) means "no link": fetch a fresh one.
-        if (uri == null || !uri.startsWith('http')) {
-          try {
-            uri = (await SaavnService.instance.song(item.id))?.streamUrl;
-          } catch (e) {
-            uri = null;
-            attempt.step('JioSaavn lookup failed: ${e.runtimeType}');
-          }
-          if (superseded()) return;
-        }
-        if (uri != null) {
-          uri = SaavnService.withQuality(uri, _ytService.playbackQuality());
-        }
-        attempt.step('JioSaavn link');
       } else if (item.sourceType == MediaSourceType.youtube) {
         try {
           uri = await _ytService.getAudioStreamUrl(item.id);
@@ -243,16 +222,14 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
         return;
       }
 
-      // Update the mediaItem with resolved stream URL — but never with the
-      // saved copy's path: the item is what favorites/playlists/downloads
-      // copy, and that temp file can be deleted any time.
+      // Update the mediaItem with resolved stream URL
       final updatedItem = AppMediaItem(
         id: item.id,
         title: item.title,
         artist: item.artist,
         album: item.album,
         artUri: item.artUri,
-        streamUrl: cachedFile != null ? item.streamUrl : uri,
+        streamUrl: uri,
         duration: item.duration,
         sourceType: item.sourceType,
         lyrics: item.lyrics,
@@ -277,9 +254,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
           // and stream instead, or every later tap would fail the same way.
           attempt.step('saved copy unplayable, streaming');
           await PlaybackCache.instance.remove(item.id);
-          final url = item.sourceType == MediaSourceType.saavn
-              ? await _saavnUrl(item)
-              : await _ytService.getAudioStreamUrl(item.id);
+          final url = await _ytService.getAudioStreamUrl(item.id);
           if (superseded()) return;
           if (url == null) rethrow;
           await _player.setAudioSource(AudioSource.uri(Uri.parse(url)),
@@ -300,7 +275,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
           // through Dart's HTTP client, the path that works on real phones.
           // Not on mobile data: a save isn't cancelled when the user skips,
           // so skipping ten songs would download all ten in full.
-          final save = item.sourceType.isOnline &&
+          final save = item.sourceType == MediaSourceType.youtube &&
               !NetworkStatus.instance.onMobileData;
           final AudioSource source = save
               // Experimental in just_audio; if it misbehaves the load
@@ -318,8 +293,6 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
         }
         if (item.sourceType == MediaSourceType.youtube) {
           await _loadYoutube(item, uri, load, superseded, startAt);
-        } else if (item.sourceType == MediaSourceType.saavn) {
-          await _loadSaavn(item, uri, load, superseded, startAt);
         } else {
           await load(uri);
         }
@@ -335,7 +308,7 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       attempt.step('player ready');
       attempt.outcome = 'playing';
       PlaybackCache.instance.playingId = item.id;
-      if (item.sourceType.isOnline) {
+      if (item.sourceType == MediaSourceType.youtube) {
         PlaybackCache.instance.trim(keep: item.id);
       }
       _loading = false;
@@ -350,63 +323,6 @@ class CustomAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       if (superseded()) return;
       _ytService.invalidateStreamUrl(item.id);
       _failPlayback('Couldn\'t play "${item.title}". Tap to try again.', e);
-    }
-  }
-
-  /// A JioSaavn song's link at the current quality: the one it carries if
-  /// that's a web link, else a fresh one.
-  Future<String?> _saavnUrl(AppMediaItem item) async {
-    var url = item.streamUrl;
-    if (url == null || !url.startsWith('http')) {
-      url = (await SaavnService.instance.song(item.id))?.streamUrl;
-    }
-    return url == null
-        ? null
-        : SaavnService.withQuality(url, _ytService.playbackQuality());
-  }
-
-  /// Load a JioSaavn song: through Dart (saved while it plays), then
-  /// directly by ExoPlayer the way JioSaavn's own player fetches it, then
-  /// with a freshly fetched link in case the saved one went stale.
-  Future<void> _loadSaavn(
-    AppMediaItem item,
-    String url,
-    Future<void> Function(String url) load,
-    bool Function() superseded,
-    Duration? startAt,
-  ) async {
-    Object? lastError;
-    try {
-      await load(url);
-      return;
-    } catch (e) {
-      if (superseded()) rethrow;
-      lastError = e;
-      _attempt?.step('stream failed: ${e.runtimeType}; trying direct');
-    }
-    try {
-      await _player
-          .setAudioSource(AudioSource.uri(Uri.parse(url)),
-              preload: true, initialPosition: startAt)
-          .timeout(const Duration(seconds: 10));
-      return;
-    } catch (e) {
-      if (superseded()) rethrow;
-      lastError = e;
-      _attempt?.step('direct failed: ${e.runtimeType}; fresh link');
-    }
-    final fresh = await SaavnService.instance.song(item.id);
-    if (superseded()) return;
-    final freshUrl = fresh?.streamUrl;
-    if (freshUrl == null) throw lastError;
-    try {
-      await load(
-          SaavnService.withQuality(freshUrl, _ytService.playbackQuality()));
-    } catch (e) {
-      if (superseded()) rethrow;
-      // Last try: the smallest file, which starts on the weakest signal.
-      _attempt?.step('fresh link failed; trying 96 kbps');
-      await load(SaavnService.withQuality(freshUrl, AudioQuality.dataSaver));
     }
   }
 

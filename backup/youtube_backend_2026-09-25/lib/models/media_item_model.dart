@@ -8,15 +8,7 @@ import 'package:audio_service/audio_service.dart';
 /// must not be renamed: doing so would quietly turn every stored online track
 /// into a local one pointing at a file that isn't there. User-facing wording
 /// lives in [MediaSourceLabel] instead.
-enum MediaSourceType {
-  local,
-  youtube,
-  podcast,
-
-  /// JioSaavn: the Online source since 2026-09-25. Its CDN URLs don't
-  /// expire, so the URL saved on the item is played directly.
-  saavn,
-}
+enum MediaSourceType { local, youtube, podcast }
 
 extension MediaSourceLabel on MediaSourceType {
   /// What the user sees. The app presents three libraries — what's on the
@@ -25,15 +17,8 @@ extension MediaSourceLabel on MediaSourceType {
   String get label => switch (this) {
         MediaSourceType.local => 'Local',
         MediaSourceType.youtube => 'Online',
-        MediaSourceType.saavn => 'Online',
         MediaSourceType.podcast => 'Podcast',
       };
-}
-
-extension MediaSourceOnline on MediaSourceType {
-  /// Streamed from the internet and downloadable (YouTube or JioSaavn).
-  bool get isOnline =>
-      this == MediaSourceType.youtube || this == MediaSourceType.saavn;
 }
 
 /// The album shown for online tracks that have no real album of their own.

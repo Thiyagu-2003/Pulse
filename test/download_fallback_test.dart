@@ -33,4 +33,36 @@ void main() {
     final item = _local('4521', 'content://media/external/audio/media/4521');
     expect(MusicPlayerProvider.streamableFallback(item), same(item));
   });
+
+  test('a downloaded JioSaavn song whose file is gone streams from JioSaavn',
+      () {
+    final item = AppMediaItem(
+      id: 'bo7KIXAM',
+      title: 'Vaseegara',
+      artist: 'Harris Jayaraj',
+      streamUrl: '/gone/Vaseegara [bo7KIXAM].m4a',
+      sourceType: MediaSourceType.local,
+      extras: {
+        MusicPlayerProvider.originKey: 'saavn',
+        MusicPlayerProvider.originUrlKey: 'https://aac.saavncdn.com/x_160.mp4',
+      },
+    );
+    final fixed = MusicPlayerProvider.streamableFallback(item);
+    expect(fixed.sourceType, MediaSourceType.saavn);
+    expect(fixed.streamUrl, 'https://aac.saavncdn.com/x_160.mp4');
+  });
+
+  test('an older JioSaavn copy (no origin recorded) is recognised by its id',
+      () {
+    final fixed =
+        MusicPlayerProvider.streamableFallback(_local('icJam_5l', '/gone/x.m4a'));
+    expect(fixed.sourceType, MediaSourceType.saavn);
+    expect(fixed.streamUrl, isNull); // the player fetches a fresh link
+  });
+
+  test('a device song with a missing file is never turned into an online one',
+      () {
+    final item = _local('12345678', '/gone/x.mp3');
+    expect(MusicPlayerProvider.streamableFallback(item), same(item));
+  });
 }

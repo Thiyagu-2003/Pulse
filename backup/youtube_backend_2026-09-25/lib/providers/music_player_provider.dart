@@ -256,13 +256,6 @@ class MusicPlayerProvider extends ChangeNotifier {
             streamUrl: path,
             duration: item.duration,
             sourceType: MediaSourceType.local,
-            // Where it came from, so a copy whose file is later deleted can
-            // go back to streaming from that same source.
-            extras: {
-              originKey: item.sourceType.name,
-              if (item.streamUrl?.startsWith('http') ?? false)
-                originUrlKey: item.streamUrl,
-            },
           ),
         );
       }
@@ -285,7 +278,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Online tracks in [items] not yet downloaded (or downloading).
   List<AppMediaItem> notDownloaded(List<AppMediaItem> items) => items
       .where((t) =>
-          t.sourceType.isOnline &&
+          t.sourceType == MediaSourceType.youtube &&
           !isDownloaded(t.id) &&
           !isDownloading(t.id))
       .toList();
@@ -416,14 +409,12 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// next doesn't pay the extraction cost from scratch.
   void _prefetchUpcoming() {
     final next = _queueState.peekNext(repeat: _repeat);
-    if (next == null || !next.sourceType.isOnline) return;
-    // JioSaavn songs carry their link; YouTube ones need it resolved.
-    if (next.sourceType == MediaSourceType.youtube) {
-      ytService.warmStreamUrl(next.id);
+    if (next?.sourceType == MediaSourceType.youtube) {
+      ytService.warmStreamUrl(next!.id);
+      // On Wi-Fi, fetch the whole next song too: Next and auto-advance then
+      // play it from disk with no network wait at all.
+      ytService.precacheForPlayback(next);
     }
-    // On Wi-Fi, fetch the whole next song too: Next and auto-advance then
-    // play it from disk with no network wait at all.
-    ytService.precacheForPlayback(next);
   }
 
   static bool _fileExists(String? path) =>
@@ -435,53 +426,24 @@ class MusicPlayerProvider extends ChangeNotifier {
   @visibleForTesting
   static AppMediaItem streamableFallback(AppMediaItem item) {
     final url = item.streamUrl;
+    final isYoutubeId = RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(item.id);
     if (item.sourceType != MediaSourceType.local ||
+        !isYoutubeId ||
         url == null ||
         url.startsWith('content://') ||
         _fileExists(url)) {
       return item;
     }
-    // Downloads record their origin. Older ones don't: those were all
-    // YouTube, recognisable by the 11-character video id.
-    final origin = item.extras?[originKey] as String? ?? _originFromId(item.id);
-    final source = origin == MediaSourceType.saavn.name
-        ? MediaSourceType.saavn
-        : origin == MediaSourceType.youtube.name
-            ? MediaSourceType.youtube
-            : null;
-    if (source == null) return item;
     return AppMediaItem(
       id: item.id,
       title: item.title,
       artist: item.artist,
-      album: item.album == 'Unknown Album' ? onlineAlbumLabel : item.album,
+      album: onlineAlbumLabel,
       artUri: item.artUri,
-      // JioSaavn links don't expire, so the one recorded still plays; YouTube
-      // ones do, and are looked up again.
-      streamUrl: source == MediaSourceType.saavn
-          ? (item.extras?[originUrlKey] as String?)
-          : null,
       duration: item.duration,
-      sourceType: source,
+      sourceType: MediaSourceType.youtube,
     );
   }
-
-  /// For records saved before downloads noted their origin: YouTube ids are
-  /// 11 characters, JioSaavn ids 8; device (MediaStore) ids are all digits.
-  static String? _originFromId(String id) {
-    if (RegExp(r'^\d+$').hasMatch(id)) return null;
-    if (RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id)) {
-      return MediaSourceType.youtube.name;
-    }
-    if (RegExp(r'^[A-Za-z0-9_-]{8}$').hasMatch(id)) {
-      return MediaSourceType.saavn.name;
-    }
-    return null;
-  }
-
-  /// Keys in a download record's extras naming its online source.
-  static const originKey = 'origin';
-  static const originUrlKey = 'originUrl';
 
   /// Podcasts only: dropping back into a 90-minute episode where you left off
   /// is the expectation, whereas a song you tapped should start from the top.
@@ -733,14 +695,9 @@ class MusicPlayerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final track = _currentTrack!;
       final lyrics = await _lyricsService.fetchLyrics(
-        track.title,
-        track.artist,
-        saavnId: track.sourceType == MediaSourceType.saavn ||
-                track.extras?[originKey] == MediaSourceType.saavn.name
-            ? track.id
-            : null,
+        _currentTrack!.title,
+        _currentTrack!.artist,
       );
 
       if (_lyricsKey != key) return; // track changed while fetching
