@@ -104,6 +104,8 @@ class OnAudioQueryPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 if (sPath == null || sPath.isEmpty()) {
                     Log.w(TAG, "Method 'scan' was called with null or empty 'path'")
                     result.success(false)
+                    // PULSE PATCH: same double-reply as below without this.
+                    return
                 }
 
                 // Scan and return

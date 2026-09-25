@@ -6,8 +6,8 @@ class LyricsService {
   /// Fetch synced or plain lyrics from open LRCLIB API
   Future<String?> fetchLyrics(String title, String artist) async {
     try {
-      final cleanTitle = _cleanQuery(title);
-      final cleanArtist = _cleanQuery(artist);
+      final cleanTitle = cleanQuery(title);
+      final cleanArtist = cleanQuery(artist);
       final url = Uri.parse(
           'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(cleanTitle)}&artist_name=${Uri.encodeComponent(cleanArtist)}');
 
@@ -48,11 +48,12 @@ class LyricsService {
     return stripped.isEmpty ? null : stripped;
   }
 
-  String _cleanQuery(String input) {
+  @visibleForTesting
+  static String cleanQuery(String input) {
     return input
         .replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), '')
         // Whole words only: "Audioslave" and "HDMI" are not noise.
-        .replaceAll(RegExp(r'(Official Video|Official Audio|Lyric Video|HD|HQ|Audio|Video|MV)',
+        .replaceAll(RegExp(r'\b(Official Video|Official Audio|Lyric Video|HD|HQ|Audio|Video|MV)\b',
             caseSensitive: false), '')
         .trim();
   }

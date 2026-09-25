@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/services/youtube_service.dart';
@@ -42,6 +44,40 @@ void main() {
     };
     await expectLater(yt.getAudioStreamUrl('v2'), throwsException);
     expect(await yt.getAudioStreamUrl('v2'), 'https://x/v2');
+  });
+
+  test('the playback cache finds the file cacheForPlayback writes', () async {
+    final dir = await Directory.systemTemp.createTemp('pulse_cache_');
+    // cacheForPlayback names files `<id>_<id>.<ext>` (title slot = id).
+    await File('${dir.path}/abc123_abc123.m4a').writeAsString('x');
+    await File('${dir.path}/other_other.webm').writeAsString('x');
+    expect(yt.cachedPlaybackFile('abc123', dir), endsWith('abc123_abc123.m4a'));
+    expect(yt.cachedPlaybackFile('missing', dir), isNull);
+    // A prefix of another id must not match.
+    expect(yt.cachedPlaybackFile('abc', dir), isNull);
+    await dir.delete(recursive: true);
+  });
+
+  test('search prefetch warms all eight; a newer search stops the old queue',
+      () async {
+    final warmed = <String>[];
+    yt.debugExtractOverride = (id, {required verify}) async {
+      warmed.add(id);
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      return 'https://x/$id';
+    };
+    await yt.prefetchStreams([for (var i = 0; i < 8; i++) 'a$i']);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(warmed.toSet(), {for (var i = 0; i < 8; i++) 'a$i'});
+
+    warmed.clear();
+    yt.clearStreamCache();
+    final old = yt.prefetchStreams([for (var i = 0; i < 8; i++) 'b$i']);
+    await yt.prefetchStreams(['c0']); // a new search
+    await old;
+    // The old run got its first three plus at most the one in flight.
+    expect(warmed.where((id) => id.startsWith('b')).length, lessThanOrEqualTo(4));
+    expect(warmed, contains('c0'));
   });
 
   group('cachedSearch', () {

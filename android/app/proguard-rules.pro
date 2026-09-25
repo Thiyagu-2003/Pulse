@@ -35,18 +35,14 @@
 
 # Flutter platform channels and app classes
 -keep class io.flutter.** { *; }
--keep class com.pulse.music.** { *; }
 
 # AudioService & JustAudio
 -keep class com.ryanheise.** { *; }
 -dontwarn com.ryanheise.**
 
-# OnAudioQuery plugin
--keep class com.lucasgosioso.on_audio_query.** { *; }
--keep class com.antigravity.on_audio_query_android.** { *; }
--dontwarn com.lucasgosioso.on_audio_query.**
--dontwarn com.antigravity.on_audio_query_android.**
+# OnAudioQuery plugin (patched fork in third_party/)
+-keep class com.lucasjosino.on_audio_query.** { *; }
+-dontwarn com.lucasjosino.on_audio_query.**
 
-# Hive local storage
--keep class com.ioflux.hive.** { *; }
--dontwarn com.ioflux.hive.**
+# Pulse's own widget/launcher code
+-keep class com.pulse.music.** { *; }

@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:music_player/models/home_sections.dart';
+import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/services/lyrics_service.dart';
 import 'package:music_player/services/podcast_service.dart';
 import 'package:music_player/services/storage_service.dart';
@@ -67,9 +68,33 @@ void main() {
     }
   });
 
+  test('search suggestions come back for a partial query', () async {
+    final s = await yt.searchSuggestions('anirudh');
+    print('suggestions: $s');
+    expect(s, isNotEmpty);
+  });
+
+  test('alternative sources each give a different, playable URL', () async {
+    const id = 'JGwWNGJdvx8';
+    final first = await yt.getAudioStreamUrl(id);
+    final alts = await yt
+        .alternativeStreamUrls(id, exclude: {first!})
+        .take(2)
+        .toList()
+        .timeout(const Duration(seconds: 60));
+    print('alternatives: ${alts.length}');
+    expect(alts, isNotEmpty);
+    expect(alts, isNot(contains(first)));
+  });
+
   test('download writes a complete audio file', () async {
-    final results = await yt.searchMusic('Vaseegara song', prefetch: false);
-    final item = results.firstWhere((t) => isSongLength(t.duration));
+    // A fixed video, so a flaky search can't fail the download test.
+    final item = AppMediaItem(
+      id: 'ew1fKCWb_M4',
+      title: 'Vaseegara',
+      artist: 'Harris Jayaraj',
+      sourceType: MediaSourceType.youtube,
+    );
     final sw = Stopwatch()..start();
     final path = await yt.downloadAudioTrack(item);
     print('downloaded ${item.title} in ${sw.elapsedMilliseconds}ms -> $path');

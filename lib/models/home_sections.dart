@@ -52,7 +52,7 @@ class HomeSection {
 const Map<String, List<HomeSection>> _languageExtras = {
   'Tamil': [
     HomeSection.rows('Anirudh', 'Anirudh Ravichander hit songs'),
-    HomeSection.rows('Ilaiyaraaja classics', 'Ilaiyaraaja classic hit songs'),
+    HomeSection.rows('Ilaiyaraaja classics', 'Ilaiyaraaja songs lyric video'),
     HomeSection.rows('Kollywood dance', 'Tamil kuthu dance songs'),
   ],
   'Telugu': [
@@ -89,9 +89,11 @@ List<HomeSection> homeSectionsFor(String? language) {
   final l = language;
   return [
     HomeSection.rows('Trending in $l', '$l trending songs this week'),
-    HomeSection.rows('$l hits', '$l hit songs'),
+    // "lyric video" steers search to single songs rather than hour-long
+    // compilations (measured: melodies went from 7/20 to 16/20 songs).
+    HomeSection.rows('$l hits', '$l hit songs lyric video'),
     HomeSection.rows('Latest $l', 'latest $l songs'),
-    HomeSection.rows('$l melodies', '$l melody songs'),
+    HomeSection.rows('$l melodies', '$l melody songs lyric video'),
     HomeSection.rows('$l love songs', '$l love songs'),
     ...?_languageExtras[l],
     HomeSection.rows('90s $l', '90s $l hit songs'),

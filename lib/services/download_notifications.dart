@@ -44,7 +44,9 @@ class DownloadNotifications {
         priority: Priority.low,
         icon: icon,
         onlyAlertOnce: true,
-        ongoing: ongoing,
+        // Never pinned: if Android kills the app mid-download, a pinned
+        // "Downloading" notification could not be swiped away.
+        ongoing: false,
         autoCancel: !ongoing,
         showProgress: showProgress,
         maxProgress: 100,

@@ -147,6 +147,7 @@ class TrackTile extends StatelessWidget {
                     size: 20,
                   ),
                 ),
+                tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
                 onPressed: () => playerProvider.toggleFavorite(item),
               ),
             ],
@@ -166,13 +167,16 @@ class TrackTile extends StatelessWidget {
   }
 
   Widget _buildSourceBadge(BuildContext context, MediaSourceType type) {
+    final light = Theme.of(context).brightness == Brightness.light;
     Color color;
     String label;
     switch (type) {
       case MediaSourceType.youtube:
         // Violet, not the provider's red — the badge says where the track
         // lives, not which service it came from.
-        color = AppTheme.primarySoft;
+        // The soft violet and bright orange are unreadable on light
+        // backgrounds (~2:1); darker shades there.
+        color = light ? AppTheme.primary : AppTheme.primarySoft;
         label = type.label;
         break;
       case MediaSourceType.local:
@@ -180,7 +184,7 @@ class TrackTile extends StatelessWidget {
         label = type.label;
         break;
       case MediaSourceType.podcast:
-        color = Colors.orangeAccent;
+        color = light ? Colors.orange.shade800 : Colors.orangeAccent;
         label = type.label;
         break;
     }
@@ -206,9 +210,14 @@ class TrackTile extends StatelessWidget {
 /// long-press menu on a track tile, and the ⋮ menu on home rows.
 void showTrackActions(BuildContext context, AppMediaItem item) {
   final provider = context.read<MusicPlayerProvider>();
+  // The row that opened this menu can be rebuilt away while the sheet is
+  // up (search suggestions arriving late shift the list). Follow-up actions
+  // use the navigator's context, which lives as long as the app, and the
+  // sheet styles itself from its own context.
+  final rootContext = Navigator.of(context).context;
   showModalBottomSheet(
     context: context,
-    backgroundColor: context.colors.surface,
+    backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
@@ -228,14 +237,14 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
           ListTile(
             leading: Icon(
               Icons.playlist_play_rounded,
-              color: context.colors.accent,
+              color: sheetContext.colors.accent,
             ),
             title: const Text('Play next'),
             onTap: () {
               final added = provider.playNext(item);
               Navigator.pop(sheetContext);
               _confirm(
-                context,
+                rootContext,
                 added
                     ? 'Playing next: ${item.title}'
                     : 'Already playing: ${item.title}',
@@ -245,14 +254,14 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
           ListTile(
             leading: Icon(
               Icons.queue_music_rounded,
-              color: context.colors.accent,
+              color: sheetContext.colors.accent,
             ),
             title: const Text('Add to queue'),
             onTap: () {
               final added = provider.addToQueue(item);
               Navigator.pop(sheetContext);
               _confirm(
-                context,
+                rootContext,
                 added
                     ? 'Added to queue: ${item.title}'
                     : 'Already playing: ${item.title}',
@@ -262,12 +271,12 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
           ListTile(
             leading: Icon(
               Icons.playlist_add_rounded,
-              color: context.colors.accent,
+              color: sheetContext.colors.accent,
             ),
             title: const Text('Add to playlist'),
             onTap: () {
               Navigator.pop(sheetContext);
-              showAddToPlaylistSheet(context, item);
+              showAddToPlaylistSheet(rootContext, item);
             },
           ),
           if (item.sourceType == MediaSourceType.youtube)
@@ -275,18 +284,18 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                 ? ListTile(
                     leading: Icon(
                       Icons.download_done_rounded,
-                      color: context.colors.accent,
+                      color: sheetContext.colors.accent,
                     ),
                     title: const Text('Remove download'),
                     onTap: () {
                       Navigator.pop(sheetContext);
-                      removeDownload(context, item);
+                      removeDownload(rootContext, item);
                     },
                   )
                 : ListTile(
                     leading: Icon(
                       Icons.download_rounded,
-                      color: context.colors.accent,
+                      color: sheetContext.colors.accent,
                     ),
                     title: Text(
                       provider.isDownloading(item.id)
@@ -296,7 +305,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                     enabled: !provider.isDownloading(item.id),
                     onTap: () {
                       Navigator.pop(sheetContext);
-                      startDownload(context, item);
+                      startDownload(rootContext, item);
                     },
                   ),
         ],

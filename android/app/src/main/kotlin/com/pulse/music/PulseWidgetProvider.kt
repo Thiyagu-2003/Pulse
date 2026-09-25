@@ -66,9 +66,19 @@ class PulseWidgetProvider : AppWidgetProvider() {
             }
 
             views.setOnClickPendingIntent(R.id.widget_root, openApp(context))
-            views.setOnClickPendingIntent(R.id.widget_prev, mediaButton(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-            views.setOnClickPendingIntent(R.id.widget_play, mediaButton(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
-            views.setOnClickPendingIntent(R.id.widget_next, mediaButton(context, KeyEvent.KEYCODE_MEDIA_NEXT))
+            if (MainActivity.engineReady) {
+                views.setOnClickPendingIntent(R.id.widget_prev, mediaButton(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+                views.setOnClickPendingIntent(R.id.widget_play, mediaButton(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+                views.setOnClickPendingIntent(R.id.widget_next, mediaButton(context, KeyEvent.KEYCODE_MEDIA_NEXT))
+            } else {
+                // The app isn't running, so there's nothing to control. A
+                // direct activity intent is the one launch Android always
+                // allows from a widget (a receiver starting it is blocked).
+                val open = openApp(context)
+                views.setOnClickPendingIntent(R.id.widget_prev, open)
+                views.setOnClickPendingIntent(R.id.widget_play, open)
+                views.setOnClickPendingIntent(R.id.widget_next, open)
+            }
             return views
         }
 

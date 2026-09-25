@@ -59,7 +59,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.only(left: 12, right: 12, bottom: 140),

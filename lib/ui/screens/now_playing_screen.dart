@@ -40,9 +40,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   /// to be actively kept in step with the sound.
   void _toggleVideoMode(MusicPlayerProvider provider, AppMediaItem track) {
     if (_isVideoMode) {
-      setState(() => _isVideoMode = false);
-      _stopVideoSync();
-      _youtubeController?.pause();
+      _stopVideo();
       return;
     }
 
@@ -106,6 +104,18 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     });
   }
 
+  /// Leave video mode and throw the controller away. Its player widget is
+  /// gone the moment video is hidden, and a kept controller came back from a
+  /// fresh widget at its *original* start position and autoplay setting —
+  /// the picture restarted at an old point, even with the audio paused.
+  void _stopVideo() {
+    _stopVideoSync();
+    _youtubeController?.dispose();
+    _youtubeController = null;
+    _currentVideoId = null;
+    if (mounted) setState(() => _isVideoMode = false);
+  }
+
   /// Stops the hidden video streaming once it's no longer on screen.
   void _stopVideoSync() {
     _playbackSubscription?.cancel();
@@ -127,7 +137,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       );
     }
 
-    if (_currentVideoId != null && _currentVideoId != track.id && _isVideoMode) {
+    if (_currentVideoId != null &&
+        _currentVideoId != track.id &&
+        _isVideoMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _stopVideoSync();
@@ -136,6 +148,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             _youtubeController?.pause();
           });
         }
+      });
+    }
+
+    // With the panel open, a new track needs its lyrics fetched too
+    // (the fetch is keyed per track, so this is a no-op otherwise).
+    if (_showLyrics) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) playerProvider.ensureLyricsLoaded();
       });
     }
 
@@ -155,9 +175,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.7),
-              ),
+              child: Container(color: Colors.black.withValues(alpha: 0.7)),
             ),
           ),
 
@@ -167,7 +185,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               children: [
                 // Top Bar
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -175,22 +196,30 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         icon: const Icon(Icons.keyboard_arrow_down, size: 30),
                         onPressed: () => Navigator.pop(context),
                       ),
-                      Column(
-                        children: [
-                          Text(
-                            track.sourceType.label.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              letterSpacing: 2,
-                              color: AppTheme.accent,
-                              fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              track.sourceType.label.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                letterSpacing: 2,
+                                color: AppTheme.accent,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          Text(
-                            track.album,
-                            style: const TextStyle(fontSize: 14, color: Colors.white70),
-                          ),
-                        ],
+                            Text(
+                              track.album,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       IconButton(
                         icon: Icon(
@@ -198,6 +227,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           color: _showLyrics ? AppTheme.accent : Colors.white70,
                         ),
                         onPressed: () {
+                          if (!_showLyrics && _isVideoMode) _stopVideo();
                           setState(() {
                             _showLyrics = !_showLyrics;
                           });
@@ -246,8 +276,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       Hero(
                         tag: 'artwork_${track.id}',
                         child: Container(
-                          width: MediaQuery.of(context).size.width * 0.75,
-                          height: MediaQuery.of(context).size.width * 0.75,
+                          // Width-based, but never more than ~40% of the
+                          // height: in landscape 75% of the width is taller
+                          // than the screen.
+                          width: _artSide(context),
+                          height: _artSide(context),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
@@ -255,7 +288,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 color: AppTheme.primary.withValues(alpha: 0.3),
                                 blurRadius: 30,
                                 spreadRadius: 5,
-                              )
+                              ),
                             ],
                           ),
                           child: ClipRRect(
@@ -278,19 +311,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                       ),
                                     ),
                                   )
-                                : track.artUri != null && track.artUri!.startsWith('http')
-                                    ? CachedNetworkImage(
-                                        imageUrl: track.artUri!,
-                                        fit: BoxFit.cover,
-                                      )
-                                    : Container(
-                                        color: Colors.white10,
-                                        child: const Icon(
-                                          Icons.music_note,
-                                          size: 100,
-                                          color: AppTheme.primary,
-                                        ),
-                                      ),
+                                : track.artUri != null &&
+                                      track.artUri!.startsWith('http')
+                                ? CachedNetworkImage(
+                                    imageUrl: track.artUri!,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Container(
+                                    color: Colors.white10,
+                                    child: const Icon(
+                                      Icons.music_note,
+                                      size: 100,
+                                      color: AppTheme.primary,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -298,13 +332,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         Padding(
                           padding: const EdgeInsets.all(12.0),
                           child: FloatingActionButton.small(
-                            backgroundColor:
-                                _isVideoMode ? AppTheme.primary : AppTheme.lift,
+                            backgroundColor: _isVideoMode
+                                ? AppTheme.primary
+                                : AppTheme.lift,
                             foregroundColor: AppTheme.mist,
                             elevation: 0,
-                            tooltip:
-                                _isVideoMode ? 'Show artwork' : 'Show video',
-                            onPressed: () => _toggleVideoMode(playerProvider, track),
+                            tooltip: _isVideoMode
+                                ? 'Show artwork'
+                                : 'Show video',
+                            onPressed: () =>
+                                _toggleVideoMode(playerProvider, track),
                             child: Icon(
                               _isVideoMode
                                   ? Icons.art_track_rounded
@@ -372,16 +409,21 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 StreamBuilder<Duration>(
                   stream: playerProvider.positionStream,
                   builder: (context, snapshot) {
-                    final duration = playerProvider.currentDuration ?? Duration.zero;
+                    final duration =
+                        playerProvider.currentDuration ?? Duration.zero;
 
                     // Protect against zero/negative duration
                     final maxMs = duration.inMilliseconds.toDouble();
                     final safeDuration = maxMs > 0 ? maxMs : 1.0;
                     // While dragging, follow the thumb rather than the player.
-                    final rawPosition = _dragMs ??
-                        (snapshot.data ?? Duration.zero).inMilliseconds.toDouble();
+                    final rawPosition =
+                        _dragMs ??
+                        (snapshot.data ?? Duration.zero).inMilliseconds
+                            .toDouble();
                     final safePosition = rawPosition.clamp(0.0, safeDuration);
-                    final position = Duration(milliseconds: safePosition.toInt());
+                    final position = Duration(
+                      milliseconds: safePosition.toInt(),
+                    );
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -404,8 +446,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               // Hold the thumb where it was dropped until the
                               // seek lands, or it snaps back for a frame.
                               onChangeEnd: (val) async {
-                                await playerProvider.audioHandler
-                                    .seek(Duration(milliseconds: val.toInt()));
+                                await playerProvider.audioHandler.seek(
+                                  Duration(milliseconds: val.toInt()),
+                                );
                                 if (mounted) setState(() => _dragMs = null);
                               },
                             ),
@@ -415,11 +458,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             children: [
                               Text(
                                 _formatDuration(position),
-                                style: const TextStyle(fontSize: 12, color: Colors.white54),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white54,
+                                ),
                               ),
                               Text(
                                 _formatDuration(duration),
-                                style: const TextStyle(fontSize: 12, color: Colors.white54),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white54,
+                                ),
                               ),
                             ],
                           ),
@@ -495,8 +544,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   builder: (context, snapshot) {
                     final state = snapshot.data;
                     final playing = state?.playing ?? false;
-                    final processingState = state?.processingState ?? AudioProcessingState.idle;
-                    final isBuffering = processingState == AudioProcessingState.buffering ||
+                    final processingState =
+                        state?.processingState ?? AudioProcessingState.idle;
+                    final isBuffering =
+                        processingState == AudioProcessingState.buffering ||
                         processingState == AudioProcessingState.loading;
 
                     return Padding(
@@ -515,8 +566,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             ),
                             onPressed: () async {
                               const speeds = [1.0, 1.25, 1.5, 2.0];
-                              final next = speeds[
-                                  (speeds.indexOf(playbackSpeed) + 1) %
+                              final next =
+                                  speeds[(speeds.indexOf(playbackSpeed) + 1) %
                                       speeds.length];
                               await playerProvider.audioHandler.setSpeed(next);
                               if (mounted) setState(() {});
@@ -578,7 +629,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           ),
 
                           IconButton(
-                            icon: const Icon(Icons.queue_music_rounded, color: Colors.white70),
+                            icon: const Icon(
+                              Icons.queue_music_rounded,
+                              color: Colors.white70,
+                            ),
                             onPressed: () {
                               _showQueueBottomSheet(context, playerProvider);
                             },
@@ -612,7 +666,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       );
   }
 
-  void _showSleepTimerSheet(BuildContext context, MusicPlayerProvider provider) {
+  void _showSleepTimerSheet(
+    BuildContext context,
+    MusicPlayerProvider provider,
+  ) {
     const options = [
       Duration(minutes: 5),
       Duration(minutes: 15),
@@ -638,12 +695,18 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 remaining != null
                     ? 'Pausing in ${remaining.inMinutes + 1} min'
                     : 'Sleep timer',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             for (final option in options)
               ListTile(
-                leading: const Icon(Icons.bedtime_outlined, color: Colors.white54),
+                leading: const Icon(
+                  Icons.bedtime_outlined,
+                  color: Colors.white54,
+                ),
                 title: Text(
                   option.inMinutes < 60
                       ? '${option.inMinutes} minutes'
@@ -656,7 +719,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               ),
             if (remaining != null)
               ListTile(
-                leading: const Icon(Icons.close_rounded, color: Colors.redAccent),
+                leading: const Icon(
+                  Icons.close_rounded,
+                  color: Colors.redAccent,
+                ),
                 title: const Text(
                   'Cancel timer',
                   style: TextStyle(color: Colors.redAccent),
@@ -672,7 +738,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 
-  void _showQueueBottomSheet(BuildContext context, MusicPlayerProvider provider) {
+  void _showQueueBottomSheet(
+    BuildContext context,
+    MusicPlayerProvider provider,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surface,
@@ -769,6 +838,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         ),
       ),
     );
+  }
+
+  static double _artSide(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final byWidth = size.width * 0.75;
+    final byHeight = size.height * 0.4;
+    return byWidth < byHeight ? byWidth : byHeight;
   }
 
   String _formatDuration(Duration duration) {

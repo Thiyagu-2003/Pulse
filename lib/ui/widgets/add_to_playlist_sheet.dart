@@ -33,7 +33,7 @@ void showAddToPlaylistSheet(BuildContext context, AppMediaItem item) {
                 ),
               ),
               ListTile(
-                leading: Icon(Icons.add_rounded, color: context.colors.accent),
+                leading: Icon(Icons.add_rounded, color: sheetContext.colors.accent),
                 title: const Text('New playlist'),
                 onTap: () async {
                   final name = await promptForPlaylistName(sheetContext);
@@ -44,11 +44,11 @@ void showAddToPlaylistSheet(BuildContext context, AppMediaItem item) {
                   _confirm(messenger, 'Added to "$name"');
                 },
               ),
-              if (playlists.isNotEmpty) Divider(color: context.colors.mist.withValues(alpha: 0.10)),
+              if (playlists.isNotEmpty) Divider(color: sheetContext.colors.mist.withValues(alpha: 0.10)),
               // Bounded so a long list scrolls instead of overflowing.
               ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.4,
+                  maxHeight: MediaQuery.of(sheetContext).size.height * 0.4,
                 ),
                 child: ListView.builder(
                   shrinkWrap: true,
@@ -61,14 +61,14 @@ void showAddToPlaylistSheet(BuildContext context, AppMediaItem item) {
                         already
                             ? Icons.playlist_add_check_rounded
                             : Icons.queue_music_rounded,
-                        color: already ? context.colors.mist.withValues(alpha: 0.30) : context.colors.accent,
+                        color: already ? sheetContext.colors.mist.withValues(alpha: 0.30) : sheetContext.colors.accent,
                       ),
                       title: Text(
                         playlist.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: already ? context.colors.mist.withValues(alpha: 0.38) : context.colors.mist,
+                          color: already ? sheetContext.colors.mist.withValues(alpha: 0.38) : sheetContext.colors.mist,
                         ),
                       ),
                       subtitle: Text(
@@ -111,15 +111,15 @@ Future<String?> promptForPlaylistName(
   final result = await showDialog<String>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      backgroundColor: context.colors.surface,
+      backgroundColor: dialogContext.colors.surface,
       title: Text(title),
       content: TextField(
         controller: controller,
         autofocus: true,
-        style: TextStyle(color: context.colors.mist),
+        style: TextStyle(color: dialogContext.colors.mist),
         decoration: InputDecoration(
           hintText: 'Playlist name',
-          hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.38)),
+          hintStyle: TextStyle(color: dialogContext.colors.mist.withValues(alpha: 0.38)),
         ),
         onSubmitted: (value) =>
             Navigator.of(dialogContext).pop(value.trim()),
@@ -127,12 +127,12 @@ Future<String?> promptForPlaylistName(
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(),
-          child: Text('Cancel', style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54))),
+          child: Text('Cancel', style: TextStyle(color: dialogContext.colors.mist.withValues(alpha: 0.54))),
         ),
         TextButton(
           onPressed: () =>
               Navigator.of(dialogContext).pop(controller.text.trim()),
-          child: Text('Save', style: TextStyle(color: context.colors.accent)),
+          child: Text('Save', style: TextStyle(color: dialogContext.colors.accent)),
         ),
       ],
     ),

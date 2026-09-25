@@ -81,7 +81,7 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                 decoration: InputDecoration(
                   hintText: 'Search podcasts & RSS shows...',
                   hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.38)),
-                  prefixIcon: Icon(Icons.podcasts, color: Colors.orangeAccent),
+                  prefixIcon: Icon(Icons.podcasts, color: podcastOrange(context)),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 14),
                 ),
@@ -92,9 +92,9 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
 
           Expanded(
             child: _isLoading
-                ? const Center(
+                ? Center(
                     child: SpinKitDoubleBounce(
-                      color: Colors.orangeAccent,
+                      color: podcastOrange(context),
                       size: 50.0,
                     ),
                   )
@@ -143,12 +143,12 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                       placeholder: (context, url) => Container(color: context.colors.mist.withValues(alpha: 0.10)),
                       errorWidget: (context, url, error) => Container(
                         color: context.colors.mist.withValues(alpha: 0.10),
-                        child: const Icon(Icons.podcasts, color: Colors.orangeAccent, size: 50),
+                        child: Icon(Icons.podcasts, color: podcastOrange(context), size: 50),
                       ),
                     )
                   : Container(
                       color: context.colors.mist.withValues(alpha: 0.10),
-                      child: const Icon(Icons.podcasts, color: Colors.orangeAccent, size: 50),
+                      child: Icon(Icons.podcasts, color: podcastOrange(context), size: 50),
                     ),
             ),
           ),
@@ -268,7 +268,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                         width: 60,
                         height: 60,
                         color: context.colors.mist.withValues(alpha: 0.10),
-                        child: const Icon(Icons.podcasts, color: Colors.orangeAccent),
+                        child: Icon(Icons.podcasts, color: podcastOrange(context)),
                       ),
               ),
               const SizedBox(width: 12),
@@ -297,8 +297,8 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
 
         Expanded(
           child: _isLoading
-              ? const Center(
-                  child: SpinKitDoubleBounce(color: Colors.orangeAccent, size: 40),
+              ? Center(
+                  child: SpinKitDoubleBounce(color: podcastOrange(context), size: 40),
                 )
               : _episodes.isEmpty
                   ? Center(
@@ -322,7 +322,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                             episode.pubDate ?? 'Podcast Episode',
                             style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.54)),
                           ),
-                          trailing: const Icon(Icons.play_circle_fill, color: Colors.orangeAccent, size: 36),
+                          trailing: Icon(Icons.play_circle_fill, color: podcastOrange(context), size: 36),
                           onTap: () {
                             final mediaItem = widget.podcastService.episodeToMediaItem(
                               episode,
@@ -339,3 +339,10 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
     );
   }
 }
+
+/// Podcast orange: the bright accent is too faint on light backgrounds
+/// (~1.9:1), so a darker shade there.
+Color podcastOrange(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.light
+        ? Colors.orange.shade800
+        : Colors.orangeAccent;

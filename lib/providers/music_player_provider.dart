@@ -42,6 +42,12 @@ class MusicPlayerProvider extends ChangeNotifier {
     _audioHandler.onSkipNext = skipToNext;
     _audioHandler.onSkipPrevious = skipToPrevious;
     _audioHandler.onTrackCompleted = _advanceOnCompletion;
+    // A reload after Stop or an error resumes a podcast where it was.
+    _audioHandler.resumePositionFor = (track) {
+      final at = _resumePositionFor(track);
+      _lastSavedPosition = at ?? Duration.zero;
+      return at;
+    };
     _initListeners();
   }
 
@@ -321,9 +327,15 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   /// Start [requested], which the queue already points at.
   Future<void> _play(AppMediaItem requested) async {
-    // If it's already on disk, play that: instant, offline, and no risk of an
-    // expired stream URL. This is the whole point of downloading.
-    final track = _storageService.getDownload(requested.id) ?? requested;
+    final online = streamableFallback(requested);
+    // If it's on disk, play that: instant, offline, and no risk of an
+    // expired stream URL. This is the whole point of downloading. Only if
+    // the file is really still there — a removed SD card or deleted file
+    // must fall back to streaming, not fail.
+    final download = _storageService.getDownload(online.id);
+    final track = download != null && _fileExists(download.streamUrl)
+        ? download
+        : online;
     _currentTrack = track;
     notifyListeners();
 
@@ -333,8 +345,9 @@ class MusicPlayerProvider extends ChangeNotifier {
     // Fire-and-forget the audio handler — it handles errors internally
     _audioHandler.playAppMediaItem(track, startAt: resumeAt);
 
-    // Save to history in background
-    _storageService.addToHistory(track);
+    // History keeps the online track, not the on-disk copy: the copy stops
+    // working once the download is removed.
+    _storageService.addToHistory(online);
 
     _prefetchUpcoming();
   }
@@ -346,6 +359,34 @@ class MusicPlayerProvider extends ChangeNotifier {
     if (next?.sourceType == MediaSourceType.youtube) {
       ytService.warmStreamUrl(next!.id);
     }
+  }
+
+  static bool _fileExists(String? path) =>
+      path != null && path.isNotEmpty && File(path).existsSync();
+
+  /// Favorites and history saved by older versions hold the on-disk copy
+  /// of a download (a local path, YouTube id). Once that file is gone, play
+  /// the song online again instead of failing on a missing file.
+  @visibleForTesting
+  static AppMediaItem streamableFallback(AppMediaItem item) {
+    final url = item.streamUrl;
+    final isYoutubeId = RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(item.id);
+    if (item.sourceType != MediaSourceType.local ||
+        !isYoutubeId ||
+        url == null ||
+        url.startsWith('content://') ||
+        _fileExists(url)) {
+      return item;
+    }
+    return AppMediaItem(
+      id: item.id,
+      title: item.title,
+      artist: item.artist,
+      album: onlineAlbumLabel,
+      artUri: item.artUri,
+      duration: item.duration,
+      sourceType: MediaSourceType.youtube,
+    );
   }
 
   /// Podcasts only: dropping back into a 90-minute episode where you left off
@@ -376,7 +417,9 @@ class MusicPlayerProvider extends ChangeNotifier {
     if (next == null) {
       _currentTrack = null;
       notifyListeners();
-      await _audioHandler.stop();
+      // Clears the handler's track too, so a headset or widget Play can't
+      // bring back the song that was just removed.
+      await _audioHandler.clear();
       return;
     }
     await _play(next);

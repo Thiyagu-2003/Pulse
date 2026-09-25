@@ -18,7 +18,8 @@ class LocalSongsScreen extends StatefulWidget {
   State<LocalSongsScreen> createState() => _LocalSongsScreenState();
 }
 
-class _LocalSongsScreenState extends State<LocalSongsScreen> {
+class _LocalSongsScreenState extends State<LocalSongsScreen>
+    with WidgetsBindingObserver {
   final LocalMusicService _localService = LocalMusicService();
   List<AppMediaItem> _localSongs = [];
   bool _isLoading = true;
@@ -54,8 +55,25 @@ class _LocalSongsScreenState extends State<LocalSongsScreen> {
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from the system Settings page ("Grant Access" sends the user there
+  /// once the permission is permanently denied): check again, or the denied
+  /// view stays up although access was just granted.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_hasPermission && !_isLoading) {
+      _initLocalMusic();
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initLocalMusic();
   }
 

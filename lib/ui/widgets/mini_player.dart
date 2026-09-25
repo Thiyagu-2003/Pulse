@@ -119,6 +119,7 @@ class MiniPlayer extends StatelessWidget {
                             color: context.colors.mist.withValues(alpha: 0.7),
                             size: 26,
                           ),
+                          tooltip: 'Next',
                           onPressed: playerProvider.skipToNext,
                         ),
                       ],
