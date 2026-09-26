@@ -17,6 +17,10 @@ jobs:
     permissions:
       contents: write
 
+    env:
+      CL: "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
+      _CL_: "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
