@@ -855,9 +855,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     )
                   : ReorderableListView.builder(
                       itemCount: queueProvider.queue.length,
-                      // onReorderItem already reports newIndex as a
-                      // position in the final list, which moveInQueue expects.
-                      onReorderItem: queueProvider.moveInQueue,
+                      onReorder: (from, to) {
+                        if (from < to) to -= 1;
+                        queueProvider.moveInQueue(from, to);
+                      },
                       itemBuilder: (_, index) {
                         final item = queueProvider.queue[index];
                         final isCurrent = index == queueProvider.currentIndex;

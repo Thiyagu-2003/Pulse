@@ -1,0 +1,64 @@
+name: Build Windows Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Pulse Windows Executable
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows Release
+        run: flutter build windows --release
+
+      - name: Package Windows Release
+        shell: pwsh
+        run: |
+          $releaseDir = "build\windows\x64\runner\Release"
+          if (Test-Path $releaseDir) {
+            Compress-Archive -Path "$releaseDir\*" -DestinationPath "Pulse-windows-x64.zip" -Force
+            Write-Host "Created Pulse-windows-x64.zip successfully."
+          } else {
+            Write-Error "Release directory not found at $releaseDir"
+            exit 1
+          }
+
+      - name: Upload Windows Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pulse-windows-x64
+          path: Pulse-windows-x64.zip
+          retention-days: 30
+
+      - name: Create Release and Attach Asset (on Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Pulse-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

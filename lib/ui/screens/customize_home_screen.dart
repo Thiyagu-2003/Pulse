@@ -59,7 +59,8 @@ class CustomizeHomeScreen extends StatelessWidget {
           ),
         ),
         itemCount: sections.length,
-        onReorderItem: (from, to) {
+        onReorder: (from, to) {
+          if (from < to) to -= 1;
           final ids = sections.map((s) => s.id).toList();
           ids.insert(to, ids.removeAt(from));
           save(layout.copyWith(order: ids));
