@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
@@ -35,6 +36,7 @@ class CustomAudioHandler extends BaseAudioHandler
   // Start after 1s of audio instead of ExoPlayer's 2.5s: noticeably
   // quicker on a weak signal, at a small risk of an early stall.
   late final AudioPlayer _player = AudioPlayer(
+    useProxyForRequestHeaders: !Platform.isWindows,
     audioLoadConfiguration: const AudioLoadConfiguration(
       androidLoadControl: AndroidLoadControl(
         bufferForPlaybackDuration: Duration(milliseconds: 1000),
@@ -333,8 +335,11 @@ class CustomAudioHandler extends BaseAudioHandler
           // through Dart's HTTP client, the path that works on real phones.
           // Not on mobile data: a save isn't cancelled when the user skips,
           // so skipping ten songs would download all ten in full.
-          final save =
-              item.sourceType.isOnline && !NetworkStatus.instance.onMobileData;
+          // On Windows, LockCachingAudioSource is unsupported by just_audio_windows
+          // and headers proxy triggers AppContainer loopback restrictions.
+          final save = !Platform.isWindows &&
+              item.sourceType.isOnline &&
+              !NetworkStatus.instance.onMobileData;
           final AudioSource source = save
               // Experimental in just_audio; if it misbehaves the load
               // fails and the fallback ladder in _loadYoutube takes over.
@@ -346,7 +351,9 @@ class CustomAudioHandler extends BaseAudioHandler
                     item.id,
                   ),
                 )
-              : AudioSource.uri(Uri.parse(url), headers: headers);
+              : (Platform.isWindows
+                  ? AudioSource.uri(Uri.parse(url))
+                  : AudioSource.uri(Uri.parse(url), headers: headers));
           await _player
               .setAudioSource(source, preload: true, initialPosition: startAt)
               .timeout(const Duration(seconds: 10));
