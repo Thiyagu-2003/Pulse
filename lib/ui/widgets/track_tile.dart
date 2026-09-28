@@ -57,135 +57,140 @@ class TrackTile extends StatelessWidget {
       // The row's own Material: ListTile paints its tap ripple on the nearest
       // Material, and the decorated container above would hide it — taps
       // gave no visual feedback at all.
-      child: Material(
-        type: MaterialType.transparency,
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
-          onTap:
-              onTap ?? () => playerProvider.playTrack(item, playlist: playlist),
-          onLongPress: onLongPress ?? () => showTrackActions(context, item),
-          selected: selected ?? false,
-          selectedTileColor: AppTheme.primary.withValues(alpha: 0.12),
-          leading: Stack(
-            alignment: Alignment.center,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: item.artUri != null && item.artUri!.startsWith('http')
-                    ? CachedNetworkImage(
-                        imageUrl: item.artUri!,
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) =>
-                            _buildPlaceholder(context),
-                        errorWidget: (context, url, error) =>
-                            _buildPlaceholder(context),
-                      )
-                    : _buildPlaceholder(context),
-              ),
-              // The pulse sits on the artwork of the track you can hear.
-              if (isPlayingCurrent)
-                Container(
-                  width: 50,
-                  height: 50,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: StreamBuilder<PlaybackState>(
-                    stream: playerProvider.playbackState,
-                    builder: (context, snapshot) => PlayingIndicator(
-                      isPlaying: snapshot.data?.playing ?? false,
-                      size: 18,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          title: Text(
-            item.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: isPlayingCurrent
-                  ? context.colors.accent
-                  : context.colors.mist,
+      // Right-click (desktop mouse) does what long-press does on a phone.
+      child: GestureDetector(
+        onSecondaryTap: onLongPress ?? () => showTrackActions(context, item),
+        child: Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
             ),
-          ),
-          subtitle: Row(
-            children: [
-              _buildSourceBadge(context, item.sourceType),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  item.artist,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: context.colors.mist.withValues(alpha: 0.60),
-                  ),
+            onTap:
+                onTap ??
+                () => playerProvider.playTrack(item, playlist: playlist),
+            onLongPress: onLongPress ?? () => showTrackActions(context, item),
+            selected: selected ?? false,
+            selectedTileColor: AppTheme.primary.withValues(alpha: 0.12),
+            leading: Stack(
+              alignment: Alignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: item.artUri != null && item.artUri!.startsWith('http')
+                      ? CachedNetworkImage(
+                          imageUrl: item.artUri!,
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) =>
+                              _buildPlaceholder(context),
+                          errorWidget: (context, url, error) =>
+                              _buildPlaceholder(context),
+                        )
+                      : _buildPlaceholder(context),
                 ),
-              ),
-              if (selected != null)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: selected!
-                        ? AppTheme.primary.withValues(alpha: 0.85)
-                        : Colors.black.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    selected!
-                        ? Icons.check_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: Colors.white,
-                  ),
-                ),
-            ],
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Downloads go through YouTube extraction; a podcast id is a
-              // hash of its URL, so that could only ever fail.
-              if (item.sourceType.isOnline) DownloadButton(item: item),
-              IconButton(
-                // Scales up as it fills in, so the tap has a result you can see
-                // without moving your eyes to a toast.
-                icon: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 260),
-                  transitionBuilder: (child, animation) => ScaleTransition(
-                    scale: CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOutBack,
+                // The pulse sits on the artwork of the track you can hear.
+                if (isPlayingCurrent)
+                  Container(
+                    width: 50,
+                    height: 50,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: child,
+                    child: StreamBuilder<PlaybackState>(
+                      stream: playerProvider.playbackState,
+                      builder: (context, snapshot) => PlayingIndicator(
+                        isPlaying: snapshot.data?.playing ?? false,
+                        size: 18,
+                      ),
+                    ),
                   ),
-                  child: Icon(
-                    isFav
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    key: ValueKey(isFav),
-                    color: isFav
-                        ? const Color(0xFFFF5C7A)
-                        : context.colors.mist.withValues(alpha: 0.35),
-                    size: 20,
+              ],
+            ),
+            title: Text(
+              item.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: isPlayingCurrent
+                    ? context.colors.accent
+                    : context.colors.mist,
+              ),
+            ),
+            subtitle: Row(
+              children: [
+                _buildSourceBadge(context, item.sourceType),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    item.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.colors.mist.withValues(alpha: 0.60),
+                    ),
                   ),
                 ),
-                tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
-                onPressed: () => playerProvider.toggleFavorite(item),
-              ),
-            ],
+                if (selected != null)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: selected!
+                          ? AppTheme.primary.withValues(alpha: 0.85)
+                          : Colors.black.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      selected!
+                          ? Icons.check_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Downloads go through YouTube extraction; a podcast id is a
+                // hash of its URL, so that could only ever fail.
+                if (item.sourceType.isOnline) DownloadButton(item: item),
+                IconButton(
+                  // Scales up as it fills in, so the tap has a result you can see
+                  // without moving your eyes to a toast.
+                  icon: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    transitionBuilder: (child, animation) => ScaleTransition(
+                      scale: CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutBack,
+                      ),
+                      child: child,
+                    ),
+                    child: Icon(
+                      isFav
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      key: ValueKey(isFav),
+                      color: isFav
+                          ? const Color(0xFFFF5C7A)
+                          : context.colors.mist.withValues(alpha: 0.35),
+                      size: 20,
+                    ),
+                  ),
+                  tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
+                  onPressed: () => playerProvider.toggleFavorite(item),
+                ),
+              ],
+            ),
           ),
         ),
       ),

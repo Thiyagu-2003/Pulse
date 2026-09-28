@@ -2,6 +2,7 @@
 // on all of them at once.
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -101,8 +102,10 @@ void main() {
       songs: songs,
       onDelete: (chosen) async => deleted = chosen,
     )));
-    await tester.longPress(find.text('Song 0'));
+    // Right-click (a mouse) starts selecting, like long-press.
+    await tester.tap(find.text('Song 0'), buttons: kSecondaryMouseButton);
     await tester.pump();
+    expect(find.text('1 selected'), findsOneWidget);
     await tester.tap(find.text('Song 4'));
     await tester.pump();
     await tester.tap(find.byTooltip('Delete'));

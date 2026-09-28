@@ -32,6 +32,12 @@ void main() {
     expect(songs.first.album, 'Leo');
     expect(RegExp(r'^\d+$').hasMatch(hukum.id), isTrue);
 
+    // A download folder chosen inside Music isn't listed twice.
+    await touch('My downloads${sep}Saved - Song.m4a');
+    final withDownloads = await LocalMusicService.scanFolder(music,
+        skip: '${music.path}/My downloads');
+    expect(withDownloads.map((s) => s.title), ['Badass', 'Hukum']);
+
     expect(await LocalMusicService.scanFolder(Directory('${music.path}${sep}nope')),
         isEmpty);
     await music.delete(recursive: true);
