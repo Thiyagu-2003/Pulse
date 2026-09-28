@@ -210,14 +210,34 @@ void main() {
     expect(find.text('Add section'), findsOneWidget);
   });
 
-  testWidgets('picking a language chip switches the sections',
+  testWidgets('a language chip browses that language, not saved',
       (tester) async {
+    await tester.runAsync(() => storage.addToHistory(_song('h1', title: 'Old fav')));
     await pumpHome(tester, const OnlineMusicScreen(prefetch: false));
-    expect(find.widgetWithText(ChoiceChip, 'Hindi'), findsOneWidget);
+    expect(find.text('Old fav'), findsOneWidget); // Recently played
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Telugu'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Trending in Telugu'), findsOneWidget);
+    // Only that language's rows: the personal ones aren't in the way.
+    expect(find.text('Old fav'), findsNothing);
+    expect(provider.homeLanguage, 'Tamil'); // the setting is untouched
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'For you'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Old fav'), findsOneWidget);
+    expect(find.text('Trending in Tamil'), findsOneWidget);
+
+    // Settings is the permanent choice, and ends any browsing.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Telugu'));
+    await tester.pump();
     await tester.runAsync(() => provider.setHomeLanguage('Hindi'));
     await tester.pump();
-    expect(provider.homeLanguage, 'Hindi');
+    await tester.pump();
     expect(find.text('Trending in Hindi'), findsOneWidget);
+    expect(find.text('Old fav'), findsOneWidget);
   });
 
   testWidgets('settings shows quality, language and history', (tester) async {

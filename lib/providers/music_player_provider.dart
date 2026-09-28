@@ -397,6 +397,12 @@ class MusicPlayerProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteDownloads(List<AppMediaItem> items) async {
+    for (final item in items) {
+      await deleteDownload(item);
+    }
+  }
+
   /// Total bytes held by downloads, for the storage line in the UI.
   Future<int> downloadedBytes() async {
     var total = 0;

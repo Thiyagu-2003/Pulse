@@ -16,7 +16,16 @@ class SelectableTrackList extends StatefulWidget {
   /// Shown above the songs while not selecting (e.g. Play all / Shuffle).
   final Widget? header;
 
-  const SelectableTrackList({super.key, required this.songs, this.header});
+  /// Set where songs can be deleted (Downloads): a delete button on the
+  /// selection bar (after a confirmation), and swipe left on a song.
+  final Future<void> Function(List<AppMediaItem> songs)? onDelete;
+
+  const SelectableTrackList({
+    super.key,
+    required this.songs,
+    this.header,
+    this.onDelete,
+  });
 
   @override
   State<SelectableTrackList> createState() => _SelectableTrackListState();
@@ -36,6 +45,44 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
   });
 
   void _clear() => setState(_selected.clear);
+
+  Future<void> _delete(List<AppMediaItem> chosen) async {
+    if (chosen.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final n = chosen.length;
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(n == 1 ? 'Delete this download?' : 'Delete $n downloads?'),
+        content: const Text(
+          'The files are removed from this device. You can download them '
+          'again any time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (sure != true) return;
+    await widget.onDelete!(chosen);
+    if (!mounted) return;
+    _clear();
+    showCompactSnack(
+      messenger,
+      'Deleted $n ${n == 1 ? 'download' : 'downloads'}',
+      icon: Icons.delete_outline_rounded,
+    );
+  }
 
   void _done(String message) {
     final messenger = ScaffoldMessenger.of(context);
@@ -86,6 +133,7 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
                 showAddToPlaylistSheet(context, chosen);
                 _clear();
               },
+              onDelete: widget.onDelete == null ? null : () => _delete(chosen),
             )
           else
             ?widget.header,
@@ -95,12 +143,29 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
               itemCount: songs.length,
               itemBuilder: (context, i) {
                 final song = songs[i];
-                return TrackTile(
+                final tile = TrackTile(
                   item: song,
                   playlist: songs,
                   selected: _selecting ? _selected.contains(song.id) : null,
                   onTap: _selecting ? () => _toggle(song) : null,
                   onLongPress: () => _toggle(song),
+                );
+                final onDelete = widget.onDelete;
+                if (onDelete == null || _selecting) return tile;
+                return Dismissible(
+                  key: ValueKey('delete_${song.id}'),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 32),
+                    color: Colors.redAccent.withValues(alpha: 0.2),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                  onDismissed: (_) => onDelete([song]),
+                  child: tile,
                 );
               },
             ),
@@ -120,6 +185,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onPlayNext;
   final VoidCallback onQueue;
   final VoidCallback onAddToPlaylist;
+  final VoidCallback? onDelete;
 
   const _SelectionBar({
     required this.count,
@@ -130,6 +196,7 @@ class _SelectionBar extends StatelessWidget {
     required this.onPlayNext,
     required this.onQueue,
     required this.onAddToPlaylist,
+    this.onDelete,
   });
 
   @override
@@ -180,6 +247,15 @@ class _SelectionBar extends StatelessWidget {
               icon: Icon(Icons.playlist_add_rounded, color: accent),
               onPressed: onAddToPlaylist,
             ),
+            if (onDelete != null)
+              IconButton(
+                tooltip: 'Delete',
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                ),
+                onPressed: onDelete,
+              ),
           ],
         ),
       ),

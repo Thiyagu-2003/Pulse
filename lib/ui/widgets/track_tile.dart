@@ -9,6 +9,7 @@ import '../../services/saavn_service.dart';
 import '../screens/artist_screen.dart';
 import '../theme/app_theme.dart';
 import 'add_to_playlist_sheet.dart';
+import 'download_playlist_sheet.dart';
 import 'playing_indicator.dart';
 
 class TrackTile extends StatelessWidget {
@@ -331,7 +332,9 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                 showAddToPlaylistSheet(rootContext, [item]);
               },
             ),
-            if (item.sourceType.isOnline)
+            // A downloaded song — including the saved copy itself, as listed
+            // in the Downloads tab — can always be removed.
+            if (item.sourceType.isOnline || provider.isDownloaded(item.id))
               provider.isDownloaded(item.id)
                   ? ListTile(
                       leading: Icon(
@@ -596,20 +599,25 @@ class _DownloadAllButtonState extends State<DownloadAllButton> {
         if (_running) return; // a second tap in the same frame
         final messenger = ScaffoldMessenger.of(context);
         var name = widget.playlistName;
-        if (name != null && widget.playlistId == null) {
-          name = await promptForPlaylistName(
+        var songs = widget.items;
+        if (name != null) {
+          // Name it, and untick any songs not wanted.
+          final picked = await showDownloadPlaylistSheet(
             context,
-            initial: name,
-            title: 'Download as playlist',
+            name: name,
+            items: songs,
+            nameEditable: widget.playlistId == null,
           );
-          if (name == null || name.isEmpty || !mounted) return;
+          if (picked == null || !mounted) return;
+          (name, songs) = picked;
         }
+        final count = provider.notDownloaded(songs).length;
         setState(() => _running = true);
         final failed = name == null
-            ? await provider.downloadAll(widget.items)
+            ? await provider.downloadAll(songs)
             : await provider.downloadPlaylist(
                 name,
-                widget.items,
+                songs,
                 playlistId: widget.playlistId,
               );
         if (mounted) setState(() => _running = false);
@@ -617,7 +625,7 @@ class _DownloadAllButtonState extends State<DownloadAllButton> {
           messenger,
           failed == 0
               ? name == null
-                    ? 'Downloaded $missing ${missing == 1 ? 'song' : 'songs'}'
+                    ? 'Downloaded $count ${count == 1 ? 'song' : 'songs'}'
                     : 'Downloaded "$name" — in your Playlists'
               : "$failed couldn't download — tap again to retry",
           icon: failed == 0

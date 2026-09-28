@@ -11,6 +11,7 @@ import 'package:music_player/providers/music_player_provider.dart';
 import 'package:music_player/services/audio_handler.dart';
 import 'package:music_player/services/storage_service.dart';
 import 'package:music_player/ui/theme/app_theme.dart';
+import 'package:music_player/ui/widgets/download_playlist_sheet.dart';
 import 'package:music_player/ui/widgets/selectable_track_list.dart';
 import 'package:provider/provider.dart';
 
@@ -87,5 +88,63 @@ void main() {
     await tester.pump();
     expect(find.text('Header'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3)); // snackbar timers
+  });
+
+  Widget host(Widget child) => ChangeNotifierProvider<MusicPlayerProvider>.value(
+        value: provider,
+        child: MaterialApp(theme: AppTheme.darkTheme, home: Scaffold(body: child)),
+      );
+
+  testWidgets('downloads: pick several, confirm, all deleted', (tester) async {
+    List<AppMediaItem>? deleted;
+    await tester.pumpWidget(host(SelectableTrackList(
+      songs: songs,
+      onDelete: (chosen) async => deleted = chosen,
+    )));
+    await tester.longPress(find.text('Song 0'));
+    await tester.pump();
+    await tester.tap(find.text('Song 4'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete 2 downloads?'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(deleted!.map((s) => s.id), ['0', '4']);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('download sheet: untick songs, rename, get the rest',
+      (tester) async {
+    final online = [
+      for (var i = 0; i < 4; i++)
+        AppMediaItem(
+            id: 'o$i',
+            title: 'Online $i',
+            artist: 'A',
+            sourceType: MediaSourceType.saavn),
+    ];
+    (String, List<AppMediaItem>)? result;
+    await tester.pumpWidget(host(Builder(
+      builder: (context) => TextButton(
+        onPressed: () async => result = await showDownloadPlaylistSheet(
+            context, name: 'Tamil hits', items: online),
+        child: const Text('open'),
+      ),
+    )));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 of 4 songs'), findsOneWidget);
+    expect(find.text('Download 4 songs'), findsOneWidget);
+
+    await tester.tap(find.text('Online 1'));
+    await tester.tap(find.text('Online 3'));
+    await tester.pump();
+    expect(find.text('2 of 4 songs'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'My mix');
+    await tester.tap(find.text('Download 2 songs'));
+    await tester.pumpAndSettle();
+    expect(result!.$1, 'My mix');
+    expect(result!.$2.map((s) => s.id), ['o0', 'o2']);
   });
 }

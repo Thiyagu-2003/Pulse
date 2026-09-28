@@ -31,6 +31,12 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
   /// rebuilds and searches again.
   int _refreshCount = 0;
 
+  /// A language chip picked here: the page shows only that language's rows.
+  /// Not saved — the permanent choice is Settings > Home language, and
+  /// changing that (or "For you") drops this.
+  String? _browsing;
+  String? _settingsLanguage;
+
   Future<void> _refresh() async {
     YoutubeService().clearSearchCache();
     setState(() => _refreshCount++);
@@ -83,13 +89,22 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
     final layout = context.select<MusicPlayerProvider, String>(
       (p) => jsonEncode(p.homeLayout.toJson()),
     );
-    final sections = homeSectionsFor(language);
-    final arranged = arrangeHome(
-      language,
-      HomeLayout.fromJson(jsonDecode(layout)),
-      personal: context.read<MusicPlayerProvider>().madeForYouSections,
-    );
-    final page = '$language/$_refreshCount';
+    if (language != _settingsLanguage) {
+      _settingsLanguage = language;
+      _browsing = null; // the default changed in Settings
+    }
+    final browsing = _browsing;
+    final sections = homeSectionsFor(browsing ?? language);
+    // Browsing a language: just its rows, none of the personal ones (which
+    // sat above them and made the chip look like it did nothing).
+    final arranged = browsing != null
+        ? sections
+        : arrangeHome(
+            language,
+            HomeLayout.fromJson(jsonDecode(layout)),
+            personal: context.read<MusicPlayerProvider>().madeForYouSections,
+          );
+    final page = '$language/$browsing/$_refreshCount';
     if (widget.prefetch && _prefetchedFor != page) {
       _prefetchedFor = page;
       _prefetchTopSongs(sections.first.query);
@@ -113,7 +128,10 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
               padding: const EdgeInsets.only(bottom: 110),
               children: [
                 const _Header(),
-                _LanguageChips(selected: language),
+                _LanguageChips(
+                selected: browsing,
+                onSelected: (l) => setState(() => _browsing = l),
+              ),
                 // In the user's order (Settings > Customize home). Keyed by
                 // id, so reordering moves each section's state with it.
                 for (final section in arranged)
@@ -364,9 +382,13 @@ class _QuickPickTile extends StatelessWidget {
 }
 
 /// Picking a chip is the same setting as "Home language" in Settings.
+/// "For you" (the home page, in the Settings language) and one chip per
+/// language to browse just that language's songs for now.
 class _LanguageChips extends StatelessWidget {
+  /// The language being browsed; null is "For you".
   final String? selected;
-  const _LanguageChips({required this.selected});
+  final ValueChanged<String?> onSelected;
+  const _LanguageChips({required this.selected, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
@@ -375,13 +397,13 @@ class _LanguageChips extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        itemCount: homeLanguages.length,
+        itemCount: homeLanguages.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final language = homeLanguages[index];
+          final language = index == 0 ? null : homeLanguages[index - 1];
           final isSelected = language == selected;
           return ChoiceChip(
-            label: Text(language),
+            label: Text(language ?? 'For you'),
             selected: isSelected,
             showCheckmark: false,
             selectedColor: AppTheme.primary,
@@ -398,9 +420,7 @@ class _LanguageChips extends StatelessWidget {
                   : context.colors.mist.withValues(alpha: 0.8),
             ),
             onSelected: (_) {
-              if (!isSelected) {
-                context.read<MusicPlayerProvider>().setHomeLanguage(language);
-              }
+              if (!isSelected) onSelected(language);
             },
           );
         },

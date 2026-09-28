@@ -7,6 +7,7 @@ import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/download_folder.dart';
+import '../widgets/selectable_track_list.dart';
 import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
 import 'playlist_detail_screen.dart';
@@ -266,34 +267,11 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               ],
             ),
           ),
+          // Swipe left to delete one; long-press to pick several.
           Expanded(
-            child: ListView.builder(
-              itemCount: downloads.length,
-              itemBuilder: (context, index) {
-                final item = downloads[index];
-                return Dismissible(
-                  key: ValueKey('download_${item.id}'),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 32),
-                    margin: const EdgeInsets.symmetric(
-                      vertical: 4,
-                      horizontal: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.redAccent,
-                    ),
-                  ),
-                  onDismissed: (_) => provider.deleteDownload(item),
-                  child: TrackTile(item: item, playlist: downloads),
-                );
-              },
+            child: SelectableTrackList(
+              songs: downloads,
+              onDelete: provider.deleteDownloads,
             ),
           ),
         ],
