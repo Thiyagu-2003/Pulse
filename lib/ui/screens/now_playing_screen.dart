@@ -12,6 +12,10 @@ import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/track_tile.dart';
+import '../../services/platform_bridge.dart';
+import '../../services/saavn_service.dart';
+import 'artist_screen.dart';
+import 'equalizer_screen.dart';
 import 'full_screen_lyrics.dart';
 import 'dart:async';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
@@ -241,6 +245,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           // change, so ask for them when the panel opens.
                           if (_showLyrics) playerProvider.ensureLyricsLoaded();
                         },
+                      ),
+                      IconButton(
+                        tooltip: 'More options',
+                        icon: const Icon(
+                          Icons.more_horiz_rounded,
+                          color: Colors.white70,
+                        ),
+                        onPressed: () =>
+                            _showOptions(context, playerProvider, track),
                       ),
                     ],
                   ),
@@ -715,6 +728,184 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+  }
+
+  /// ⋯ — everything about the song playing: quick actions (download, radio,
+  /// share) on top, then add to playlist, album, artist, equalizer, sleep
+  /// timer.
+  void _showOptions(
+    BuildContext context,
+    MusicPlayerProvider provider,
+    AppMediaItem track,
+  ) {
+    final rootContext = Navigator.of(context).context;
+    final messenger = ScaffoldMessenger.of(context);
+    final artistId = track.extras?[SaavnService.artistIdKey] as String?;
+    final albumId = track.extras?[SaavnService.albumIdKey] as String?;
+    final link = shareLinkFor(track);
+    final downloaded = provider.isDownloaded(track.id);
+    final canDownload = track.sourceType.isOnline && !downloaded;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        void close() => Navigator.pop(sheetContext);
+        Widget round(IconData icon, String label, VoidCallback? onTap) =>
+            Column(
+              children: [
+                IconButton.filledTonal(
+                  iconSize: 26,
+                  padding: const EdgeInsets.all(14),
+                  tooltip: label,
+                  icon: Icon(icon),
+                  onPressed: onTap,
+                ),
+                const SizedBox(height: 4),
+                Text(label, style: const TextStyle(fontSize: 12)),
+              ],
+            );
+        Widget row(IconData icon, String label, VoidCallback onTap) => ListTile(
+          leading: Icon(icon, color: Colors.white),
+          title: Text(label),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () {
+            close();
+            onTap();
+          },
+        );
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                  child: Text(
+                    '${track.title} · ${track.artist}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      if (downloaded)
+                        round(Icons.download_done_rounded, 'Remove', () {
+                          close();
+                          removeDownload(rootContext, track);
+                        })
+                      else
+                        round(
+                          Icons.download_rounded,
+                          'Download',
+                          canDownload
+                              ? () {
+                                  close();
+                                  startDownload(rootContext, track);
+                                }
+                              : null,
+                        ),
+                      round(Icons.sensors_rounded, 'Start radio', () async {
+                        close();
+                        final n = await provider.startRadio();
+                        showCompactSnack(
+                          messenger,
+                          n == 0
+                              ? "Couldn't find songs like this one"
+                              : 'Radio: $n songs like this queued',
+                          icon: Icons.sensors_rounded,
+                          error: n == 0,
+                        );
+                      }),
+                      round(
+                        Icons.share_rounded,
+                        'Share',
+                        link == null
+                            ? null
+                            : () async {
+                                close();
+                                final shared = await PlatformBridge.share(
+                                  '${track.title} – ${track.artist}\n$link',
+                                );
+                                if (!shared) {
+                                  showCompactSnack(
+                                    messenger,
+                                    'Link copied',
+                                    icon: Icons.link_rounded,
+                                  );
+                                }
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white12),
+                row(
+                  Icons.playlist_add_rounded,
+                  'Add to playlist',
+                  () => showAddToPlaylistSheet(rootContext, [track]),
+                ),
+                if (albumId != null)
+                  row(
+                    Icons.album_rounded,
+                    'View album',
+                    () => openCollection(
+                      rootContext,
+                      SaavnCollection(
+                        kind: SaavnKind.album,
+                        id: albumId,
+                        title: track.album,
+                        subtitle: '',
+                        image: '',
+                      ),
+                    ),
+                  ),
+                if (artistId != null)
+                  row(
+                    Icons.person_rounded,
+                    'Go to artist',
+                    () => openCollection(
+                      rootContext,
+                      SaavnCollection(
+                        kind: SaavnKind.artist,
+                        id: artistId,
+                        title: track.artist.split(',').first.trim(),
+                        subtitle: '',
+                        image: '',
+                      ),
+                    ),
+                  ),
+                if (Platform.isAndroid)
+                  row(
+                    Icons.equalizer_rounded,
+                    'Equaliser',
+                    () => Navigator.push(
+                      rootContext,
+                      MaterialPageRoute(
+                        builder: (_) => const EqualizerScreen(),
+                      ),
+                    ),
+                  ),
+                row(
+                  Icons.bedtime_rounded,
+                  'Sleep timer',
+                  () => _showSleepTimerSheet(context, provider),
+                ),
+                TextButton(onPressed: close, child: const Text('Dismiss')),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showSleepTimerSheet(

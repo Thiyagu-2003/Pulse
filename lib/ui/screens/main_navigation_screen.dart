@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/desktop_tray.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/update_service.dart';
@@ -60,6 +61,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         .playbackErrors
         .listen(_showPlaybackError);
     _checkForUpdate();
+    // Windows: the notification-area icon and hide-to-tray on close.
+    DesktopTray.start(context.read<MusicPlayerProvider>());
   }
 
   /// Once a day, quietly: a newer release only shows as a SnackBar.
@@ -74,13 +77,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       SnackBar(
         content: Text('Pulse ${update.version} is available'),
         behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.only(left: 12, right: 12, bottom: 140),
+        margin: _snackMargin(context),
         action: SnackBarAction(
           label: 'Update',
           onPressed: () => showUpdateDialog(context, update),
         ),
       ),
     );
+  }
+
+  // Floating messages sit above the mini player: full width on a phone, a
+  // centred ~480px box on a wide (desktop) window rather than a bar across
+  // the whole screen.
+  static EdgeInsets _snackMargin(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final side = width > 700 ? (width - 480) / 2 : 12.0;
+    return EdgeInsets.only(left: side, right: side, bottom: 140);
   }
 
   void _showPlaybackError(String message) {
@@ -92,7 +104,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.only(left: 12, right: 12, bottom: 140),
+          margin: _snackMargin(context),
         ),
       );
   }

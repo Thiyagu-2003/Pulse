@@ -540,6 +540,36 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// When the last queued song starts, queue songs like it (JioSaavn radio)
   /// behind it — fetched now, so the ending runs straight on and Next has
   /// somewhere to go. Only for online songs, and not while repeating.
+  /// JioSaavn radio seeded with [track]. YouTube songs (and their saved
+  /// copies) seed from their JioSaavn match.
+  Future<List<AppMediaItem>> _radioFor(AppMediaItem track) async {
+    final saavn = SaavnService.instance;
+    final isSaavn = track.sourceType == MediaSourceType.saavn ||
+        track.extras?[originKey] == MediaSourceType.saavn.name;
+    final seed = isSaavn
+        ? track.id
+        : (await saavn.searchSongs('${track.title} ${track.artist}', count: 1))
+            .firstOrNull
+            ?.id;
+    return seed == null ? const [] : saavn.radio(seed);
+  }
+
+  /// Now Playing > Start radio: replace what's queued after the current
+  /// song with songs like it. Returns how many were queued.
+  Future<int> startRadio() async {
+    final track = _currentTrack;
+    if (track == null) return 0;
+    final songs = await _radioFor(track);
+    if (songs.isEmpty || _currentTrack?.id != track.id) return 0;
+    clearUpNext();
+    for (final song in songs) {
+      if (song.id != track.id) _queueState.append(song);
+    }
+    notifyListeners();
+    _prefetchUpcoming();
+    return songs.length;
+  }
+
   Future<void> _extendWithRadio(AppMediaItem track) async {
     final online =
         track.sourceType.isOnline || track.extras?[originKey] != null;
@@ -548,16 +578,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     if (_radioSeed == track.id) return; // already fetching for this one
     _radioSeed = track.id;
     try {
-      final saavn = SaavnService.instance;
-      // YouTube songs seed from their JioSaavn match.
-      final seed = track.sourceType == MediaSourceType.youtube
-          ? (await saavn.searchSongs(
-              '${track.title} ${track.artist}',
-              count: 1,
-            )).firstOrNull?.id
-          : track.id;
-      if (seed == null) return;
-      final songs = await saavn.radio(seed);
+      final songs = await _radioFor(track);
       // Still the last song? The user may have queued or skipped meanwhile.
       if (_queueState.currentTrack?.id != track.id ||
           _queueState.orderPos != _queueState.length - 1) {

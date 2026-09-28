@@ -498,6 +498,8 @@ void showCompactSnack(
         backgroundColor: error ? Colors.redAccent : colors.lift,
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
+        // A box, not a bar across a wide (desktop) window.
+        width: MediaQuery.sizeOf(messenger.context).width > 700 ? 480 : null,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );

@@ -129,9 +129,9 @@ class _OnlineMusicScreenState extends State<OnlineMusicScreen> {
               children: [
                 const _Header(),
                 _LanguageChips(
-                selected: browsing,
-                onSelected: (l) => setState(() => _browsing = l),
-              ),
+                  selected: browsing,
+                  onSelected: (l) => setState(() => _browsing = l),
+                ),
                 // In the user's order (Settings > Customize home). Keyed by
                 // id, so reordering moves each section's state with it.
                 for (final section in arranged)
@@ -304,30 +304,36 @@ class _QuickPicks extends StatelessWidget {
   }
 
   Widget _grid(List<AppMediaItem> items) {
-    final rows = <Widget>[];
-    for (var i = 0; i < items.length; i += 2) {
-      rows.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: _QuickPickTile(item: items[i], playlist: items),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Two columns on a phone; more on a wide (desktop) window, so each
+        // tile keeps a sensible width instead of stretching.
+        final columns = (constraints.maxWidth / 340).floor().clamp(2, 4);
+        final rows = <Widget>[];
+        for (var i = 0; i < items.length; i += columns) {
+          rows.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  for (var c = 0; c < columns; c++) ...[
+                    if (c > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: i + c < items.length
+                          ? _QuickPickTile(item: items[i + c], playlist: items)
+                          : const SizedBox(),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: i + 1 < items.length
-                    ? _QuickPickTile(item: items[i + 1], playlist: items)
-                    : const SizedBox(),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Column(children: rows),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Column(children: rows),
+        );
+      },
     );
   }
 }
@@ -468,7 +474,20 @@ class _RowsSection extends StatefulWidget {
 class _RowsSectionState extends State<_RowsSection> {
   static const _rowsPerPage = 4;
 
-  final _pages = PageController(viewportFraction: 0.9);
+  // A page of rows is ~90% of a phone's width; on a wide window it stays
+  // about that wide, so several pages sit side by side.
+  PageController _pages = PageController(viewportFraction: 0.9);
+
+  PageController _pagesFor(double width) {
+    final fraction = (420 / width).clamp(0.25, 0.9);
+    if ((_pages.viewportFraction - fraction).abs() > 0.01) {
+      final old = _pages;
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      _pages = PageController(viewportFraction: fraction);
+    }
+    return _pages;
+  }
+
   late Future<List<AppMediaItem>> _tracks = _load();
 
   Future<List<AppMediaItem>> _load() => YoutubeService()
@@ -521,7 +540,7 @@ class _RowsSectionState extends State<_RowsSection> {
                 return SizedBox(
                   height: _rowsPerPage * rowHeight,
                   child: PageView.builder(
-                    controller: _pages,
+                    controller: _pagesFor(MediaQuery.sizeOf(context).width),
                     padEnds: false,
                     itemCount: pageCount,
                     itemBuilder: (context, page) => Column(

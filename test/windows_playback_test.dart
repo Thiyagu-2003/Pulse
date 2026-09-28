@@ -34,10 +34,9 @@ void main() {
         return codec.encodeSuccessEnvelope(temp.path);
       }
       if (call.method == 'androidEqualizerGetParameters') {
-        // Only asked under test: just_audio enables Android effects there.
-        return codec.encodeSuccessEnvelope({
-          'parameters': {'minDecibels': -15.0, 'maxDecibels': 15.0, 'bands': []},
-        });
+        // What just_audio_windows really answers: an empty map. Being asked
+        // at all on Windows is the bug this test guards against.
+        return codec.encodeSuccessEnvelope(<String, dynamic>{});
       }
       if (call.method == 'load') {
         final source = (call.arguments as Map)['audioSource'] as Map;

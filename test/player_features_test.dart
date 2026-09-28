@@ -134,4 +134,15 @@ void main() {
     expect(provider.queue.map((t) => t.id).toSet(), {'f1', 'f2'});
     await provider.setAutoplay(true);
   });
+
+  test('Start radio replaces what is queued after the current song',
+      () async {
+    await provider.setAutoplay(false);
+    final list = [_song('p1'), _song('p2'), _song('p3')];
+    await provider.playTrack(list[0], playlist: list);
+    final n = await provider.startRadio(); // override answers r1, a, r2
+    expect(n, 3);
+    expect(provider.queue.map((t) => t.id), ['p1', 'r1', 'a', 'r2']);
+    await provider.setAutoplay(true);
+  });
 }

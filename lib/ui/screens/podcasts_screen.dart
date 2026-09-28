@@ -117,8 +117,11 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                 : GridView.builder(
                     padding: const EdgeInsets.all(16),
                     gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
+                        // Cards up to ~220px: two across on a phone, as
+                        // many as fit on a wide (desktop) window rather
+                        // than two giant ones.
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 220,
                           childAspectRatio: 0.75,
                           crossAxisSpacing: 14,
                           mainAxisSpacing: 14,

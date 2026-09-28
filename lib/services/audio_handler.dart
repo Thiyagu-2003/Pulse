@@ -42,8 +42,12 @@ class CustomAudioHandler extends BaseAudioHandler
         bufferForPlaybackDuration: Duration(milliseconds: 1000),
       ),
     ),
-    // Settings > Equalizer. Android only; elsewhere these do nothing.
-    audioPipeline: AudioPipeline(androidAudioEffects: [equalizer, loudness]),
+    // Settings > Equalizer. Android only — and attached only there: just_audio
+    // activates every attached effect on every platform, and on Windows the
+    // plugin's empty answer to "equalizer parameters" failed every load.
+    audioPipeline: Platform.isAndroid
+        ? AudioPipeline(androidAudioEffects: [equalizer, loudness])
+        : null,
   );
 
   final AndroidEqualizer equalizer = AndroidEqualizer();
