@@ -11,6 +11,7 @@ import '../models/search_match.dart';
 import 'network_status.dart';
 import 'platform_bridge.dart';
 import 'playback_cache.dart';
+import 'local_music_service.dart';
 import 'saavn_service.dart';
 import 'storage_service.dart';
 import '../util/first_success.dart';
@@ -817,6 +818,17 @@ class YoutubeService {
         debugPrint('Failed to resolve external music dir: $e');
       }
     }
+    if (Platform.isWindows) {
+      // Music\Pulse, where a music library looks — not loose in Documents.
+      final dir = Directory(
+          '${LocalMusicService.musicFolder().path}${Platform.pathSeparator}Pulse');
+      try {
+        await dir.create(recursive: true);
+        return dir;
+      } catch (e) {
+        debugPrint('Music folder not writable: $e');
+      }
+    }
     return await getApplicationDocumentsDirectory();
   }
 
@@ -826,7 +838,11 @@ class YoutubeService {
   static Future<bool> isWritableDirectory(Directory dir) async {
     try {
       if (!await dir.exists()) await dir.create(recursive: true);
-      final probe = File('${dir.path}/.pulse_write_test');
+      // Unique per check: download-all runs two downloads at once, and on
+      // Windows two probes sharing one name collided — one "failed", and
+      // that song went to the default folder instead.
+      final probe = File('${dir.path}/.pulse_write_test_'
+          '${DateTime.now().microsecondsSinceEpoch}_${identityHashCode(Object())}');
       await probe.writeAsString('');
       await probe.delete();
       return true;
@@ -838,9 +854,13 @@ class YoutubeService {
   Future<String?> downloadAudioTrack(
     AppMediaItem item, {
     void Function(double)? onProgress,
+    String? folder,
   }) async {
     try {
-      final dir = await _getDownloadDirectory();
+      // A playlist downloads into its own folder, so its songs stay together.
+      final dir = folder == null
+          ? await _getDownloadDirectory()
+          : await playlistFolder(folder);
       Future<File> nameFor(String ext) async =>
           File('${dir.path}/${downloadFileName(item)}.$ext');
 
@@ -861,6 +881,26 @@ class YoutubeService {
       debugPrint('Download error: $e');
       return null;
     }
+  }
+
+  /// The folder a downloaded playlist named [name] lives in (created).
+  Future<Directory> playlistFolder(String name) async {
+    final dir = Directory(
+        '${(await _getDownloadDirectory()).path}/${safeFolderName(name)}');
+    await dir.create(recursive: true);
+    return dir;
+  }
+
+  /// [name] as a folder name: characters no filesystem allows removed, and
+  /// never empty, "." or "..".
+  static String safeFolderName(String name) {
+    final clean = name
+        .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .replaceAll(RegExp(r'^\.+|\.+$'), '')
+        .trim();
+    return clean.isEmpty ? 'Playlist' : clean;
   }
 
   /// "Title - Artist" as a file name: readable in any file manager or music

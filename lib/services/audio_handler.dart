@@ -359,7 +359,11 @@ class CustomAudioHandler extends BaseAudioHandler
               .timeout(const Duration(seconds: 10));
         }
 
-        if (item.sourceType == MediaSourceType.youtube) {
+        if (Platform.isWindows &&
+            item.sourceType.isOnline &&
+            await _playFetchedFile(item, startAt, superseded)) {
+          // Playing from the fetched file.
+        } else if (item.sourceType == MediaSourceType.youtube) {
           await _loadYoutube(item, uri, load, superseded, startAt);
         } else if (item.sourceType == MediaSourceType.saavn) {
           await _loadSaavn(item, uri, load, superseded, startAt);
@@ -393,6 +397,37 @@ class CustomAudioHandler extends BaseAudioHandler
       if (superseded()) return;
       _ytService.invalidateStreamUrl(item.id);
       _failPlayback('Couldn\'t play "${item.title}". Tap to try again.', e);
+    }
+  }
+
+  /// Windows: songs didn't play when the Windows player (WinRT MediaPlayer,
+  /// via just_audio_windows) opened the web link itself. Fetch the whole
+  /// song with Dart's HTTP client instead — the one downloads use, which
+  /// works on Windows — and play the file. False if that didn't work, so
+  /// the streaming ladder still gets its turn.
+  Future<bool> _playFetchedFile(
+    AppMediaItem item,
+    Duration? startAt,
+    bool Function() superseded,
+  ) async {
+    _attempt?.step('fetching whole song');
+    final path = await _ytService.cacheForPlayback(item);
+    if (superseded()) return true; // a newer tap owns the player now
+    if (path == null) {
+      _attempt?.step('fetch failed; streaming');
+      return false;
+    }
+    try {
+      await _player
+          .setFilePath(path, initialPosition: startAt)
+          .timeout(const Duration(seconds: 10));
+      _attempt?.step('playing fetched file');
+      return true;
+    } catch (e) {
+      if (superseded()) rethrow;
+      _attempt?.step('fetched file failed: ${e.runtimeType}; streaming');
+      await PlaybackCache.instance.remove(item.id);
+      return false;
     }
   }
 

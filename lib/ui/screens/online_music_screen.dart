@@ -481,7 +481,10 @@ class _RowsSectionState extends State<_RowsSection> {
               widget.section.title,
               trailing: loaded.isEmpty
                   ? null
-                  : DownloadAllButton(items: loaded),
+                  : DownloadAllButton(
+                      items: loaded,
+                      playlistName: widget.section.title,
+                    ),
             ),
             Builder(
               builder: (context) {

@@ -77,7 +77,10 @@ class _TrackListScreenState extends State<TrackListScreen> {
                       ),
                       const Spacer(),
                       // The whole playlist, for offline.
-                      DownloadAllButton(items: tracks),
+                      DownloadAllButton(
+                        items: tracks,
+                        playlistName: widget.title,
+                      ),
                     ],
                   ),
                 );

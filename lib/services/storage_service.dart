@@ -1,5 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart' show ThemeMode, debugPrint;
+import 'package:path_provider/path_provider.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../models/home_sections.dart';
 import '../models/media_item_model.dart';
@@ -45,8 +49,48 @@ class StorageService {
   static const int recentSearchLimit = 10;
   static const int historyLimit = 200;
 
+  static const _allBoxes = [
+    favoritesBox, historyBox, playlistsBox, positionsBox, downloadsBox,
+    settingsBox, streamUrlsBox, searchCacheBox, playbackLogBox,
+  ];
+
+  /// Earlier Windows builds kept their boxes in [from] (Documents): move
+  /// them to [to] once, so favorites and playlists come along.
+  @visibleForTesting
+  static Future<void> moveBoxes(Directory from, Directory to) async {
+    final sep = Platform.pathSeparator;
+    // "settings" or "favorites" in Documents could be another app's. Only a
+    // folder that also holds Pulse's own caches is taken to be Pulse's.
+    final isPulses = await File('${from.path}$sep$streamUrlsBox.hive').exists() &&
+        await File('${from.path}$sep$playbackLogBox.hive').exists();
+    if (!isPulses) return;
+    for (final name in _allBoxes) {
+      final old = File('${from.path}$sep$name.hive');
+      final moved = File('${to.path}$sep$name.hive');
+      try {
+        if (!await old.exists() || await moved.exists()) continue;
+        await old.copy(moved.path); // copy + delete: may be another drive
+        await old.delete();
+        final lock = File('${from.path}$sep$name.lock');
+        if (await lock.exists()) await lock.delete();
+      } catch (e) {
+        debugPrint('Could not move $name: $e');
+      }
+    }
+  }
+
   Future<void> init() async {
-    await Hive.initFlutter();
+    if (Platform.isAndroid || Platform.isIOS) {
+      await Hive.initFlutter();
+    } else {
+      // Desktop: initFlutter's folder is the user's Documents, which filled
+      // with Pulse's .hive files. Use the app's own data folder instead.
+      final dir = Directory(
+          '${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}data');
+      await dir.create(recursive: true);
+      await moveBoxes(await getApplicationDocumentsDirectory(), dir);
+      Hive.init(dir.path);
+    }
     await Hive.openBox<String>(favoritesBox);
     await Hive.openBox<String>(historyBox);
     await Hive.openBox<String>(playlistsBox);

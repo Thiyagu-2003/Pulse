@@ -10,14 +10,28 @@ class Playlist {
   final String name;
   final List<AppMediaItem> items;
 
-  const Playlist({required this.id, required this.name, this.items = const []});
+  /// Set once the playlist has been downloaded: the folder (under the
+  /// download folder) its songs were saved into. Follows renames.
+  final String? folder;
+
+  const Playlist({
+    required this.id,
+    required this.name,
+    this.items = const [],
+    this.folder,
+  });
 
   int get length => items.length;
 
   bool contains(String trackId) => items.any((t) => t.id == trackId);
 
-  Playlist copyWith({String? name, List<AppMediaItem>? items}) =>
-      Playlist(id: id, name: name ?? this.name, items: items ?? this.items);
+  Playlist copyWith({String? name, List<AppMediaItem>? items, String? folder}) =>
+      Playlist(
+        id: id,
+        name: name ?? this.name,
+        items: items ?? this.items,
+        folder: folder ?? this.folder,
+      );
 
   /// Adding a track already in the playlist is a no-op rather than a
   /// duplicate — re-tapping "add to playlist" should be harmless.
@@ -31,6 +45,7 @@ class Playlist {
     'id': id,
     'name': name,
     'items': items.map((t) => t.toJson()).toList(),
+    if (folder != null) 'folder': folder,
   };
 
   factory Playlist.fromJson(Map<String, dynamic> json) => Playlist(
@@ -41,5 +56,6 @@ class Playlist {
             ?.map((t) => AppMediaItem.fromJson(t as Map<String, dynamic>))
             .toList() ??
         const [],
+    folder: json['folder'] as String?,
   );
 }

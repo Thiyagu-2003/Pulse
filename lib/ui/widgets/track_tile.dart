@@ -16,7 +16,19 @@ class TrackTile extends StatelessWidget {
   final List<AppMediaItem>? playlist;
   final VoidCallback? onTap;
 
-  const TrackTile({super.key, required this.item, this.playlist, this.onTap});
+  /// Selection mode (multi-select lists): non-null shows a tick in place of
+  /// the artwork's corner, and [onLongPress] replaces the song menu.
+  final bool? selected;
+  final VoidCallback? onLongPress;
+
+  const TrackTile({
+    super.key,
+    required this.item,
+    this.playlist,
+    this.onTap,
+    this.selected,
+    this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +65,9 @@ class TrackTile extends StatelessWidget {
           ),
           onTap:
               onTap ?? () => playerProvider.playTrack(item, playlist: playlist),
-          onLongPress: () => showTrackActions(context, item),
+          onLongPress: onLongPress ?? () => showTrackActions(context, item),
+          selected: selected ?? false,
+          selectedTileColor: AppTheme.primary.withValues(alpha: 0.12),
           leading: Stack(
             alignment: Alignment.center,
             children: [
@@ -118,6 +132,24 @@ class TrackTile extends StatelessWidget {
                   ),
                 ),
               ),
+              if (selected != null)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: selected!
+                        ? AppTheme.primary.withValues(alpha: 0.85)
+                        : Colors.black.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    selected!
+                        ? Icons.check_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    color: Colors.white,
+                  ),
+                ),
             ],
           ),
           trailing: Row(
@@ -296,7 +328,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
               title: const Text('Add to playlist'),
               onTap: () {
                 Navigator.pop(sheetContext);
-                showAddToPlaylistSheet(rootContext, item);
+                showAddToPlaylistSheet(rootContext, [item]);
               },
             ),
             if (item.sourceType.isOnline)
@@ -359,9 +391,18 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                   color: sheetContext.colors.accent,
                 ),
                 title: const Text('Share'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(sheetContext);
-                  PlatformBridge.share('${item.title} – ${item.artist}\n$link');
+                  final shared = await PlatformBridge.share(
+                    '${item.title} – ${item.artist}\n$link',
+                  );
+                  if (!shared && rootContext.mounted) {
+                    showCompactSnack(
+                      ScaffoldMessenger.of(rootContext),
+                      'Link copied',
+                      icon: Icons.link_rounded,
+                    );
+                  }
                 },
               ),
           ],
@@ -509,7 +550,22 @@ class DownloadButton extends StatelessWidget {
 /// Hidden when there's nothing left to download.
 class DownloadAllButton extends StatefulWidget {
   final List<AppMediaItem> items;
-  const DownloadAllButton({super.key, required this.items});
+
+  /// Set for a collection (an album, a home row, a playlist): it downloads
+  /// as a playlist of this name — its own folder, kept together in the
+  /// Library. The name is asked for first, and can be changed there.
+  final String? playlistName;
+
+  /// The user's own playlist: downloads into its folder under its name,
+  /// without asking.
+  final String? playlistId;
+
+  const DownloadAllButton({
+    super.key,
+    required this.items,
+    this.playlistName,
+    this.playlistId,
+  });
 
   @override
   State<DownloadAllButton> createState() => _DownloadAllButtonState();
@@ -539,13 +595,30 @@ class _DownloadAllButtonState extends State<DownloadAllButton> {
       onPressed: () async {
         if (_running) return; // a second tap in the same frame
         final messenger = ScaffoldMessenger.of(context);
+        var name = widget.playlistName;
+        if (name != null && widget.playlistId == null) {
+          name = await promptForPlaylistName(
+            context,
+            initial: name,
+            title: 'Download as playlist',
+          );
+          if (name == null || name.isEmpty || !mounted) return;
+        }
         setState(() => _running = true);
-        final failed = await provider.downloadAll(widget.items);
+        final failed = name == null
+            ? await provider.downloadAll(widget.items)
+            : await provider.downloadPlaylist(
+                name,
+                widget.items,
+                playlistId: widget.playlistId,
+              );
         if (mounted) setState(() => _running = false);
         showCompactSnack(
           messenger,
           failed == 0
-              ? 'Downloaded $missing ${missing == 1 ? 'song' : 'songs'}'
+              ? name == null
+                    ? 'Downloaded $missing ${missing == 1 ? 'song' : 'songs'}'
+                    : 'Downloaded "$name" — in your Playlists'
               : "$failed couldn't download — tap again to retry",
           icon: failed == 0
               ? Icons.download_done_rounded

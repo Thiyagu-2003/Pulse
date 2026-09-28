@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -358,7 +359,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           ),
                         ),
                       ),
-                      if (track.sourceType == MediaSourceType.youtube)
+                      // The video player is a phone web view; not on desktop.
+                      if (track.sourceType == MediaSourceType.youtube &&
+                          (Platform.isAndroid || Platform.isIOS))
                         Padding(
                           padding: const EdgeInsets.all(12.0),
                           child: FloatingActionButton.small(

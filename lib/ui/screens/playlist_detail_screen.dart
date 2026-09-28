@@ -23,7 +23,9 @@ class PlaylistDetailScreen extends StatelessWidget {
         body: Center(
           child: Text(
             'This playlist no longer exists.',
-            style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
+            style: TextStyle(
+              color: context.colors.mist.withValues(alpha: 0.54),
+            ),
           ),
         ),
       );
@@ -36,9 +38,16 @@ class PlaylistDetailScreen extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          DownloadAllButton(items: playlist.items),
+          DownloadAllButton(
+            items: playlist.items,
+            playlistName: playlist.name,
+            playlistId: playlist.id,
+          ),
           IconButton(
-            icon: Icon(Icons.edit_rounded, color: context.colors.mist.withValues(alpha: 0.70)),
+            icon: Icon(
+              Icons.edit_rounded,
+              color: context.colors.mist.withValues(alpha: 0.70),
+            ),
             tooltip: 'Rename',
             onPressed: () async {
               final name = await promptForPlaylistName(
@@ -59,20 +68,27 @@ class PlaylistDetailScreen extends StatelessWidget {
                 child: Text(
                   'Nothing here yet.\nLong-press any track to add it.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
+                  style: TextStyle(
+                    color: context.colors.mist.withValues(alpha: 0.54),
+                  ),
                 ),
               ),
             )
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         '${playlist.length} tracks',
-                        style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
+                        style: TextStyle(
+                          color: context.colors.mist.withValues(alpha: 0.60),
+                        ),
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
@@ -118,14 +134,9 @@ class PlaylistDetailScreen extends StatelessWidget {
                             color: Colors.redAccent,
                           ),
                         ),
-                        onDismissed: (_) => provider.removeFromPlaylist(
-                          playlist.id,
-                          item.id,
-                        ),
-                        child: TrackTile(
-                          item: item,
-                          playlist: playlist.items,
-                        ),
+                        onDismissed: (_) =>
+                            provider.removeFromPlaylist(playlist.id, item.id),
+                        child: TrackTile(item: item, playlist: playlist.items),
                       );
                     },
                   ),

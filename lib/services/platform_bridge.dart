@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -41,10 +43,26 @@ class PlatformBridge {
   }
 
   /// Open [url] in the browser (e.g. an update's download).
-  static Future<void> openUrl(String url) => _call('openUrl', {'url': url});
+  static Future<void> openUrl(String url) async {
+    if (Platform.isWindows) {
+      // The default browser, as a click on a link would.
+      await Process.start('rundll32', ['url.dll,FileProtocolHandler', url]);
+      return;
+    }
+    await _call('openUrl', {'url': url});
+  }
 
   /// Android's share sheet with [text].
-  static Future<void> share(String text) => _call('share', {'text': text});
+  /// Off Android there's no share sheet: [text] goes to the clipboard, and
+  /// the result is false so the caller can say "copied".
+  static Future<bool> share(String text) async {
+    if (Platform.isAndroid) {
+      await _call('share', {'text': text});
+      return true;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    return false;
+  }
 
   /// Tell Android's media index about a new file. Only matters for a custom
   /// download folder (e.g. Music/): the default folder is app-private, which

@@ -32,8 +32,10 @@ class LyricsView extends StatefulWidget {
 
 class _LyricsViewState extends State<LyricsView> {
   final _scroll = ScrollController();
-  late final List<GlobalKey> _lineKeys =
-      List.generate(widget.lyrics.lines.length, (_) => GlobalKey());
+  late final List<GlobalKey> _lineKeys = List.generate(
+    widget.lyrics.lines.length,
+    (_) => GlobalKey(),
+  );
   StreamSubscription<Duration>? _sub;
   int _current = -1;
   DateTime _userScrolledAt = DateTime(0);
@@ -63,7 +65,9 @@ class _LyricsViewState extends State<LyricsView> {
       if (index == _current) return; // rebuild only when the line changes
       setState(() => _current = index);
       if (index >= 0 && !_userIsScrolling) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLine(index));
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _scrollToLine(index),
+        );
       }
     } else {
       _glide(position);
@@ -87,11 +91,16 @@ class _LyricsViewState extends State<LyricsView> {
     if (_userIsScrolling || total == null || total == Duration.zero) return;
     if (!_scroll.hasClients) return;
     final max = _scroll.position.maxScrollExtent;
-    final target =
-        (max * position.inMilliseconds / total.inMilliseconds).clamp(0.0, max);
+    final target = (max * position.inMilliseconds / total.inMilliseconds).clamp(
+      0.0,
+      max,
+    );
     if ((target - _scroll.offset).abs() < 2) return;
-    _scroll.animateTo(target,
-        duration: const Duration(milliseconds: 600), curve: Curves.linear);
+    _scroll.animateTo(
+      target,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.linear,
+    );
   }
 
   bool _onScroll(ScrollNotification n) {
@@ -118,18 +127,24 @@ class _LyricsViewState extends State<LyricsView> {
             shaderCallback: (rect) => const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
+              colors: [
+                Colors.transparent,
+                Colors.white,
+                Colors.white,
+                Colors.transparent,
+              ],
               stops: [0, 0.12, 0.88, 1],
             ).createShader(rect),
             blendMode: BlendMode.dstIn,
             child: SingleChildScrollView(
               controller: _scroll,
-              padding: EdgeInsets.symmetric(vertical: lyrics.isSynced ? pad : 24),
+              padding: EdgeInsets.symmetric(
+                vertical: lyrics.isSynced ? pad : 24,
+              ),
               child: Column(
                 children: [
                   if (lyrics.isSynced)
-                    for (var i = 0; i < lyrics.lines.length; i++)
-                      _line(i)
+                    for (var i = 0; i < lyrics.lines.length; i++) _line(i)
                   else ...[
                     Text(
                       lyrics.plain,

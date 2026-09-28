@@ -1,15 +1,12 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/media_item_model.dart';
 import '../../models/playlist.dart';
 import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
-import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/download_folder.dart';
 import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
 import 'playlist_detail_screen.dart';
@@ -85,10 +82,19 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
           tabAlignment: TabAlignment.start,
           indicatorSize: TabBarIndicatorSize.label,
           tabs: const [
-            Tab(icon: Icon(Icons.favorite_rounded, size: 20), text: 'Favorites'),
+            Tab(
+              icon: Icon(Icons.favorite_rounded, size: 20),
+              text: 'Favorites',
+            ),
             Tab(icon: Icon(Icons.history_rounded, size: 20), text: 'History'),
-            Tab(icon: Icon(Icons.queue_music_rounded, size: 20), text: 'Playlists'),
-            Tab(icon: Icon(Icons.download_done_rounded, size: 20), text: 'Downloads'),
+            Tab(
+              icon: Icon(Icons.queue_music_rounded, size: 20),
+              text: 'Playlists',
+            ),
+            Tab(
+              icon: Icon(Icons.download_done_rounded, size: 20),
+              text: 'Downloads',
+            ),
           ],
         ),
       ),
@@ -103,8 +109,9 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
             // History is chronological — sorting it would destroy the only
             // thing it means. Playlists sort by name, not by track.
             sort: tabIndex == 0 ? _sort : null,
-            onSortChanged:
-                tabIndex == 0 ? (value) => setState(() => _sort = value) : null,
+            onSortChanged: tabIndex == 0
+                ? (value) => setState(() => _sort = value)
+                : null,
           ),
           Expanded(
             child: TabBarView(
@@ -140,9 +147,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
   ) {
     final customPath = provider.customDownloadPath;
     final isCustom = customPath != null && customPath.isNotEmpty;
-    final displayPath = isCustom
-        ? customPath
-        : 'Internal Storage / Android / data / com.pulse.music / files / Music';
+    final displayPath = downloadFolderLabel(provider);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -195,33 +200,17 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   displayPath,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: context.colors.mist.withValues(alpha: 0.60)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.colors.mist.withValues(alpha: 0.60),
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
           TextButton(
-            onPressed: () async {
-              final selectedDir = await FilePicker.getDirectoryPath(
-                dialogTitle: 'Select Download Folder',
-              );
-              if (selectedDir == null || selectedDir.isEmpty) return;
-              if (!await YoutubeService.isWritableDirectory(
-                Directory(selectedDir),
-              )) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      "Pulse can't save files in that folder. Pick one inside Music or Download.",
-                    ),
-                  ),
-                );
-                return;
-              }
-              await provider.setCustomDownloadPath(selectedDir);
-            },
+            onPressed: () => chooseDownloadFolder(context),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               minimumSize: Size.zero,
@@ -260,13 +249,18 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               children: [
                 Text(
                   '${downloads.length} downloaded',
-                  style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
+                  style: TextStyle(
+                    color: context.colors.mist.withValues(alpha: 0.60),
+                  ),
                 ),
                 FutureBuilder<int>(
                   future: _sizeFuture(provider),
                   builder: (_, snapshot) => Text(
                     snapshot.hasData ? _formatBytes(snapshot.data!) : '',
-                    style: TextStyle(color: context.colors.mist.withValues(alpha: 0.38), fontSize: 12),
+                    style: TextStyle(
+                      color: context.colors.mist.withValues(alpha: 0.38),
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
@@ -386,10 +380,16 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
           ),
           subtitle: Text(
             '${playlist.length} tracks',
-            style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.60)),
+            style: TextStyle(
+              fontSize: 12,
+              color: context.colors.mist.withValues(alpha: 0.60),
+            ),
           ),
           trailing: IconButton(
-            icon: Icon(Icons.more_vert, color: context.colors.mist.withValues(alpha: 0.38)),
+            icon: Icon(
+              Icons.more_vert,
+              color: context.colors.mist.withValues(alpha: 0.38),
+            ),
             onPressed: () => _showPlaylistActions(playlist, provider),
           ),
           onTap: () => Navigator.push(
@@ -416,7 +416,10 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
           children: [
             if (playlist.items.isNotEmpty)
               ListTile(
-                leading: Icon(Icons.play_arrow_rounded, color: context.colors.accent),
+                leading: Icon(
+                  Icons.play_arrow_rounded,
+                  color: context.colors.accent,
+                ),
                 title: Text('Play all'),
                 onTap: () {
                   provider.playTrack(
@@ -441,7 +444,10 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.redAccent,
+              ),
               title: Text('Delete', style: TextStyle(color: Colors.redAccent)),
               onTap: () async {
                 Navigator.pop(sheetContext);
@@ -470,11 +476,19 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text('Cancel', style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54))),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: context.colors.mist.withValues(alpha: 0.54),
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -523,17 +537,21 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 80, color: context.colors.mist.withValues(alpha: 0.24)),
+            Icon(
+              icon,
+              size: 80,
+              color: context.colors.mist.withValues(alpha: 0.24),
+            ),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: context.colors.mist.withValues(alpha: 0.60)),
+              style: TextStyle(
+                fontSize: 16,
+                color: context.colors.mist.withValues(alpha: 0.60),
+              ),
             ),
-            if (action != null) ...[
-              const SizedBox(height: 20),
-              action,
-            ],
+            if (action != null) ...[const SizedBox(height: 20), action],
           ],
         ),
       ),

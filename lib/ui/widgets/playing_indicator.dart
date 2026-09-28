@@ -13,6 +13,7 @@ import '../theme/app_theme.dart';
 class PlayingIndicator extends StatefulWidget {
   final bool isPlaying;
   final double size;
+
   /// Defaults to the theme's accent.
   final Color? color;
 
@@ -88,8 +89,7 @@ class _PlayingIndicatorState extends State<PlayingIndicator>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              for (final phase in _phases)
-                _bar(barWidth, _heightFactor(phase)),
+              for (final phase in _phases) _bar(barWidth, _heightFactor(phase)),
             ],
           );
         },

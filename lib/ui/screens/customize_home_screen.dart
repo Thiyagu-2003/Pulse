@@ -15,9 +15,12 @@ class CustomizeHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<MusicPlayerProvider>();
     final layout = provider.homeLayout;
-    final sections =
-        arrangeHome(provider.homeLanguage, layout,
-            includeHidden: true, personal: provider.madeForYouSections);
+    final sections = arrangeHome(
+      provider.homeLanguage,
+      layout,
+      includeHidden: true,
+      personal: provider.madeForYouSections,
+    );
 
     Future<void> save(HomeLayout next) => provider.setHomeLayout(next);
 
@@ -39,12 +42,14 @@ class CustomizeHomeScreen extends StatelessWidget {
         onPressed: () async {
           final title = await _askForTitle(context);
           if (title == null) return;
-          await save(layout.copyWith(
-            custom: [
-              ...layout.custom,
-              ('custom_${DateTime.now().millisecondsSinceEpoch}', title),
-            ],
-          ));
+          await save(
+            layout.copyWith(
+              custom: [
+                ...layout.custom,
+                ('custom_${DateTime.now().millisecondsSinceEpoch}', title),
+              ],
+            ),
+          );
         },
       ),
       body: ReorderableListView.builder(
@@ -93,22 +98,26 @@ class CustomizeHomeScreen extends StatelessWidget {
                   IconButton(
                     tooltip: 'Remove section',
                     icon: const Icon(Icons.delete_outline_rounded),
-                    onPressed: () => save(layout.copyWith(
-                      custom: layout.custom
-                          .where((c) => c.$1 != section.id)
-                          .toList(),
-                      order: layout.order
-                          .where((id) => id != section.id)
-                          .toList(),
-                    )),
+                    onPressed: () => save(
+                      layout.copyWith(
+                        custom: layout.custom
+                            .where((c) => c.$1 != section.id)
+                            .toList(),
+                        order: layout.order
+                            .where((id) => id != section.id)
+                            .toList(),
+                      ),
+                    ),
                   ),
                 Switch(
                   value: visible,
-                  onChanged: (on) => save(layout.copyWith(
-                    hidden: on
-                        ? ({...layout.hidden}..remove(section.id))
-                        : {...layout.hidden, section.id},
-                  )),
+                  onChanged: (on) => save(
+                    layout.copyWith(
+                      hidden: on
+                          ? ({...layout.hidden}..remove(section.id))
+                          : {...layout.hidden, section.id},
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -119,14 +128,15 @@ class CustomizeHomeScreen extends StatelessWidget {
   }
 
   static String _describe(HomeSection s) => switch (s.style) {
-        HomeSectionStyle.recent => 'Your recently played songs',
-        HomeSectionStyle.cards => 'Playlist cards',
-        HomeSectionStyle.rows => s.custom
-            ? 'Your section'
-            : s.id.startsWith('foryou')
-                ? 'Made for you, from what you play'
-                : 'Songs',
-      };
+    HomeSectionStyle.recent => 'Your recently played songs',
+    HomeSectionStyle.cards => 'Playlist cards',
+    HomeSectionStyle.rows =>
+      s.custom
+          ? 'Your section'
+          : s.id.startsWith('foryou')
+          ? 'Made for you, from what you play'
+          : 'Songs',
+  };
 
   static Future<String?> _askForTitle(BuildContext context) async {
     final controller = TextEditingController();

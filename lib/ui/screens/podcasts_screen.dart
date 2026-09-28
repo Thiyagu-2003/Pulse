@@ -73,15 +73,22 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
               decoration: BoxDecoration(
                 color: context.colors.mist.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: context.colors.mist.withValues(alpha: 0.10)),
+                border: Border.all(
+                  color: context.colors.mist.withValues(alpha: 0.10),
+                ),
               ),
               child: TextField(
                 controller: _searchController,
                 style: TextStyle(color: context.colors.mist),
                 decoration: InputDecoration(
                   hintText: 'Search podcasts & RSS shows...',
-                  hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.38)),
-                  prefixIcon: Icon(Icons.podcasts, color: podcastOrange(context)),
+                  hintStyle: TextStyle(
+                    color: context.colors.mist.withValues(alpha: 0.38),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.podcasts,
+                    color: podcastOrange(context),
+                  ),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 14),
                 ),
@@ -99,26 +106,29 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                     ),
                   )
                 : _channels.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No podcasts found.',
-                          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
-                        ),
-                      )
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                ? Center(
+                    child: Text(
+                      'No podcasts found.',
+                      style: TextStyle(
+                        color: context.colors.mist.withValues(alpha: 0.54),
+                      ),
+                    ),
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           childAspectRatio: 0.75,
                           crossAxisSpacing: 14,
                           mainAxisSpacing: 14,
                         ),
-                        itemCount: _channels.length,
-                        itemBuilder: (context, index) {
-                          final channel = _channels[index];
-                          return _buildPodcastCard(channel);
-                        },
-                      ),
+                    itemCount: _channels.length,
+                    itemBuilder: (context, index) {
+                      final channel = _channels[index];
+                      return _buildPodcastCard(channel);
+                    },
+                  ),
           ),
         ],
       ),
@@ -134,21 +144,33 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
         children: [
           Expanded(
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
               child: channel.artworkUrl.isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: channel.artworkUrl,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(color: context.colors.mist.withValues(alpha: 0.10)),
+                      placeholder: (context, url) => Container(
+                        color: context.colors.mist.withValues(alpha: 0.10),
+                      ),
                       errorWidget: (context, url, error) => Container(
                         color: context.colors.mist.withValues(alpha: 0.10),
-                        child: Icon(Icons.podcasts, color: podcastOrange(context), size: 50),
+                        child: Icon(
+                          Icons.podcasts,
+                          color: podcastOrange(context),
+                          size: 50,
+                        ),
                       ),
                     )
                   : Container(
                       color: context.colors.mist.withValues(alpha: 0.10),
-                      child: Icon(Icons.podcasts, color: podcastOrange(context), size: 50),
+                      child: Icon(
+                        Icons.podcasts,
+                        color: podcastOrange(context),
+                        size: 50,
+                      ),
                     ),
             ),
           ),
@@ -161,14 +183,20 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                   channel.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   channel.author,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: context.colors.mist.withValues(alpha: 0.60)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.colors.mist.withValues(alpha: 0.60),
+                  ),
                 ),
               ],
             ),
@@ -235,7 +263,9 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
   }
 
   Future<void> _loadEpisodes() async {
-    final episodes = await widget.podcastService.fetchEpisodes(widget.channel.feedUrl);
+    final episodes = await widget.podcastService.fetchEpisodes(
+      widget.channel.feedUrl,
+    );
     if (mounted) {
       setState(() {
         _episodes = episodes;
@@ -246,7 +276,10 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final playerProvider = Provider.of<MusicPlayerProvider>(context, listen: false);
+    final playerProvider = Provider.of<MusicPlayerProvider>(
+      context,
+      listen: false,
+    );
 
     return Column(
       children: [
@@ -268,7 +301,10 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                         width: 60,
                         height: 60,
                         color: context.colors.mist.withValues(alpha: 0.10),
-                        child: Icon(Icons.podcasts, color: podcastOrange(context)),
+                        child: Icon(
+                          Icons.podcasts,
+                          color: podcastOrange(context),
+                        ),
                       ),
               ),
               const SizedBox(width: 12),
@@ -279,12 +315,18 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                     Text(
                       widget.channel.title,
                       maxLines: 1,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     Text(
                       widget.channel.author,
                       maxLines: 1,
-                      style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60), fontSize: 13),
+                      style: TextStyle(
+                        color: context.colors.mist.withValues(alpha: 0.60),
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 ),
@@ -298,42 +340,55 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
         Expanded(
           child: _isLoading
               ? Center(
-                  child: SpinKitDoubleBounce(color: podcastOrange(context), size: 40),
+                  child: SpinKitDoubleBounce(
+                    color: podcastOrange(context),
+                    size: 40,
+                  ),
                 )
               : _episodes.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No episodes found.',
-                        style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: widget.scrollController,
-                      itemCount: _episodes.length,
-                      itemBuilder: (context, index) {
-                        final episode = _episodes[index];
-                        return ListTile(
-                          title: Text(
-                            episode.title,
-                            maxLines: 2,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                          ),
-                          subtitle: Text(
-                            episode.pubDate ?? 'Podcast Episode',
-                            style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.54)),
-                          ),
-                          trailing: Icon(Icons.play_circle_fill, color: podcastOrange(context), size: 36),
-                          onTap: () {
-                            final mediaItem = widget.podcastService.episodeToMediaItem(
-                              episode,
-                              widget.channel,
-                            );
-                            playerProvider.playTrack(mediaItem);
-                            Navigator.pop(context);
-                          },
-                        );
-                      },
+              ? Center(
+                  child: Text(
+                    'No episodes found.',
+                    style: TextStyle(
+                      color: context.colors.mist.withValues(alpha: 0.54),
                     ),
+                  ),
+                )
+              : ListView.builder(
+                  controller: widget.scrollController,
+                  itemCount: _episodes.length,
+                  itemBuilder: (context, index) {
+                    final episode = _episodes[index];
+                    return ListTile(
+                      title: Text(
+                        episode.title,
+                        maxLines: 2,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        episode.pubDate ?? 'Podcast Episode',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.colors.mist.withValues(alpha: 0.54),
+                        ),
+                      ),
+                      trailing: Icon(
+                        Icons.play_circle_fill,
+                        color: podcastOrange(context),
+                        size: 36,
+                      ),
+                      onTap: () {
+                        final mediaItem = widget.podcastService
+                            .episodeToMediaItem(episode, widget.channel);
+                        playerProvider.playTrack(mediaItem);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -344,5 +399,5 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
 /// (~1.9:1), so a darker shade there.
 Color podcastOrange(BuildContext context) =>
     Theme.of(context).brightness == Brightness.light
-        ? Colors.orange.shade800
-        : Colors.orangeAccent;
+    ? Colors.orange.shade800
+    : Colors.orangeAccent;

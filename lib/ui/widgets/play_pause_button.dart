@@ -11,6 +11,7 @@ class PlayPauseButton extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback onPressed;
   final double size;
+
   /// Defaults to the theme's accent.
   final Color? color;
 

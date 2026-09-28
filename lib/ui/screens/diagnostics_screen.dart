@@ -49,7 +49,8 @@ class DiagnosticsScreen extends StatelessWidget {
                   child: Text(
                     'Play a song and its start-up steps appear here.',
                     style: TextStyle(
-                        color: context.colors.mist.withValues(alpha: 0.6)),
+                      color: context.colors.mist.withValues(alpha: 0.6),
+                    ),
                   ),
                 )
               : ListView.separated(
@@ -76,8 +77,8 @@ class _AttemptView extends StatelessWidget {
     final colour = ok
         ? context.colors.accent
         : failed
-            ? Colors.redAccent
-            : context.colors.mist.withValues(alpha: 0.6);
+        ? Colors.redAccent
+        : context.colors.mist.withValues(alpha: 0.6);
     final time = attempt.startedAt.toLocal().toString().substring(11, 19);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,10 +89,10 @@ class _AttemptView extends StatelessWidget {
               ok
                   ? Icons.check_circle_rounded
                   : failed
-                      ? Icons.error_rounded
-                      : loading
-                          ? Icons.hourglass_top_rounded
-                          : Icons.skip_next_rounded,
+                  ? Icons.error_rounded
+                  : loading
+                  ? Icons.hourglass_top_rounded
+                  : Icons.skip_next_rounded,
               color: colour,
               size: 18,
             ),
@@ -104,10 +105,13 @@ class _AttemptView extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-            Text(time,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: context.colors.mist.withValues(alpha: 0.5))),
+            Text(
+              time,
+              style: TextStyle(
+                fontSize: 12,
+                color: context.colors.mist.withValues(alpha: 0.5),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),

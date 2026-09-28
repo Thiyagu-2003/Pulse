@@ -62,16 +62,17 @@ class AppTheme {
       scaffoldBackgroundColor: c.background,
       primaryColor: primary,
       splashFactory: InkSparkle.splashFactory,
-      colorScheme: (isDark ? const ColorScheme.dark() : const ColorScheme.light())
-          .copyWith(
-        primary: primary,
-        onPrimary: Colors.white,
-        secondary: c.accent,
-        onSecondary: c.background,
-        surface: c.surface,
-        onSurface: c.mist,
-        surfaceContainerHighest: c.lift,
-      ),
+      colorScheme:
+          (isDark ? const ColorScheme.dark() : const ColorScheme.light())
+              .copyWith(
+                primary: primary,
+                onPrimary: Colors.white,
+                secondary: c.accent,
+                onSecondary: c.background,
+                surface: c.surface,
+                onSurface: c.mist,
+                surfaceContainerHighest: c.lift,
+              ),
       textTheme: _textTheme(base.textTheme, c.mist),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -141,12 +142,12 @@ class AppTheme {
         labelColor: c.mist,
         unselectedLabelColor: c.mist.withValues(alpha: 0.45),
         dividerColor: Colors.transparent,
-        labelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+        labelStyle: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
       ),
-      listTileTheme: ListTileThemeData(
-        iconColor: c.mist,
-        textColor: c.mist,
-      ),
+      listTileTheme: ListTileThemeData(iconColor: c.mist, textColor: c.mist),
       popupMenuTheme: PopupMenuThemeData(
         color: c.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -243,14 +244,13 @@ class PulseColors extends ThemeExtension<PulseColors> {
     Color? lift,
     Color? mist,
     Color? accent,
-  }) =>
-      PulseColors(
-        background: background ?? this.background,
-        surface: surface ?? this.surface,
-        lift: lift ?? this.lift,
-        mist: mist ?? this.mist,
-        accent: accent ?? this.accent,
-      );
+  }) => PulseColors(
+    background: background ?? this.background,
+    surface: surface ?? this.surface,
+    lift: lift ?? this.lift,
+    mist: mist ?? this.mist,
+    accent: accent ?? this.accent,
+  );
 
   @override
   PulseColors lerp(PulseColors? other, double t) {

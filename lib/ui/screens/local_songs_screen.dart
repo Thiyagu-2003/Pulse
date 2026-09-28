@@ -7,8 +7,9 @@ import '../../models/media_item_model.dart';
 import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/selectable_track_list.dart';
 import '../widgets/track_filter_bar.dart';
-import '../widgets/track_tile.dart';
 import 'folder_songs_screen.dart';
 
 class LocalSongsScreen extends StatefulWidget {
@@ -121,8 +122,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
               color: context.colors.accent,
             ),
             tooltip: _groupByFolder ? 'Show all songs' : 'Group by folder',
-            onPressed: () =>
-                setState(() => _groupByFolder = !_groupByFolder),
+            onPressed: () => setState(() => _groupByFolder = !_groupByFolder),
           ),
           IconButton(
             icon: Icon(Icons.refresh, color: context.colors.accent),
@@ -141,90 +141,109 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
               ),
             )
           : !_hasPermission
-              ? _buildPermissionDeniedView()
-              : _localSongs.isEmpty
-                  ? _buildEmptyView()
-                  : Column(
-                      children: [
-                        TrackFilterBar(
-                          query: _query,
-                          onQueryChanged: (value) =>
-                              setState(() => _query = value),
-                          sort: _sort,
-                          onSortChanged: (value) =>
-                              setState(() => _sort = value),
+          ? _buildPermissionDeniedView()
+          : _localSongs.isEmpty
+          ? _buildEmptyView()
+          : Column(
+              children: [
+                TrackFilterBar(
+                  query: _query,
+                  onQueryChanged: (value) => setState(() => _query = value),
+                  sort: _sort,
+                  onSortChanged: (value) => setState(() => _sort = value),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _query.isEmpty
+                            ? '${_localSongs.length} Songs found'
+                            : '${_visibleSongs.length} of ${_localSongs.length}',
+                        style: TextStyle(
+                          color: context.colors.mist.withValues(alpha: 0.60),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                          child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _query.isEmpty
-                                    ? '${_localSongs.length} Songs found'
-                                    : '${_visibleSongs.length} of ${_localSongs.length}',
-                                style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
-                              ),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primary,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.play_arrow, color: Colors.white),
-                                label: const Text('Play All', style: TextStyle(color: Colors.white)),
-                                onPressed: () {
-                                  // Queue what's on screen, not the whole
-                                  // library — otherwise a search result plays
-                                  // and then wanders off into unfiltered songs.
-                                  final visible = _visibleSongs;
-                                  if (visible.isNotEmpty) {
-                                    final playerProvider = Provider.of<MusicPlayerProvider>(
-                                      context,
-                                      listen: false,
-                                    );
-                                    playerProvider.playTrack(
-                                      visible.first,
-                                      playlist: visible,
-                                    );
-                                  }
-                                },
-                              ),
-                            ],
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: 'Shuffle',
+                        icon: Icon(
+                          Icons.shuffle_rounded,
+                          color: context.colors.accent,
+                        ),
+                        onPressed: () => context
+                            .read<MusicPlayerProvider>()
+                            .shuffleAll(_visibleSongs),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        Expanded(
-                          child: Builder(
-                            builder: (context) {
-                              final visible = _visibleSongs;
-                              if (visible.isEmpty) {
-                                return Center(
-                                  child: Text(
-                                    'No songs match your search.',
-                                    style: TextStyle(color: context.colors.mist.withValues(alpha: 0.54)),
-                                  ),
+                        icon: const Icon(Icons.play_arrow, color: Colors.white),
+                        label: const Text(
+                          'Play All',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        onPressed: () {
+                          // Queue what's on screen, not the whole
+                          // library — otherwise a search result plays
+                          // and then wanders off into unfiltered songs.
+                          final visible = _visibleSongs;
+                          if (visible.isNotEmpty) {
+                            final playerProvider =
+                                Provider.of<MusicPlayerProvider>(
+                                  context,
+                                  listen: false,
                                 );
-                              }
-                              // A search is looking for a track, not a
-                              // folder, so results stay flat.
-                              if (_groupByFolder && _query.isEmpty) {
-                                return _buildFolderList(visible);
-                              }
-                              return ListView.builder(
-                                itemCount: visible.length,
-                                itemBuilder: (context, index) {
-                                  return TrackTile(
-                                    item: visible[index],
-                                    playlist: visible,
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                            playerProvider.playTrack(
+                              visible.first,
+                              playlist: visible,
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    // Pull down to pick up newly added files.
+                    onRefresh: _initLocalMusic,
+                    color: context.colors.accent,
+                    child: Builder(
+                      builder: (context) {
+                        final visible = _visibleSongs;
+                        if (visible.isEmpty) {
+                          return Center(
+                            child: Text(
+                              'No songs match your search.',
+                              style: TextStyle(
+                                color: context.colors.mist.withValues(
+                                  alpha: 0.54,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        // A search is looking for a track, not a
+                        // folder, so results stay flat.
+                        if (_groupByFolder && _query.isEmpty) {
+                          return _buildFolderList(visible);
+                        }
+                        return SelectableTrackList(songs: visible);
+                      },
                     ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -241,13 +260,16 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: (folder.isRecordings ? Colors.orangeAccent : AppTheme.primary)
-                  .withValues(alpha: 0.18),
+              color:
+                  (folder.isRecordings ? Colors.orangeAccent : AppTheme.primary)
+                      .withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
-              color: folder.isRecordings ? Colors.orangeAccent : AppTheme.primary,
+              color: folder.isRecordings
+                  ? Colors.orangeAccent
+                  : AppTheme.primary,
             ),
           ),
           title: Text(
@@ -258,9 +280,41 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
           ),
           subtitle: Text(
             '${folder.length} ${folder.length == 1 ? 'track' : 'tracks'}',
-            style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.60)),
+            style: TextStyle(
+              fontSize: 12,
+              color: context.colors.mist.withValues(alpha: 0.60),
+            ),
           ),
-          trailing: Icon(Icons.chevron_right, color: context.colors.mist.withValues(alpha: 0.38)),
+          // The whole folder at once, without opening it.
+          trailing: PopupMenuButton<String>(
+            tooltip: 'Folder actions',
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: context.colors.mist.withValues(alpha: 0.6),
+            ),
+            onSelected: (action) {
+              final provider = context.read<MusicPlayerProvider>();
+              switch (action) {
+                case 'play':
+                  provider.playTrack(
+                    folder.items.first,
+                    playlist: folder.items,
+                  );
+                case 'shuffle':
+                  provider.shuffleAll(folder.items);
+                case 'queue':
+                  provider.addAllToQueue(folder.items);
+                case 'playlist':
+                  showAddToPlaylistSheet(context, folder.items);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'play', child: Text('Play')),
+              PopupMenuItem(value: 'shuffle', child: Text('Shuffle')),
+              PopupMenuItem(value: 'queue', child: Text('Add to queue')),
+              PopupMenuItem(value: 'playlist', child: Text('Add to playlist')),
+            ],
+          ),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -279,7 +333,11 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.folder_off, size: 80, color: context.colors.mist.withValues(alpha: 0.24)),
+            Icon(
+              Icons.folder_off,
+              size: 80,
+              color: context.colors.mist.withValues(alpha: 0.24),
+            ),
             const SizedBox(height: 16),
             const Text(
               'Storage Permission Required',
@@ -289,16 +347,24 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
             Text(
               'Grant permission to scan your device for local MP3, FLAC, and audio files.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
+              style: TextStyle(
+                color: context.colors.mist.withValues(alpha: 0.60),
+              ),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
               ),
               onPressed: () => _initLocalMusic(fromButton: true),
-              child: const Text('Grant Access', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Grant Access',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -311,7 +377,11 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.library_music, size: 80, color: context.colors.mist.withValues(alpha: 0.24)),
+          Icon(
+            Icons.library_music,
+            size: 80,
+            color: context.colors.mist.withValues(alpha: 0.24),
+          ),
           SizedBox(height: 16),
           Text(
             'No Local Songs Found',
@@ -320,7 +390,9 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
           SizedBox(height: 8),
           Text(
             'Add music files to your device storage to play them offline.',
-            style: TextStyle(color: context.colors.mist.withValues(alpha: 0.60)),
+            style: TextStyle(
+              color: context.colors.mist.withValues(alpha: 0.60),
+            ),
           ),
         ],
       ),

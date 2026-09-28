@@ -26,8 +26,9 @@ class TrackFilterBar extends StatefulWidget {
 }
 
 class _TrackFilterBarState extends State<TrackFilterBar> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.query);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.query,
+  );
 
   @override
   void didUpdateWidget(TrackFilterBar oldWidget) {
@@ -36,8 +37,9 @@ class _TrackFilterBarState extends State<TrackFilterBar> {
     // switch). Assigning during typing would fight the cursor.
     if (widget.query != _controller.text) {
       _controller.text = widget.query;
-      _controller.selection =
-          TextSelection.collapsed(offset: widget.query.length);
+      _controller.selection = TextSelection.collapsed(
+        offset: widget.query.length,
+      );
     }
   }
 
@@ -64,7 +66,9 @@ class _TrackFilterBarState extends State<TrackFilterBar> {
               decoration: BoxDecoration(
                 color: context.colors.mist.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: context.colors.mist.withValues(alpha: 0.10)),
+                border: Border.all(
+                  color: context.colors.mist.withValues(alpha: 0.10),
+                ),
               ),
               child: TextField(
                 controller: _controller,
@@ -72,12 +76,23 @@ class _TrackFilterBarState extends State<TrackFilterBar> {
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: hintText,
-                  hintStyle: TextStyle(color: context.colors.mist.withValues(alpha: 0.38), fontSize: 14),
-                  prefixIcon: Icon(Icons.search, color: context.colors.accent, size: 20),
+                  hintStyle: TextStyle(
+                    color: context.colors.mist.withValues(alpha: 0.38),
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: context.colors.accent,
+                    size: 20,
+                  ),
                   suffixIcon: query.isEmpty
                       ? null
                       : IconButton(
-                          icon: Icon(Icons.clear, color: context.colors.mist.withValues(alpha: 0.38), size: 18),
+                          icon: Icon(
+                            Icons.clear,
+                            color: context.colors.mist.withValues(alpha: 0.38),
+                            size: 18,
+                          ),
                           onPressed: () => onQueryChanged(''),
                         ),
                   border: InputBorder.none,
@@ -106,7 +121,9 @@ class _TrackFilterBarState extends State<TrackFilterBar> {
                               ? Icons.radio_button_checked
                               : Icons.radio_button_unchecked,
                           size: 16,
-                          color: option == sort ? context.colors.accent : context.colors.mist.withValues(alpha: 0.38),
+                          color: option == sort
+                              ? context.colors.accent
+                              : context.colors.mist.withValues(alpha: 0.38),
                         ),
                         const SizedBox(width: 10),
                         Text(option.label),

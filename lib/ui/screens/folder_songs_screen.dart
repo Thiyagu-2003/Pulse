@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/media_folder.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
-import '../widgets/track_tile.dart';
+import '../widgets/selectable_track_list.dart';
 
 /// The tracks inside one device folder — Music, Recordings, Call recordings.
 class FolderSongsScreen extends StatelessWidget {
@@ -26,32 +26,38 @@ class FolderSongsScreen extends StatelessWidget {
             ),
             Text(
               '${folder.length} ${folder.length == 1 ? 'track' : 'tracks'}',
-              style: TextStyle(fontSize: 12, color: context.colors.mist.withValues(alpha: 0.54)),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.colors.mist.withValues(alpha: 0.54),
+              ),
             ),
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.shuffle_rounded, color: context.colors.accent),
+            tooltip: 'Shuffle',
+            onPressed: folder.items.isEmpty
+                ? null
+                : () => context.read<MusicPlayerProvider>().shuffleAll(
+                    folder.items,
+                  ),
+          ),
           IconButton(
             icon: Icon(Icons.play_arrow_rounded, color: context.colors.accent),
             tooltip: 'Play all',
             onPressed: folder.items.isEmpty
                 ? null
                 : () => context.read<MusicPlayerProvider>().playTrack(
-                      folder.items.first,
-                      playlist: folder.items,
-                    ),
+                    folder.items.first,
+                    playlist: folder.items,
+                  ),
           ),
         ],
       ),
-      body: ListView.builder(
-        itemCount: folder.items.length,
-        itemBuilder: (context, index) => TrackTile(
-          item: folder.items[index],
-          // Queue only this folder, so a call recording can't run on into
-          // the next one just because it happened to be next on disk.
-          playlist: folder.items,
-        ),
-      ),
+      // Queue only this folder, so a call recording can't run on into the
+      // next one just because it happened to be next on disk.
+      body: SelectableTrackList(songs: folder.items),
     );
   }
 }

@@ -174,6 +174,8 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Push the current track to the home-screen widget. The widget can only
   /// show a local file, so network artwork is fetched once per track.
   Future<void> _syncWidget() async {
+    // The home-screen widget is Android's; elsewhere don't fetch its art.
+    if (!Platform.isAndroid) return;
     final track = _currentTrack;
     final url = track?.artUri;
     String? artPath;
@@ -221,7 +223,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   }
 
   /// Download YouTube/Online track locally for offline playback
-  Future<String?> downloadTrack(AppMediaItem item) async {
+  Future<String?> downloadTrack(AppMediaItem item, {String? folder}) async {
     if (_downloadingIds.contains(item.id)) return null;
     _downloadingIds.add(item.id);
     _holdKeepAlive();
@@ -236,6 +238,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     try {
       path = await ytService.downloadAudioTrack(
         item,
+        folder: folder,
         onProgress: (value) {
           _downloadProgress[item.id] = value;
           final now = DateTime.now();
@@ -307,7 +310,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Download every online track in [items] that isn't on disk yet, two at a
   /// time — faster than one by one, without the burst that gets YouTube
   /// refusing requests. Returns how many failed.
-  Future<int> downloadAll(List<AppMediaItem> items) async {
+  Future<int> downloadAll(List<AppMediaItem> items, {String? folder}) async {
     final queue = notDownloaded(items);
     var failed = 0;
     Future<void> worker() async {
@@ -317,7 +320,7 @@ class MusicPlayerProvider extends ChangeNotifier {
         // may have got to it meanwhile — that's not a failure, and not a
         // second download.
         if (isDownloaded(item.id) || isDownloading(item.id)) continue;
-        if (await downloadTrack(item) == null) failed++;
+        if (await downloadTrack(item, folder: folder) == null) failed++;
       }
     }
 
@@ -330,6 +333,29 @@ class MusicPlayerProvider extends ChangeNotifier {
       _releaseKeepAlive();
     }
     return failed;
+  }
+
+  /// Download [items] as a playlist called [name]: into a folder of that
+  /// name, and kept together as a playlist in the Library — so the songs
+  /// don't mingle with single downloads. Reuses the playlist [playlistId]
+  /// (or one already called [name]); returns how many failed.
+  Future<int> downloadPlaylist(
+    String name,
+    List<AppMediaItem> items, {
+    String? playlistId,
+  }) async {
+    var playlist = playlistId != null
+        ? getPlaylist(playlistId)
+        : getPlaylists().where((p) => p.name == name).firstOrNull;
+    playlist ??= await createPlaylist(name);
+    await addAllToPlaylist(playlist.id, items);
+    playlist = getPlaylist(playlist.id)!;
+    if (playlist.folder == null) {
+      playlist = playlist.copyWith(folder: name);
+      await _storageService.savePlaylist(playlist);
+      notifyListeners();
+    }
+    return downloadAll(items, folder: playlist.folder);
   }
 
   /// Everything that needs the app alive in the background (each download,
@@ -704,6 +730,33 @@ class MusicPlayerProvider extends ChangeNotifier {
     return added;
   }
 
+  /// Several songs at once, in order, right after the one playing.
+  void playNextAll(List<AppMediaItem> items) {
+    for (final item in items.reversed) {
+      _queueState.insertNext(item);
+    }
+    notifyListeners();
+    _prefetchUpcoming();
+  }
+
+  /// Several songs at once, appended in order.
+  void addAllToQueue(List<AppMediaItem> items) {
+    for (final item in items) {
+      _queueState.append(item);
+    }
+    notifyListeners();
+  }
+
+  /// Play [items] in shuffled order, starting from a random one.
+  Future<void> shuffleAll(List<AppMediaItem> items) async {
+    if (items.isEmpty) return;
+    final first = (List.of(items)..shuffle()).first;
+    await playTrack(first, playlist: items);
+    // Shuffle pins the playing song first and mixes the rest.
+    _queueState.setShuffled(true);
+    notifyListeners();
+  }
+
   /// Append [item] to the end of the queue. False if it's what's playing.
   bool addToQueue(AppMediaItem item) {
     final added = _queueState.append(item);
@@ -912,8 +965,49 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> renamePlaylist(String id, String name) async {
     final playlist = _storageService.getPlaylist(id);
     if (playlist == null) return;
-    await _storageService.savePlaylist(playlist.copyWith(name: name.trim()));
+    var renamed = playlist.copyWith(name: name.trim());
+    // A downloaded playlist's folder is renamed with it.
+    final folder = playlist.folder;
+    if (folder != null) {
+      final moved = await _renameFolder(folder, name.trim());
+      if (moved) renamed = renamed.copyWith(folder: name.trim());
+    }
+    await _storageService.savePlaylist(renamed);
     notifyListeners();
+  }
+
+  /// Rename a playlist's download folder and point its downloads at the new
+  /// place. False (nothing changed) if the new name is taken or the move
+  /// fails — the playlist is still renamed, its folder just keeps the name.
+  Future<bool> _renameFolder(String from, String to) async {
+    try {
+      final old = await ytService.playlistFolder(from);
+      final target = Directory(
+          '${old.parent.path}/${YoutubeService.safeFolderName(to)}');
+      if (target.path == old.path) return true;
+      if (await target.exists()) return false;
+      await old.rename(target.path);
+      final prefix = '${old.path}/';
+      for (final d in _storageService.getDownloads()) {
+        final path = d.streamUrl;
+        if (path == null || !path.startsWith(prefix)) continue;
+        await _storageService.saveDownload(AppMediaItem(
+          id: d.id,
+          title: d.title,
+          artist: d.artist,
+          album: d.album,
+          artUri: d.artUri,
+          streamUrl: '${target.path}/${path.substring(prefix.length)}',
+          duration: d.duration,
+          sourceType: d.sourceType,
+          extras: d.extras,
+        ));
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Could not rename playlist folder: $e');
+      return false;
+    }
   }
 
   Future<void> deletePlaylist(String id) async {
@@ -928,6 +1022,23 @@ class MusicPlayerProvider extends ChangeNotifier {
     await _storageService.savePlaylist(playlist.withItem(item));
     notifyListeners();
     return true;
+  }
+
+  /// Add many songs in one save; ones already there are skipped. Returns
+  /// how many were added.
+  Future<int> addAllToPlaylist(
+      String playlistId, List<AppMediaItem> items) async {
+    var playlist = _storageService.getPlaylist(playlistId);
+    if (playlist == null) return 0;
+    var added = 0;
+    for (final item in items) {
+      if (playlist!.contains(item.id)) continue;
+      playlist = playlist.withItem(item);
+      added++;
+    }
+    if (added > 0) await _storageService.savePlaylist(playlist!);
+    notifyListeners();
+    return added;
   }
 
   Future<void> removeFromPlaylist(String playlistId, String trackId) async {

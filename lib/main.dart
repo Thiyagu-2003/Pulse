@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/audio_handler.dart';
@@ -45,6 +47,11 @@ class MusicPlayerApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
+      // Desktop: Flutter only drags lists by touch, so the sideways home
+      // rows couldn't be moved with a mouse. Let every pointer drag.
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        dragDevices: PointerDeviceKind.values.toSet(),
+      ),
       home: const MainNavigationScreen(),
     );
   }

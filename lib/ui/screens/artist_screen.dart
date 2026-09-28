@@ -151,7 +151,11 @@ class _ArtistScreenState extends State<ArtistScreen> {
                             .playTrack(songs.first, playlist: songs),
                       ),
                     const Spacer(),
-                    if (songs.isNotEmpty) DownloadAllButton(items: songs),
+                    if (songs.isNotEmpty)
+                      DownloadAllButton(
+                        items: songs,
+                        playlistName: '${artist.name} top songs',
+                      ),
                   ],
                 ),
               ),

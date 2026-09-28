@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -10,6 +11,7 @@ import '../../services/playback_cache.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/update_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/download_folder.dart';
 import 'customize_home_screen.dart';
 import 'diagnostics_screen.dart';
 import 'equalizer_screen.dart';
@@ -189,25 +191,42 @@ class SettingsScreen extends StatelessWidget {
             value: provider.dataSaverOnMobile,
             onChanged: provider.setDataSaverOnMobile,
           ),
-          ListTile(
-            leading: const Icon(Icons.system_update_rounded),
-            title: const Text('Check for updates'),
-            subtitle: FutureBuilder<String?>(
-              future: PlatformBridge.appVersion(),
-              builder: (_, v) => Text('Pulse ${v.data ?? ''}'.trim()),
+          // Releases carry Android APKs; the check can't read a desktop
+          // build's version, and would always say "latest".
+          if (Platform.isAndroid)
+            ListTile(
+              leading: const Icon(Icons.system_update_rounded),
+              title: const Text('Check for updates'),
+              subtitle: FutureBuilder<String?>(
+                future: PlatformBridge.appVersion(),
+                builder: (_, v) => Text('Pulse ${v.data ?? ''}'.trim()),
+              ),
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final update = await UpdateService.check();
+                if (!context.mounted) return;
+                if (update == null) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text("You're on the latest version"),
+                    ),
+                  );
+                } else {
+                  showUpdateDialog(context, update);
+                }
+              },
             ),
-            onTap: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              final update = await UpdateService.check();
-              if (!context.mounted) return;
-              if (update == null) {
-                messenger.showSnackBar(
-                  const SnackBar(content: Text("You're on the latest version")),
-                );
-              } else {
-                showUpdateDialog(context, update);
-              }
-            },
+          ListTile(
+            leading: const Icon(Icons.folder_open_rounded),
+            title: const Text('Download folder'),
+            subtitle: Text(downloadFolderLabel(provider)),
+            trailing: provider.customDownloadPath == null
+                ? null
+                : TextButton(
+                    onPressed: () => provider.setCustomDownloadPath(null),
+                    child: const Text('Reset'),
+                  ),
+            onTap: () => chooseDownloadFolder(context),
           ),
           const _Heading('Library'),
           ListTile(
