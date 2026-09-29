@@ -42,6 +42,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       PlatformBridge.setLauncherIcon(
         dark: context.read<MusicPlayerProvider>().darkLauncherIcon,
       );
+    } else if (state == AppLifecycleState.detached) {
+      final provider = context.read<MusicPlayerProvider>();
+      if (provider.stopPlaybackOnClose) {
+        provider.stop();
+      }
     }
   }
 
@@ -49,11 +54,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final provider = context.read<MusicPlayerProvider>();
     // Native parts (widget, notifications) read the icon style from their
     // own store; keep it in step with the setting on every start.
-    PlatformBridge.setIconStyle(
-      dark: context.read<MusicPlayerProvider>().darkLauncherIcon,
-    );
+    PlatformBridge.setIconStyle(dark: provider.darkLauncherIcon);
+    PlatformBridge.setStopOnClose(stop: provider.stopPlaybackOnClose);
     // This shell outlives every tab and the Now Playing route, so it is the
     // one place guaranteed to be mounted whenever playback fails.
     _errorSubscription = context

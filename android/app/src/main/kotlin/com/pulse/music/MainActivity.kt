@@ -22,18 +22,40 @@ class MainActivity : AudioServiceActivity() {
          */
         @Volatile
         var engineReady = false
+
+        var channel: MethodChannel? = null
+    }
+
+    override fun onStart() {
+        super.onStart()
+        PulseTaskService.start(applicationContext)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        PulseTaskService.start(applicationContext)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         engineReady = true
         applyTaskIcon()
+        PulseTaskService.start(applicationContext)
         // Application context: the engine can outlive this activity while
         // audio keeps playing in the background.
         val app = applicationContext
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "pulse/platform")
-            .setMethodCallHandler { call, result ->
+        val platformChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "pulse/platform")
+        channel = platformChannel
+        platformChannel.setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "setStopOnClose" -> {
+                        val stop = call.argument<Boolean>("stop") ?: false
+                        app.getSharedPreferences("pulse_preferences", Context.MODE_PRIVATE)
+                            .edit()
+                            .putBoolean("stop_on_close", stop)
+                            .apply()
+                        result.success(null)
+                    }
                     "updateWidget" -> {
                         app.getSharedPreferences(PulseWidgetProvider.PREFS, Context.MODE_PRIVATE)
                             .edit()

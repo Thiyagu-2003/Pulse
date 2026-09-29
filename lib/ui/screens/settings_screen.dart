@@ -191,6 +191,15 @@ class SettingsScreen extends StatelessWidget {
             value: provider.dataSaverOnMobile,
             onChanged: provider.setDataSaverOnMobile,
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.stop_circle_outlined),
+            title: const Text('Stop playback on app close'),
+            subtitle: const Text(
+              'Stop music when Pulse is closed from recent apps instead of continuing in the background',
+            ),
+            value: provider.stopPlaybackOnClose,
+            onChanged: provider.setStopPlaybackOnClose,
+          ),
           // Releases carry Android APKs; the check can't read a desktop
           // build's version, and would always say "latest".
           if (Platform.isAndroid)

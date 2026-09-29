@@ -33,6 +33,24 @@ class PlatformBridge {
   static Future<void> setIconStyle({required bool dark}) =>
       _call('setIconStyle', {'dark': dark});
 
+  /// Tells Android whether to stop audio playback when the app is swiped away
+  /// from the Recent Apps screen.
+  static Future<void> setStopOnClose({required bool stop}) =>
+      _call('setStopOnClose', {'stop': stop});
+
+  static VoidCallback? onStopPlaybackRequested;
+  static bool _handlerInstalled = false;
+
+  static void ensureHandler() {
+    if (_handlerInstalled) return;
+    _handlerInstalled = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'stopPlayback') {
+        onStopPlaybackRequested?.call();
+      }
+    });
+  }
+
   /// The installed version ("1.0.0"), or null off Android.
   static Future<String?> appVersion() async {
     try {

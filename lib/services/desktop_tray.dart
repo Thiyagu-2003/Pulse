@@ -101,7 +101,14 @@ class DesktopTray with TrayListener, WindowListener {
   }
 
   @override
-  void onWindowClose() => windowManager.hide();
+  void onWindowClose() {
+    if (_provider.stopPlaybackOnClose) {
+      _provider.audioHandler.stop();
+      _quit();
+    } else {
+      windowManager.hide();
+    }
+  }
 
   Future<void> _quit() async {
     await trayManager.destroy();

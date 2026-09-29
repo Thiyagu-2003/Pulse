@@ -58,6 +58,10 @@ class MusicPlayerProvider extends ChangeNotifier {
     };
     _initListeners();
     if (Platform.isAndroid) applyEqualizer(equalizerSettings);
+    PlatformBridge.ensureHandler();
+    PlatformBridge.onStopPlaybackRequested = () {
+      _audioHandler.stop();
+    };
   }
 
   CustomAudioHandler get audioHandler => _audioHandler;
@@ -931,6 +935,18 @@ class MusicPlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool get stopPlaybackOnClose => _storageService.getStopPlaybackOnClose();
+
+  Future<void> setStopPlaybackOnClose(bool stop) async {
+    await _storageService.setStopPlaybackOnClose(stop);
+    PlatformBridge.setStopOnClose(stop: stop);
+    notifyListeners();
+  }
+
+  Future<void> stop() async {
+    await _audioHandler.stop();
+  }
+
   Map<String, dynamic> exportBackup() => _storageService.exportBackup();
 
   /// Merge a backup in; returns how many entries it restored.
@@ -938,6 +954,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     final count = await _storageService.importBackup(backup);
     if (Platform.isAndroid) applyEqualizer(equalizerSettings);
     PlatformBridge.setIconStyle(dark: darkLauncherIcon);
+    PlatformBridge.setStopOnClose(stop: stopPlaybackOnClose);
     notifyListeners();
     return count;
   }

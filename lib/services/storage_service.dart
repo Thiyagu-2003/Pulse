@@ -45,6 +45,7 @@ class StorageService {
   static const String dataSaverOnMobileKey = 'data_saver_on_mobile';
   static const String homeLayoutKey = 'home_layout';
   static const String darkLauncherIconKey = 'dark_launcher_icon';
+  static const String stopPlaybackOnCloseKey = 'stop_playback_on_close';
   static const String defaultHomeLanguage = 'Tamil';
   static const int recentSearchLimit = 10;
   static const int historyLimit = 200;
@@ -260,6 +261,13 @@ class StorageService {
 
   Future<void> setDarkLauncherIcon(bool dark) =>
       _settingsBox.put(darkLauncherIconKey, '$dark');
+
+  /// Whether playback should stop when the app is closed/swiped away from recents.
+  bool getStopPlaybackOnClose() =>
+      getFlag(stopPlaybackOnCloseKey, fallback: false);
+
+  Future<void> setStopPlaybackOnClose(bool on) =>
+      setFlag(stopPlaybackOnCloseKey, on);
 
   List<String> getRecentSearches() {
     final stored = _settingsBox.get(recentSearchesKey);
