@@ -38,6 +38,7 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   Timer? _sleepTimer;
   DateTime? _sleepEndsAt;
+  bool _sleepTimerEndOfQueue = false;
   Duration _lastSavedPosition = Duration.zero;
 
   MusicPlayerProvider(this._audioHandler, this._storageService) {
@@ -83,11 +84,13 @@ class MusicPlayerProvider extends ChangeNotifier {
   bool get isShuffled => _queueState.isShuffled;
   QueueRepeat get repeatMode => _repeat;
 
-  bool get hasSleepTimer => _sleepTimer?.isActive ?? false;
+  bool get hasSleepTimer =>
+      (_sleepTimer?.isActive ?? false) || _sleepTimerEndOfQueue;
+  bool get sleepTimerEndOfQueue => _sleepTimerEndOfQueue;
 
-  /// Time left before playback pauses, or null if no timer is running.
+  /// Time left before playback pauses, or null if no timed timer is running.
   Duration? get sleepTimeRemaining {
-    if (!hasSleepTimer || _sleepEndsAt == null) return null;
+    if (!(_sleepTimer?.isActive ?? false) || _sleepEndsAt == null) return null;
     final left = _sleepEndsAt!.difference(DateTime.now());
     return left.isNegative ? Duration.zero : left;
   }
@@ -95,13 +98,24 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Pause playback after [duration]. Starting a new timer replaces any
   /// running one — otherwise both would fire.
   void startSleepTimer(Duration duration) {
-    _sleepTimer?.cancel();
+    cancelSleepTimer();
     _sleepEndsAt = DateTime.now().add(duration);
     _sleepTimer = Timer(duration, () {
       _audioHandler.pause();
       _sleepEndsAt = null;
+      _sleepTimer = null;
       notifyListeners();
     });
+    notifyListeners();
+  }
+
+  /// Pause playback once the current queue / playlist finishes playing all songs.
+  void startSleepTimerEndOfQueue() {
+    cancelSleepTimer();
+    _sleepTimerEndOfQueue = true;
+    if (_repeat == QueueRepeat.one) {
+      _audioHandler.setLoopOne(false);
+    }
     notifyListeners();
   }
 
@@ -109,6 +123,12 @@ class MusicPlayerProvider extends ChangeNotifier {
     _sleepTimer?.cancel();
     _sleepTimer = null;
     _sleepEndsAt = null;
+    if (_sleepTimerEndOfQueue) {
+      _sleepTimerEndOfQueue = false;
+      if (_repeat == QueueRepeat.one) {
+        _audioHandler.setLoopOne(true);
+      }
+    }
     notifyListeners();
   }
 
@@ -573,7 +593,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> _extendWithRadio(AppMediaItem track) async {
     final online =
         track.sourceType.isOnline || track.extras?[originKey] != null;
-    if (!autoplay || !online || _repeat != QueueRepeat.off) return;
+    if (!autoplay || !online || _repeat != QueueRepeat.off || _sleepTimerEndOfQueue) return;
     if (_queueState.orderPos != _queueState.length - 1) return;
     if (_radioSeed == track.id) return; // already fetching for this one
     _radioSeed = track.id;
@@ -807,12 +827,29 @@ class MusicPlayerProvider extends ChangeNotifier {
     // A finished episode must not resume at its own outro next time.
     final finished = _currentTrack;
     if (finished != null) await _storageService.clearPosition(finished.id);
+
+    if (_sleepTimerEndOfQueue) {
+      // If we are at the last track of the playlist / queue, pause and end timer!
+      if (_queueState.orderPos >= _queueState.length - 1) {
+        cancelSleepTimer();
+        await _audioHandler.pause();
+        return;
+      }
+    }
+
     await _moveTo(auto: true);
   }
 
   Future<void> _moveTo({required bool auto}) async {
-    final next = _queueState.advance(repeat: _repeat, auto: auto);
-    if (next == null) return;
+    final effectiveRepeat = _sleepTimerEndOfQueue ? QueueRepeat.off : _repeat;
+    final next = _queueState.advance(repeat: effectiveRepeat, auto: auto);
+    if (next == null) {
+      if (_sleepTimerEndOfQueue) {
+        cancelSleepTimer();
+        await _audioHandler.pause();
+      }
+      return;
+    }
     await _play(next);
   }
 

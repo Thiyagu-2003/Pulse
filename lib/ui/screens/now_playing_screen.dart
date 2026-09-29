@@ -920,6 +920,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       Duration(hours: 1),
     ];
     final remaining = provider.sleepTimeRemaining;
+    final isEndOfQueue = provider.sleepTimerEndOfQueue;
 
     showModalBottomSheet(
       context: context,
@@ -928,55 +929,302 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                remaining != null
-                    ? 'Pausing in ${remaining.inMinutes + 1} min'
-                    : 'Sleep timer',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  isEndOfQueue
+                      ? 'Stopping at end of playlist'
+                      : remaining != null
+                          ? 'Pausing in ${remaining.inMinutes + 1} min'
+                          : 'Sleep timer',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.mist,
+                  ),
                 ),
               ),
-            ),
-            for (final option in options)
+              // End of playlist / queue option
               ListTile(
-                leading: const Icon(
-                  Icons.bedtime_outlined,
-                  color: Colors.white54,
+                leading: Icon(
+                  Icons.queue_music_rounded,
+                  color: isEndOfQueue ? AppTheme.accent : Colors.white70,
                 ),
                 title: Text(
-                  option.inMinutes < 60
-                      ? '${option.inMinutes} minutes'
-                      : '1 hour',
+                  'End of playlist / queue',
+                  style: TextStyle(
+                    fontWeight:
+                        isEndOfQueue ? FontWeight.bold : FontWeight.normal,
+                    color: isEndOfQueue ? AppTheme.accent : Colors.white,
+                  ),
                 ),
-                onTap: () {
-                  provider.startSleepTimer(option);
-                  Navigator.pop(sheetContext);
-                },
+                subtitle: Text(
+                  provider.queue.isEmpty
+                      ? 'Queue is empty'
+                      : '${(provider.queue.length - provider.currentIndex).clamp(0, provider.queue.length)} track(s) remaining',
+                  style: TextStyle(
+                    color: isEndOfQueue
+                        ? AppTheme.accent.withValues(alpha: 0.8)
+                        : Colors.white38,
+                    fontSize: 12,
+                  ),
+                ),
+                trailing: isEndOfQueue
+                    ? const Icon(
+                        Icons.check_circle_rounded,
+                        color: AppTheme.accent,
+                      )
+                    : null,
+                onTap: provider.queue.isEmpty
+                    ? null
+                    : () {
+                        final messenger = ScaffoldMessenger.of(context);
+                        provider.startSleepTimerEndOfQueue();
+                        Navigator.pop(sheetContext);
+                        showCompactSnack(
+                          messenger,
+                          'Sleep timer: stopping at end of playlist',
+                          icon: Icons.queue_music_rounded,
+                        );
+                      },
               ),
-            if (remaining != null)
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: AppTheme.mist.withValues(alpha: 0.08),
+              ),
+              for (final option in options)
+                ListTile(
+                  leading: const Icon(
+                    Icons.bedtime_outlined,
+                    color: Colors.white54,
+                  ),
+                  title: Text(
+                    option.inMinutes < 60
+                        ? '${option.inMinutes} minutes'
+                        : '1 hour',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    final messenger = ScaffoldMessenger.of(context);
+                    provider.startSleepTimer(option);
+                    Navigator.pop(sheetContext);
+                    showCompactSnack(
+                      messenger,
+                      'Sleep timer set for ${option.inMinutes < 60 ? "${option.inMinutes} minutes" : "1 hour"}',
+                      icon: Icons.bedtime_outlined,
+                    );
+                  },
+                ),
+              // Custom duration option
               ListTile(
                 leading: const Icon(
-                  Icons.close_rounded,
-                  color: Colors.redAccent,
+                  Icons.more_time_rounded,
+                  color: Colors.white70,
                 ),
                 title: const Text(
-                  'Cancel timer',
-                  style: TextStyle(color: Colors.redAccent),
+                  'Custom duration...',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'Set a custom time in minutes',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
                 ),
                 onTap: () {
-                  provider.cancelSleepTimer();
                   Navigator.pop(sheetContext);
+                  _showCustomSleepTimerDialog(context, provider);
                 },
               ),
-          ],
+              if (provider.hasSleepTimer)
+                ListTile(
+                  leading: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.redAccent,
+                  ),
+                  title: const Text(
+                    'Cancel timer',
+                    style: TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    final messenger = ScaffoldMessenger.of(context);
+                    provider.cancelSleepTimer();
+                    Navigator.pop(sheetContext);
+                    showCompactSnack(
+                      messenger,
+                      'Sleep timer turned off',
+                      icon: Icons.timer_off_rounded,
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Future<void> _showCustomSleepTimerDialog(
+    BuildContext context,
+    MusicPlayerProvider provider,
+  ) async {
+    final controller = TextEditingController(text: '20');
+    final messenger = ScaffoldMessenger.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final parsed = int.tryParse(controller.text) ?? 0;
+            return AlertDialog(
+              backgroundColor: AppTheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.more_time_rounded,
+                      color: AppTheme.accent, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    'Custom sleep timer',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.mist,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Enter duration in minutes:',
+                      style: TextStyle(
+                        color: AppTheme.mist.withValues(alpha: 0.70),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      autofocus: true,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.mist,
+                      ),
+                      decoration: InputDecoration(
+                        suffixText: 'min',
+                        suffixStyle: TextStyle(
+                          color: AppTheme.mist.withValues(alpha: 0.60),
+                          fontSize: 16,
+                        ),
+                        filled: true,
+                        fillColor: AppTheme.lift,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: AppTheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Quick presets:',
+                      style: TextStyle(
+                        color: AppTheme.mist.withValues(alpha: 0.50),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [10, 20, 30, 60, 90, 120].map((mins) {
+                        final isSelected = parsed == mins;
+                        return ChoiceChip(
+                          label: Text('${mins}m'),
+                          selected: isSelected,
+                          selectedColor: AppTheme.primary,
+                          backgroundColor: AppTheme.lift,
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.white : AppTheme.mist,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                          onSelected: (_) {
+                            controller.text = mins.toString();
+                            controller.selection = TextSelection.fromPosition(
+                              TextPosition(offset: controller.text.length),
+                            );
+                            setDialogState(() {});
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: AppTheme.mist.withValues(alpha: 0.60),
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: parsed <= 0
+                      ? null
+                      : () {
+                          provider.startSleepTimer(Duration(minutes: parsed));
+                          Navigator.pop(dialogContext);
+                          final hours = parsed ~/ 60;
+                          final mins = parsed % 60;
+                          final formatted = hours > 0
+                              ? (mins > 0
+                                  ? '${hours}h ${mins}m'
+                                  : '${hours}h')
+                              : '$mins min';
+                          showCompactSnack(
+                            messenger,
+                            'Sleep timer set for $formatted',
+                            icon: Icons.bedtime_outlined,
+                          );
+                        },
+                  child: const Text('Start timer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -986,144 +1234,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   ) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      // Watches the provider so reorders and removals redraw the sheet in
-      // place — a modal route does not rebuild with the screen behind it.
-      builder: (_) => Consumer<MusicPlayerProvider>(
-        builder: (_, queueProvider, _) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Playing Queue · ${queueProvider.queue.length}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Save as playlist',
-                    icon: const Icon(Icons.playlist_add_rounded),
-                    onPressed: queueProvider.queue.isEmpty
-                        ? null
-                        : () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            final name = await promptForPlaylistName(
-                              context,
-                              title: 'Save queue as playlist',
-                            );
-                            if (name == null) return;
-                            await queueProvider.saveQueueAsPlaylist(name);
-                            showCompactSnack(
-                              messenger,
-                              'Saved playlist: $name',
-                              icon: Icons.playlist_add_check_rounded,
-                            );
-                          },
-                  ),
-                  IconButton(
-                    tooltip: 'Clear up next',
-                    icon: const Icon(Icons.clear_all_rounded),
-                    onPressed: queueProvider.queue.length < 2
-                        ? null
-                        : queueProvider.clearUpNext,
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: queueProvider.queue.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Queue is empty.',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    )
-                  : ReorderableListView.builder(
-                      itemCount: queueProvider.queue.length,
-                      onReorder: (from, to) {
-                        if (from < to) to -= 1;
-                        queueProvider.moveInQueue(from, to);
-                      },
-                      itemBuilder: (_, index) {
-                        final item = queueProvider.queue[index];
-                        final isCurrent = index == queueProvider.currentIndex;
-                        // Swipe either way to remove. The queue never holds
-                        // a song twice, so its id is a stable key.
-                        return Dismissible(
-                          key: ValueKey(item.id),
-                          onDismissed: (_) =>
-                              queueProvider.removeFromQueue(index),
-                          background: Container(
-                            color: Colors.red.withValues(alpha: 0.3),
-                          ),
-                          child: ListTile(
-                            leading: Icon(
-                              isCurrent ? Icons.volume_up : Icons.music_note,
-                              color: isCurrent
-                                  ? AppTheme.accent
-                                  : Colors.white38,
-                            ),
-                            title: Text(
-                              item.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: isCurrent
-                                    ? AppTheme.accent
-                                    : Colors.white,
-                              ),
-                            ),
-                            subtitle: Text(
-                              item.artist,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    size: 18,
-                                  ),
-                                  color: Colors.white38,
-                                  tooltip: 'Remove from queue',
-                                  onPressed: () =>
-                                      queueProvider.removeFromQueue(index),
-                                ),
-                                ReorderableDragStartListener(
-                                  index: index,
-                                  child: const Padding(
-                                    padding: EdgeInsets.only(right: 4),
-                                    child: Icon(
-                                      Icons.drag_handle_rounded,
-                                      color: Colors.white38,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              queueProvider.playQueueItem(index);
-                              Navigator.pop(context);
-                            },
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => const _QueueBottomSheet(),
     );
   }
 
@@ -1142,5 +1256,370 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     // displayed as 05:23.
     if (duration.inHours > 0) return '${duration.inHours}:$minutes:$seconds';
     return '$minutes:$seconds';
+  }
+}
+
+class _QueueBottomSheet extends StatefulWidget {
+  const _QueueBottomSheet();
+
+  @override
+  State<_QueueBottomSheet> createState() => _QueueBottomSheetState();
+}
+
+class _QueueBottomSheetState extends State<_QueueBottomSheet> {
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
+
+  static const double _initialSize = 0.55;
+  static const double _minSize = 0.35;
+  static const double _maxSize = 0.95;
+
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    super.dispose();
+  }
+
+  void _handleVerticalDragUpdate(
+    DragUpdateDetails details,
+    BuildContext context,
+  ) {
+    if (!_sheetController.isAttached) return;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    if (screenHeight <= 0) return;
+    final delta = -details.primaryDelta! / screenHeight;
+    final next = (_sheetController.size + delta).clamp(_minSize, _maxSize);
+    _sheetController.jumpTo(next);
+  }
+
+  void _handleVerticalDragEnd(
+    DragEndDetails details,
+    BuildContext context,
+  ) {
+    if (!_sheetController.isAttached) return;
+    final velocity = details.primaryVelocity ?? 0.0;
+    // Fast downward fling dismisses the sheet
+    if (velocity > 1200) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final current = _sheetController.size;
+    if (current <= _minSize + 0.02 && velocity >= 0) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final double target;
+    if (velocity < -400) {
+      target = _maxSize;
+    } else if (velocity > 400) {
+      target = _initialSize;
+    } else {
+      target = (current - _initialSize).abs() < (current - _maxSize).abs()
+          ? _initialSize
+          : _maxSize;
+    }
+    _sheetController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _toggleExpanded() {
+    if (!_sheetController.isAttached) return;
+    final target = _sheetController.size > 0.75 ? _initialSize : _maxSize;
+    _sheetController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+  Future<void> _confirmClearQueue(
+    BuildContext context,
+    MusicPlayerProvider queueProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24),
+            SizedBox(width: 8),
+            Text(
+              'Clear queue?',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.mist,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'This will remove all upcoming songs from the queue.',
+          style: TextStyle(
+            color: AppTheme.mist.withValues(alpha: 0.70),
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: AppTheme.mist.withValues(alpha: 0.60),
+              ),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      queueProvider.clearUpNext();
+      final messenger = ScaffoldMessenger.of(context);
+      showCompactSnack(
+        messenger,
+        'Cleared upcoming songs',
+        icon: Icons.delete_outline_rounded,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      controller: _sheetController,
+      initialChildSize: _initialSize,
+      minChildSize: _minSize,
+      maxChildSize: _maxSize,
+      snap: true,
+      snapSizes: const [_initialSize, _maxSize],
+      expand: false,
+      builder: (sheetContext, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Consumer<MusicPlayerProvider>(
+              builder: (_, queueProvider, _) {
+                return Column(
+                  children: [
+                    // Draggable header area (handle + title bar)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragUpdate: (details) =>
+                          _handleVerticalDragUpdate(details, sheetContext),
+                      onVerticalDragEnd: (details) =>
+                          _handleVerticalDragEnd(details, sheetContext),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Center(
+                            child: GestureDetector(
+                              onTap: _toggleExpanded,
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                                width: 38,
+                                height: 4.5,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.mist.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: _toggleExpanded,
+                                    child: Text(
+                                      'Playing Queue · ${queueProvider.queue.length}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.mist,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Save as playlist',
+                                  icon: const Icon(Icons.playlist_add_rounded),
+                                  color: AppTheme.mist.withValues(alpha: 0.85),
+                                  onPressed: queueProvider.queue.isEmpty
+                                      ? null
+                                      : () async {
+                                          final messenger =
+                                              ScaffoldMessenger.of(context);
+                                          final name =
+                                              await promptForPlaylistName(
+                                            context,
+                                            title: 'Save queue as playlist',
+                                          );
+                                          if (name == null || name.isEmpty) {
+                                            return;
+                                          }
+                                          await queueProvider
+                                              .saveQueueAsPlaylist(name);
+                                          showCompactSnack(
+                                            messenger,
+                                            'Saved playlist: $name',
+                                            icon: Icons
+                                                .playlist_add_check_rounded,
+                                          );
+                                        },
+                                ),
+                                IconButton(
+                                  tooltip: 'Clear queue',
+                                  icon: const Icon(Icons.delete_outline_rounded),
+                                  color: Colors.redAccent,
+                                  disabledColor: Colors.white24,
+                                  onPressed: queueProvider.queue.length < 2
+                                      ? null
+                                      : () => _confirmClearQueue(
+                                            context,
+                                            queueProvider,
+                                          ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: AppTheme.mist.withValues(alpha: 0.08),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: queueProvider.queue.isEmpty
+                          ? ListView(
+                              controller: scrollController,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 60),
+                                  child: Center(
+                                    child: Text(
+                                      'Queue is empty.',
+                                      style: TextStyle(
+                                        color: AppTheme.mist
+                                            .withValues(alpha: 0.54),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ReorderableListView.builder(
+                              scrollController: scrollController,
+                              buildDefaultDragHandles: false,
+                              padding: const EdgeInsets.only(bottom: 24),
+                              itemCount: queueProvider.queue.length,
+                              onReorder: (from, to) {
+                                if (from < to) to -= 1;
+                                queueProvider.moveInQueue(from, to);
+                              },
+                              itemBuilder: (itemContext, index) {
+                                final item = queueProvider.queue[index];
+                                final isCurrent =
+                                    index == queueProvider.currentIndex;
+                                return Dismissible(
+                                  key: ValueKey(item.id),
+                                  onDismissed: (_) =>
+                                      queueProvider.removeFromQueue(index),
+                                  background: Container(
+                                    color: Colors.red.withValues(alpha: 0.3),
+                                  ),
+                                  child: ListTile(
+                                    leading: Icon(
+                                      isCurrent
+                                          ? Icons.volume_up
+                                          : Icons.music_note,
+                                      color: isCurrent
+                                          ? AppTheme.accent
+                                          : Colors.white38,
+                                    ),
+                                    title: Text(
+                                      item.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isCurrent
+                                            ? AppTheme.accent
+                                            : Colors.white,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      item.artist,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white60,
+                                      ),
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            size: 18,
+                                          ),
+                                          color: Colors.white38,
+                                          tooltip: 'Remove from queue',
+                                          onPressed: () => queueProvider
+                                              .removeFromQueue(index),
+                                        ),
+                                        ReorderableDragStartListener(
+                                          index: index,
+                                          child: const Padding(
+                                            padding: EdgeInsets.only(right: 4),
+                                            child: Icon(
+                                              Icons.drag_handle_rounded,
+                                              color: Colors.white38,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () {
+                                      queueProvider.playQueueItem(index);
+                                      Navigator.pop(context);
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
   }
 }

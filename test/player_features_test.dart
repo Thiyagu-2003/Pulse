@@ -145,4 +145,37 @@ void main() {
     expect(provider.queue.map((t) => t.id), ['p1', 'r1', 'a', 'r2']);
     await provider.setAutoplay(true);
   });
+
+  test('sleep timer and end of playlist timer', () async {
+    expect(provider.hasSleepTimer, isFalse);
+    expect(provider.sleepTimerEndOfQueue, isFalse);
+    expect(provider.sleepTimeRemaining, isNull);
+
+    // Timed timer
+    provider.startSleepTimer(const Duration(minutes: 15));
+    expect(provider.hasSleepTimer, isTrue);
+    expect(provider.sleepTimerEndOfQueue, isFalse);
+    expect(provider.sleepTimeRemaining!.inMinutes, greaterThanOrEqualTo(14));
+
+    provider.cancelSleepTimer();
+    expect(provider.hasSleepTimer, isFalse);
+    expect(provider.sleepTimeRemaining, isNull);
+
+    // End of playlist timer
+    final list = [_song('s1'), _song('s2')];
+    await provider.playTrack(list[0], playlist: list);
+
+    provider.startSleepTimerEndOfQueue();
+    expect(provider.hasSleepTimer, isTrue);
+    expect(provider.sleepTimerEndOfQueue, isTrue);
+
+    // Skip to last song
+    await provider.skipToNext();
+    expect(provider.currentTrack?.id, 's2');
+    expect(provider.sleepTimerEndOfQueue, isTrue);
+
+    provider.cancelSleepTimer();
+    expect(provider.hasSleepTimer, isFalse);
+    expect(provider.sleepTimerEndOfQueue, isFalse);
+  });
 }
