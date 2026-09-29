@@ -7,6 +7,7 @@ import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/now_playing_screen.dart';
 import 'glass_container.dart';
+import 'local_artwork.dart';
 import 'play_pause_button.dart';
 
 class MiniPlayer extends StatelessWidget {
@@ -86,15 +87,23 @@ class MiniPlayer extends StatelessWidget {
                         height: 44,
                         fit: BoxFit.cover,
                       )
-                    : Container(
-                        width: 44,
-                        height: 44,
-                        color: context.colors.mist.withValues(alpha: 0.10),
-                        child: const Icon(
-                          Icons.music_note,
-                          color: AppTheme.primary,
-                        ),
-                      ),
+                    : track.sourceType == MediaSourceType.local
+                        ? LocalArtwork(
+                            id: (track.extras?['songId'] as int?) ??
+                                int.tryParse(track.id),
+                            width: 44,
+                            height: 44,
+                            borderRadius: BorderRadius.circular(12),
+                          )
+                        : Container(
+                            width: 44,
+                            height: 44,
+                            color: context.colors.mist.withValues(alpha: 0.10),
+                            child: const Icon(
+                              Icons.music_note,
+                              color: AppTheme.primary,
+                            ),
+                          ),
               ),
             ),
             const SizedBox(width: 12),

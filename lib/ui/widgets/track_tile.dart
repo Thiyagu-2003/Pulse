@@ -10,6 +10,7 @@ import '../screens/artist_screen.dart';
 import '../theme/app_theme.dart';
 import 'add_to_playlist_sheet.dart';
 import 'download_playlist_sheet.dart';
+import 'local_artwork.dart';
 import 'playing_indicator.dart';
 
 class TrackTile extends StatelessWidget {
@@ -89,7 +90,15 @@ class TrackTile extends StatelessWidget {
                           errorWidget: (context, url, error) =>
                               _buildPlaceholder(context),
                         )
-                      : _buildPlaceholder(context),
+                      : item.sourceType == MediaSourceType.local
+                          ? LocalArtwork(
+                              id: (item.extras?['songId'] as int?) ??
+                                  int.tryParse(item.id),
+                              width: 50,
+                              height: 50,
+                              fallback: _buildPlaceholder(context),
+                            )
+                          : _buildPlaceholder(context),
                 ),
                 // The pulse sits on the artwork of the track you can hear.
                 if (isPlayingCurrent)

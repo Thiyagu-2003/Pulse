@@ -14,9 +14,14 @@ import '../widgets/lyrics_view.dart';
 import '../widgets/track_tile.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/saavn_service.dart';
+import '../../models/media_folder.dart';
+import '../../services/local_music_service.dart';
+import '../widgets/local_artwork.dart';
 import 'artist_screen.dart';
 import 'equalizer_screen.dart';
+import 'folder_songs_screen.dart';
 import 'full_screen_lyrics.dart';
+import 'local_collection_screen.dart';
 import 'dart:async';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -180,6 +185,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               child: CachedNetworkImage(
                 imageUrl: track.artUri!,
                 fit: BoxFit.cover,
+              ),
+            )
+          else if (track.sourceType == MediaSourceType.local)
+            Positioned.fill(
+              child: LocalArtwork(
+                item: track,
+                fit: BoxFit.cover,
+                size: 800,
               ),
             ),
           Positioned.fill(
@@ -360,6 +373,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 ? CachedNetworkImage(
                                     imageUrl: track.artUri!,
                                     fit: BoxFit.cover,
+                                  )
+                                : track.sourceType == MediaSourceType.local
+                                ? LocalArtwork(
+                                    item: track,
+                                    fit: BoxFit.cover,
+                                    size: 500,
                                   )
                                 : Container(
                                     color: Colors.white10,
@@ -828,21 +847,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       round(
                         Icons.share_rounded,
                         'Share',
-                        link == null
-                            ? null
-                            : () async {
-                                close();
-                                final shared = await PlatformBridge.share(
-                                  '${track.title} – ${track.artist}\n$link',
-                                );
-                                if (!shared) {
-                                  showCompactSnack(
-                                    messenger,
-                                    'Link copied',
-                                    icon: Icons.link_rounded,
-                                  );
-                                }
-                              },
+                        () async {
+                          close();
+                          final shareText = link != null
+                              ? '${track.title} – ${track.artist}\n$link'
+                              : '${track.title} – ${track.artist}';
+                          final shared = await PlatformBridge.share(shareText);
+                          if (!shared) {
+                            showCompactSnack(
+                              messenger,
+                              'Track info copied',
+                              icon: Icons.copy_rounded,
+                            );
+                          }
+                        },
                       ),
                     ],
                   ),
@@ -867,6 +885,29 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         image: '',
                       ),
                     ),
+                  )
+                else if (track.sourceType == MediaSourceType.local &&
+                    track.album.trim().isNotEmpty &&
+                    track.album != 'Local Storage')
+                  row(
+                    Icons.album_rounded,
+                    'View album',
+                    () {
+                      final all = LocalMusicService.instance.cachedSongs;
+                      final albumTracks = all
+                          .where((s) => s.album.trim() == track.album.trim())
+                          .toList();
+                      Navigator.push(
+                        rootContext,
+                        MaterialPageRoute(
+                          builder: (_) => LocalCollectionScreen(
+                            title: track.album,
+                            subtitle: '${albumTracks.length} tracks',
+                            songs: albumTracks.isNotEmpty ? albumTracks : [track],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 if (artistId != null)
                   row(
@@ -882,7 +923,65 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         image: '',
                       ),
                     ),
+                  )
+                else if (track.sourceType == MediaSourceType.local &&
+                    track.artist.trim().isNotEmpty &&
+                    track.artist != 'Unknown Artist')
+                  row(
+                    Icons.person_rounded,
+                    'Go to artist',
+                    () {
+                      final all = LocalMusicService.instance.cachedSongs;
+                      final artistTracks = all
+                          .where((s) => s.artist.trim() == track.artist.trim())
+                          .toList();
+                      Navigator.push(
+                        rootContext,
+                        MaterialPageRoute(
+                          builder: (_) => LocalCollectionScreen(
+                            title: track.artist,
+                            subtitle: '${artistTracks.length} tracks',
+                            songs: artistTracks.isNotEmpty ? artistTracks : [track],
+                          ),
+                        ),
+                      );
+                    },
                   ),
+                if (track.sourceType == MediaSourceType.local) ...[
+                  row(
+                    Icons.folder_rounded,
+                    'Show in folder',
+                    () {
+                      final filePath = (track.extras?['filePath'] as String?) ??
+                          track.streamUrl ??
+                          (track.id.startsWith('/') ? track.id : '');
+                      final folderPath = File(filePath).parent.path;
+                      final all = LocalMusicService.instance.cachedSongs;
+                      final folderSongs = all.where((s) {
+                        final p = (s.extras?['filePath'] as String?) ??
+                            s.streamUrl ??
+                            (s.id.startsWith('/') ? s.id : '');
+                        return File(p).parent.path == folderPath;
+                      }).toList();
+                      Navigator.push(
+                        rootContext,
+                        MaterialPageRoute(
+                          builder: (_) => FolderSongsScreen(
+                            folder: MediaFolder(
+                              path: folderPath,
+                              items: folderSongs.isNotEmpty ? folderSongs : [track],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  row(
+                    Icons.info_outline_rounded,
+                    'Track details',
+                    () => _showTrackDetails(rootContext, track),
+                  ),
+                ],
                 if (Platform.isAndroid)
                   row(
                     Icons.equalizer_rounded,
@@ -905,6 +1004,76 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _showTrackDetails(BuildContext context, AppMediaItem track) {
+    final filePath = (track.extras?['filePath'] as String?) ??
+        track.streamUrl ??
+        (track.id.startsWith('/') ? track.id : '');
+    final file = File(filePath);
+    String fileSizeStr = 'Unknown';
+    if (file.existsSync()) {
+      final bytes = file.lengthSync();
+      fileSizeStr = '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    }
+    final isSdCard = filePath.startsWith('/storage/') && !filePath.startsWith('/storage/emulated');
+    final durationStr = track.duration != null
+        ? '${track.duration!.inMinutes}:${(track.duration!.inSeconds % 60).toString().padLeft(2, '0')}'
+        : 'Unknown';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: AppTheme.accent),
+            SizedBox(width: 8),
+            Text('Track details', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('Title', track.title),
+              _detailRow('Artist', track.artist),
+              _detailRow('Album', track.album),
+              _detailRow('Duration', durationStr),
+              _detailRow('File size', fileSizeStr),
+              _detailRow('Storage location', isSdCard ? 'SD Card (Removable)' : 'Internal Storage'),
+              _detailRow('File path', filePath),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white54),
+          ),
+          const SizedBox(height: 2),
+          SelectableText(
+            value,
+            style: const TextStyle(fontSize: 13, color: Colors.white),
+          ),
+        ],
+      ),
     );
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:on_audio_query_pluse/on_audio_query.dart';
@@ -5,8 +6,31 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/media_item_model.dart';
 import 'storage_service.dart';
 
+class LocalScanProgress {
+  final bool isScanning;
+  final int count;
+  final String message;
+
+  const LocalScanProgress({
+    required this.isScanning,
+    required this.count,
+    required this.message,
+  });
+}
+
 class LocalMusicService {
+  static final LocalMusicService instance = LocalMusicService._();
+  factory LocalMusicService() => instance;
+  LocalMusicService._();
+
   final OnAudioQuery _audioQuery = OnAudioQuery();
+  List<AppMediaItem> _cachedSongs = [];
+
+  final StreamController<LocalScanProgress> _progressController =
+      StreamController<LocalScanProgress>.broadcast();
+
+  Stream<LocalScanProgress> get scanProgress => _progressController.stream;
+  List<AppMediaItem> get cachedSongs => _cachedSongs;
 
   /// Request storage/audio permissions safely using permission_handler
   /// to avoid on_audio_query_pluse's "Reply already submitted" crash.
@@ -57,16 +81,32 @@ class LocalMusicService {
     }
   }
 
-  /// Scan local device for audio tracks
-  Future<List<AppMediaItem>> fetchLocalSongs() async {
+  /// Scan local device and SD card for audio tracks with fast caching.
+  Future<List<AppMediaItem>> fetchLocalSongs({bool forceRescan = false}) async {
+    if (!forceRescan && _cachedSongs.isNotEmpty) {
+      return _cachedSongs;
+    }
+
+    _progressController.add(const LocalScanProgress(
+      isScanning: true,
+      count: 0,
+      message: 'Scanning storage & SD card...',
+    ));
+
     // The media index (on_audio_query) is Android's; elsewhere, read the
     // Music folder directly.
     if (!Platform.isAndroid) {
-      // Downloads are in Library already; a download folder inside Music
-      // would list them twice.
       final custom = StorageService().getCustomDownloadPath();
-      return scanFolder(musicFolder(), skip: custom);
+      final songs = await scanFolder(musicFolder(), skip: custom);
+      _cachedSongs = songs;
+      _progressController.add(LocalScanProgress(
+        isScanning: false,
+        count: songs.length,
+        message: 'Scan complete (${songs.length} songs)',
+      ));
+      return songs;
     }
+
     try {
       final List<SongModel> songs = await _audioQuery.querySongs(
         sortType: SongSortType.TITLE,
@@ -75,7 +115,7 @@ class LocalMusicService {
         ignoreCase: true,
       );
 
-      return songs
+      final List<AppMediaItem> result = songs
           .where((song) => (song.duration ?? 0) > 10000) // Skip short sound effects <10s
           .map((song) => AppMediaItem(
                 id: song.id.toString(),
@@ -84,7 +124,6 @@ class LocalMusicService {
                     ? song.artist!
                     : 'Local Track',
                 album: song.album ?? 'Local Storage',
-                // Prefer URI (content://) for Android, fallback to file path
                 streamUrl: song.uri ?? song.data,
                 duration: song.duration != null
                     ? Duration(milliseconds: song.duration!)
@@ -92,14 +131,68 @@ class LocalMusicService {
                 sourceType: MediaSourceType.local,
                 extras: {
                   'songId': song.id,
+                  'albumId': song.albumId,
+                  'artistId': song.artistId,
+                  'genre': song.genre,
+                  'dateAdded': song.dateAdded,
                   'filePath': song.data,
                   'uri': song.uri,
                 },
               ))
           .toList();
+
+      _progressController.add(LocalScanProgress(
+        isScanning: true,
+        count: result.length,
+        message: 'Checking SD card storage...',
+      ));
+
+      // Direct SD card scan check for unindexed tracks:
+      try {
+        final storageDir = Directory('/storage');
+        if (await storageDir.exists()) {
+          final entries = await storageDir.list().toList();
+          final existingPaths = result
+              .map((s) => (s.extras?['filePath'] as String?)?.toLowerCase())
+              .where((p) => p != null)
+              .toSet();
+
+          for (final entry in entries) {
+            final name = entry.path.split('/').where((s) => s.isNotEmpty).last;
+            if (name != 'emulated' && name != 'self' && name != 'enc_emulated') {
+              final sdSongs = await scanFolder(Directory(entry.path));
+              for (final sdSong in sdSongs) {
+                final p = (sdSong.extras?['filePath'] as String?)?.toLowerCase();
+                if (p != null && !existingPaths.contains(p)) {
+                  result.add(sdSong);
+                  existingPaths.add(p);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('SD card probe error: $e');
+      }
+
+      result.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      _cachedSongs = result;
+
+      _progressController.add(LocalScanProgress(
+        isScanning: false,
+        count: result.length,
+        message: 'Scan complete (${result.length} songs)',
+      ));
+
+      return result;
     } catch (e) {
       debugPrint('Local song scan failed: $e');
-      return [];
+      _progressController.add(LocalScanProgress(
+        isScanning: false,
+        count: _cachedSongs.length,
+        message: 'Scan failed: $e',
+      ));
+      return _cachedSongs;
     }
   }
 
