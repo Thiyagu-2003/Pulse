@@ -22,6 +22,7 @@ import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
 class MainActivity : AudioServiceActivity() {
@@ -121,9 +122,43 @@ class MainActivity : AudioServiceActivity() {
                         setLauncherIcon(app, call.argument<Boolean>("dark") ?: false)
                         result.success(null)
                     }
+                    "copyUriToFile" -> {
+                        val uriStr = call.argument<String>("uri")
+                        val destPath = call.argument<String>("destPath")
+                        if (uriStr == null || destPath == null) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            var ok = false
+                            try {
+                                val destFile = File(destPath)
+                                destFile.parentFile?.mkdirs()
+                                val uri = Uri.parse(uriStr)
+                                val inputStream = if (uriStr.startsWith("content://")) {
+                                    app.contentResolver.openInputStream(uri)
+                                } else {
+                                    File(uriStr).inputStream()
+                                }
+                                if (inputStream != null) {
+                                    inputStream.use { input ->
+                                        destFile.outputStream().use { output ->
+                                            input.copyTo(output)
+                                        }
+                                    }
+                                    ok = destFile.exists() && destFile.length() > 0
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("MainActivity", "copyUriToFile failed for $uriStr: ${e.message}")
+                                ok = false
+                            }
+                            runOnUiThread { result.success(ok) }
+                        }.start()
+                    }
                     "setRingtone" -> {
                         Thread {
-                            val tempTrimmed = File(app.cacheDir, "ringtone_trimmed_${System.currentTimeMillis()}.m4a")
+                            var tempSourceFile: File? = null
+                            var tempTrimmed: File? = null
                             try {
                                 val filePath = call.argument<String>("filePath")!!
                                 val title = call.argument<String>("title") ?: "Pulse Ringtone"
@@ -138,11 +173,26 @@ class MainActivity : AudioServiceActivity() {
                                     else           -> RingtoneManager.TYPE_RINGTONE
                                 }
 
-                                val sourceFile = File(filePath)
+                                var sourceFile = File(filePath)
+                                if (!sourceFile.exists() && filePath.startsWith("content://")) {
+                                    val tempSource = File(app.cacheDir, "ringtone_src_${System.currentTimeMillis()}.tmp")
+                                    app.contentResolver.openInputStream(Uri.parse(filePath))?.use { inp ->
+                                        tempSource.outputStream().use { out -> inp.copyTo(out) }
+                                    }
+                                    if (tempSource.exists() && tempSource.length() > 0) {
+                                        sourceFile = tempSource
+                                        tempSourceFile = tempSource
+                                    }
+                                }
+
                                 if (!sourceFile.exists()) {
                                     runOnUiThread { result.success(false) }
                                     return@Thread
                                 }
+
+                                val sourceExt = sourceFile.extension.lowercase().ifEmpty { "m4a" }
+                                val trimExt = if (sourceExt == "mp3") "mp3" else if (sourceExt == "wav") "wav" else "m4a"
+                                tempTrimmed = File(app.cacheDir, "ringtone_trimmed_${System.currentTimeMillis()}.$trimExt")
 
                                 // Trim audio if custom timing is requested
                                 var useTrimmed = false
@@ -163,8 +213,8 @@ class MainActivity : AudioServiceActivity() {
                                     else           -> Environment.DIRECTORY_RINGTONES
                                 }
 
-                                val ext = if (useTrimmed) "m4a" else sourceFile.extension.ifEmpty { "m4a" }
-                                val mimeType = when (ext.lowercase()) {
+                                val ext = inputFile.extension.lowercase().ifEmpty { sourceExt }
+                                val mimeType = when (ext) {
                                     "mp3" -> "audio/mpeg"
                                     "ogg", "opus" -> "audio/ogg"
                                     "wav" -> "audio/wav"
@@ -241,7 +291,8 @@ class MainActivity : AudioServiceActivity() {
                                 runOnUiThread { result.success(false) }
                             } finally {
                                 try {
-                                    if (tempTrimmed.exists()) tempTrimmed.delete()
+                                    if (tempTrimmed != null && tempTrimmed.exists()) tempTrimmed.delete()
+                                    if (tempSourceFile != null && tempSourceFile.exists()) tempSourceFile.delete()
                                 } catch (_: Exception) {}
                             }
                         }.start()
@@ -305,12 +356,12 @@ class MainActivity : AudioServiceActivity() {
     }
 
     /**
-     * Trims an audio file from [startMs] to [endMs] using MediaExtractor and MediaMuxer.
-     * Keeps the original compression without re-encoding. Returns true on success.
+     * Trims an audio file from [startMs] to [endMs]. Supports MP3 (MPEG audio frames)
+     * and AAC/M4A (via MediaMuxer). Keeps original compression without quality loss.
+     * Returns true on success.
      */
     private fun trimAudio(sourcePath: String, destPath: String, startMs: Long, endMs: Long): Boolean {
         var extractor: MediaExtractor? = null
-        var muxer: MediaMuxer? = null
         try {
             extractor = MediaExtractor()
             extractor.setDataSource(sourcePath)
@@ -331,10 +382,91 @@ class MainActivity : AudioServiceActivity() {
                 return false
             }
 
-            extractor.selectTrack(audioTrackIndex)
-
+            val mime = audioFormat.getString(MediaFormat.KEY_MIME) ?: ""
             val startUs = startMs * 1000L
             val endUs = endMs * 1000L
+
+            if (mime.equals("audio/mpeg", ignoreCase = true) || mime.contains("mp3", ignoreCase = true)) {
+                return trimMp3Audio(extractor, audioTrackIndex, destPath, startUs, endUs, audioFormat)
+            }
+
+            return trimM4aAudio(extractor, audioTrackIndex, destPath, startUs, endUs, audioFormat)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "trimAudio failed: ${e.message}")
+            return false
+        } finally {
+            try { extractor?.release() } catch (_: Exception) {}
+        }
+    }
+
+    private fun trimMp3Audio(
+        extractor: MediaExtractor,
+        trackIndex: Int,
+        destPath: String,
+        startUs: Long,
+        endUs: Long,
+        audioFormat: MediaFormat
+    ): Boolean {
+        var fos: FileOutputStream? = null
+        try {
+            extractor.selectTrack(trackIndex)
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+
+            val destFile = File(destPath)
+            destFile.parentFile?.mkdirs()
+            fos = FileOutputStream(destFile)
+            val channel = fos.channel
+
+            val maxBufferSize = if (audioFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                audioFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+            } else {
+                128 * 1024
+            }
+            val buffer = ByteBuffer.allocate(Math.max(maxBufferSize, 128 * 1024))
+            var firstSampleTimeUs = -1L
+            var samplesWritten = 0
+
+            while (true) {
+                buffer.clear()
+                val sampleSize = extractor.readSampleData(buffer, 0)
+                if (sampleSize < 0) break
+
+                val sampleTimeUs = extractor.sampleTime
+                if (sampleTimeUs > endUs && samplesWritten > 0) break
+
+                if (sampleTimeUs >= startUs || firstSampleTimeUs >= 0L) {
+                    if (firstSampleTimeUs < 0L) {
+                        firstSampleTimeUs = sampleTimeUs
+                    }
+                    buffer.position(0)
+                    buffer.limit(sampleSize)
+                    channel.write(buffer)
+                    samplesWritten++
+                }
+
+                extractor.advance()
+            }
+            fos.flush()
+            return samplesWritten > 0
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "trimMp3Audio failed: ${e.message}")
+            return false
+        } finally {
+            try { fos?.close() } catch (_: Exception) {}
+        }
+    }
+
+    private fun trimM4aAudio(
+        extractor: MediaExtractor,
+        trackIndex: Int,
+        destPath: String,
+        startUs: Long,
+        endUs: Long,
+        audioFormat: MediaFormat
+    ): Boolean {
+        var muxer: MediaMuxer? = null
+        try {
+            extractor.selectTrack(trackIndex)
             extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
             muxer = MediaMuxer(destPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
@@ -375,16 +507,12 @@ class MainActivity : AudioServiceActivity() {
             }
 
             muxer.stop()
-            muxer.release()
-            muxer = null
-            extractor.release()
-            extractor = null
             return samplesWritten > 0
         } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "trimAudio failed: ${e.message}")
-            try { muxer?.release() } catch (_: Exception) {}
-            try { extractor?.release() } catch (_: Exception) {}
+            android.util.Log.w("MainActivity", "trimM4aAudio failed: ${e.message}")
             return false
+        } finally {
+            try { muxer?.release() } catch (_: Exception) {}
         }
     }
 }

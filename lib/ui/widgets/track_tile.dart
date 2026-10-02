@@ -201,6 +201,16 @@ class TrackTile extends StatelessWidget {
                   tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
                   onPressed: () => playerProvider.toggleFavorite(item),
                 ),
+                if (selected == null)
+                  IconButton(
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      color: context.colors.mist.withValues(alpha: 0.55),
+                      size: 20,
+                    ),
+                    tooltip: 'More actions',
+                    onPressed: () => showTrackActions(context, item),
+                  ),
               ],
             ),
           ),
