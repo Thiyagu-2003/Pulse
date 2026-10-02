@@ -441,6 +441,15 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
                     opacity: _fadeIn,
                     child: _buildEditor(colors),
                   ),
+        bottomNavigationBar: (_loading || _error != null)
+            ? null
+            : SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: _buildSetButton(colors),
+                ),
+              ),
       ),
     );
   }
@@ -536,10 +545,6 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
 
           // ─ Type selector ───────────────────────────────────────────
           _buildTypeSelector(colors),
-          const SizedBox(height: 24),
-
-          // ─ Set button ──────────────────────────────────────────────
-          _buildSetButton(colors),
           const SizedBox(height: 20),
         ],
       ),
@@ -733,76 +738,100 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
     final clipSec = ((_endMs - _startMs) / 1000).toStringAsFixed(1);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: colors.lift.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Start adjustment
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'START: ${_formatDuration(_startMs)}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.accent,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'START: ${_formatDuration(_startMs)}',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accent,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _stepBtn('-1s', () => _adjustStart(-1000), colors),
-                  const SizedBox(width: 6),
-                  _stepBtn('+1s', () => _adjustStart(1000), colors),
-                ],
-              ),
-            ],
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _stepBtn('-1s', () => _adjustStart(-1000), colors),
+                      const SizedBox(width: 4),
+                      _stepBtn('+1s', () => _adjustStart(1000), colors),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           // Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$clipSec s',
-              style: const TextStyle(
-                color: AppTheme.primarySoft,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$clipSec s',
+                style: const TextStyle(
+                  color: AppTheme.primarySoft,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11.5,
+                ),
               ),
             ),
           ),
           // End adjustment
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'END: ${_formatDuration(_endMs)}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.accent,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'END: ${_formatDuration(_endMs)}',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accent,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _stepBtn('-1s', () => _adjustEnd(-1000), colors),
-                  const SizedBox(width: 6),
-                  _stepBtn('+1s', () => _adjustEnd(1000), colors),
-                ],
-              ),
-            ],
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _stepBtn('-1s', () => _adjustEnd(-1000), colors),
+                      const SizedBox(width: 4),
+                      _stepBtn('+1s', () => _adjustEnd(1000), colors),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -811,17 +840,20 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
 
   Widget _stepBtn(String text, VoidCallback onTap, PulseColors colors) {
     return SizedBox(
-      height: 28,
+      height: 26,
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
           side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.3)),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         child: Text(text,
             style: TextStyle(
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 color: colors.mist)),
       ),
@@ -1039,8 +1071,8 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
 
   Widget _buildSetButton(PulseColors colors) {
     return SizedBox(
-      height: 54,
-      child: FilledButton(
+      height: 52,
+      child: FilledButton.icon(
         onPressed: _setting ? null : _setRingtone,
         style: FilledButton.styleFrom(
           backgroundColor: AppTheme.primary,
@@ -1050,29 +1082,23 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: _setting
+        icon: _setting
             ? const SizedBox(
-                width: 22,
-                height: 22,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
+                  strokeWidth: 2.2,
                   color: Colors.white,
                 ),
               )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(_typeIcon(_selectedType), size: 20),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Set as ${_typeLabel(_selectedType)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
+            : Icon(_typeIcon(_selectedType), size: 20),
+        label: Text(
+          _setting ? 'Setting…' : 'Set as ${_typeLabel(_selectedType)}',
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+          ),
+        ),
       ),
     );
   }

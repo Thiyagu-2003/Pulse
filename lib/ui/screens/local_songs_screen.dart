@@ -540,7 +540,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
       onRefresh: () => _initLocalMusic(forceRescan: true),
       color: context.colors.accent,
       child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: const EdgeInsets.only(bottom: 110),
         children: [
           // Section: Recently played
           Padding(
@@ -677,7 +677,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
         crossAxisCount: 3,
         crossAxisSpacing: 10,
         mainAxisSpacing: 12,
-        childAspectRatio: 0.72,
+        childAspectRatio: 0.68,
         children: cards.take(6).toList(),
       ),
     );
@@ -789,24 +789,38 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
-              PopupMenuButton<String>(
-                padding: EdgeInsets.zero,
-                icon: Icon(
-                  Icons.more_vert_rounded,
-                  size: 16,
-                  color: context.colors.mist.withValues(alpha: 0.5),
-                ),
-                onSelected: (action) {
-                  if (action == 'play' && folder.items.isNotEmpty) {
-                    provider.playTrack(folder.items.first, playlist: folder.items);
-                  } else if (action == 'shuffle' && folder.items.isNotEmpty) {
-                    provider.shuffleAll(folder.items);
-                  }
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  final offset = details.globalPosition;
+                  showMenu<String>(
+                    context: context,
+                    position: RelativeRect.fromLTRB(
+                      offset.dx,
+                      offset.dy,
+                      offset.dx + 1,
+                      offset.dy + 1,
+                    ),
+                    items: const [
+                      PopupMenuItem(value: 'play', child: Text('Play folder')),
+                      PopupMenuItem(value: 'shuffle', child: Text('Shuffle folder')),
+                    ],
+                  ).then((action) {
+                    if (action == 'play' && folder.items.isNotEmpty) {
+                      provider.playTrack(folder.items.first, playlist: folder.items);
+                    } else if (action == 'shuffle' && folder.items.isNotEmpty) {
+                      provider.shuffleAll(folder.items);
+                    }
+                  });
                 },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'play', child: Text('Play folder')),
-                  const PopupMenuItem(value: 'shuffle', child: Text('Shuffle folder')),
-                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                  child: Icon(
+                    Icons.more_vert_rounded,
+                    size: 16,
+                    color: context.colors.mist.withValues(alpha: 0.5),
+                  ),
+                ),
               ),
             ],
           ),
@@ -983,7 +997,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
       onRefresh: () => _initLocalMusic(forceRescan: true),
       color: context.colors.accent,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
         itemCount: folders.length,
         separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
         itemBuilder: (context, index) {
@@ -1077,7 +1091,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
       onRefresh: () => _initLocalMusic(forceRescan: true),
       color: context.colors.accent,
       child: GridView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 14,
@@ -1150,7 +1164,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
       onRefresh: () => _initLocalMusic(forceRescan: true),
       color: context.colors.accent,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
         itemCount: artists.length,
         separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
         itemBuilder: (context, index) {
@@ -1205,7 +1219,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
     final customPlaylists = provider.getPlaylists();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
       children: [
         // Smart Playlists
         _buildPlaylistTile(
@@ -1348,7 +1362,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
       onRefresh: () => _initLocalMusic(forceRescan: true),
       color: context.colors.accent,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
         itemCount: genres.length,
         separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
         itemBuilder: (context, index) {

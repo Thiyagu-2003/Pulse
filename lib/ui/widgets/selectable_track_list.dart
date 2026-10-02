@@ -139,7 +139,7 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
             ?widget.header,
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: 110),
               itemCount: songs.length,
               itemBuilder: (context, i) {
                 final song = songs[i];
