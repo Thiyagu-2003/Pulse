@@ -40,8 +40,7 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
   // ── Trim markers (in milliseconds) ──────────────────────────────────
   int _startMs = 0;
   int _endMs = 30000; // Default: first 30 seconds
-  static const int _minClipMs = 3000; // At least 3 seconds
-  static const int _maxClipMs = 60000; // At most 60 seconds
+  static const int _minClipMs = 1000; // At least 1 second
 
   // ── Waveform ────────────────────────────────────────────────────────
   List<double> _waveformSamples = [];
@@ -113,7 +112,7 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
 
       // Default clip: first 30s or total duration if shorter.
       _startMs = 0;
-      _endMs = math.min(_totalDuration.inMilliseconds, _maxClipMs);
+      _endMs = math.min(_totalDuration.inMilliseconds, 30000);
       if (_endMs - _startMs < _minClipMs) {
         _endMs = math.min(_totalDuration.inMilliseconds, _minClipMs);
       }
@@ -126,9 +125,10 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
       _positionSub = player.positionStream.listen((pos) {
         if (!mounted) return;
         setState(() => _previewPosition = pos);
-        // Stop at the end marker.
+        // Stop at the end marker and reset seek position back to startMs.
         if (_isPreviewing && pos.inMilliseconds >= _endMs) {
           player.pause();
+          player.seek(Duration(milliseconds: _startMs));
           setState(() {
             _isPreviewing = false;
             _previewPosition = Duration(milliseconds: _startMs);
@@ -139,6 +139,7 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
       _playerStateSub = player.playerStateStream.listen((state) {
         if (!mounted) return;
         if (state.processingState == ProcessingState.completed) {
+          player.seek(Duration(milliseconds: _startMs));
           setState(() {
             _isPreviewing = false;
             _previewPosition = Duration(milliseconds: _startMs);
@@ -225,43 +226,36 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
         await mainPlayer.pause();
       }
     }
-    final curMs = _previewPosition.inMilliseconds;
-    if (curMs < _startMs || curMs >= _endMs) {
-      await player.seek(Duration(milliseconds: _startMs));
+    // Always seek strictly to _startMs so preview plays smoothly every time.
+    await player.seek(Duration(milliseconds: _startMs));
+    setState(() {
       _previewPosition = Duration(milliseconds: _startMs);
-    }
+      _isPreviewing = true;
+    });
     await player.play();
-    setState(() => _isPreviewing = true);
   }
 
   void _updateTrim(int start, int end) {
     final totalMs = _totalDuration.inMilliseconds;
     if (totalMs <= 0) return;
 
+    final minClip = math.min(_minClipMs, totalMs);
     var s = start.clamp(0, totalMs);
     var e = end.clamp(0, totalMs);
 
-    if (e - s < _minClipMs) {
+    if (e - s < minClip) {
       if (s != _startMs) {
-        e = (s + _minClipMs).clamp(0, totalMs);
-        if (e - s < _minClipMs) s = (e - _minClipMs).clamp(0, totalMs);
+        e = math.min(totalMs, s + minClip);
+        s = math.max(0, e - minClip);
       } else {
-        s = (e - _minClipMs).clamp(0, totalMs);
-        if (e - s < _minClipMs) e = (s + _minClipMs).clamp(0, totalMs);
-      }
-    }
-
-    if (e - s > _maxClipMs) {
-      if (s != _startMs) {
-        e = (s + _maxClipMs).clamp(0, totalMs);
-      } else {
-        s = (e - _maxClipMs).clamp(0, totalMs);
+        s = math.max(0, e - minClip);
+        e = math.min(totalMs, s + minClip);
       }
     }
 
     setState(() {
-      _startMs = s.clamp(0, totalMs);
-      _endMs = e.clamp(0, totalMs);
+      _startMs = s;
+      _endMs = e;
       _previewPosition = Duration(milliseconds: _startMs);
     });
 
@@ -269,18 +263,30 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
   }
 
   void _adjustStart(int deltaMs) {
+    if (_isPreviewing) {
+      _ringtoneService.previewPlayer.pause();
+      setState(() => _isPreviewing = false);
+    }
     _updateTrim(_startMs + deltaMs, _endMs);
   }
 
   void _adjustEnd(int deltaMs) {
+    if (_isPreviewing) {
+      _ringtoneService.previewPlayer.pause();
+      setState(() => _isPreviewing = false);
+    }
     _updateTrim(_startMs, _endMs + deltaMs);
   }
 
   void _applyPreset(double startFraction, double durationFraction) {
     final totalMs = _totalDuration.inMilliseconds;
     if (totalMs <= 0) return;
-    final s = (startFraction * totalMs).round();
-    final d = (durationFraction * totalMs).round().clamp(_minClipMs, _maxClipMs);
+    if (_isPreviewing) {
+      _ringtoneService.previewPlayer.pause();
+      setState(() => _isPreviewing = false);
+    }
+    final s = (startFraction * totalMs).round().clamp(0, totalMs);
+    final d = (durationFraction * totalMs).round().clamp(_minClipMs, totalMs);
     final e = (s + d).clamp(0, totalMs);
     _updateTrim(s, e);
   }
@@ -406,23 +412,36 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        title: const Text('Set as Ringtone'),
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => Navigator.pop(context),
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (_isPreviewing) {
+          _ringtoneService.previewPlayer.pause();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          title: const Text('Set as Ringtone'),
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: () {
+              if (_isPreviewing) {
+                _ringtoneService.previewPlayer.pause();
+              }
+              Navigator.pop(context);
+            },
+          ),
         ),
+        body: _loading
+            ? _buildLoading(colors)
+            : _error != null
+                ? _buildError(colors)
+                : FadeTransition(
+                    opacity: _fadeIn,
+                    child: _buildEditor(colors),
+                  ),
       ),
-      body: _loading
-          ? _buildLoading(colors)
-          : _error != null
-              ? _buildError(colors)
-              : FadeTransition(
-                  opacity: _fadeIn,
-                  child: _buildEditor(colors),
-                ),
     );
   }
 
@@ -594,6 +613,10 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
             if (totalMs <= 0 || width <= 0) return;
+            if (_isPreviewing) {
+              _ringtoneService.previewPlayer.pause();
+              setState(() => _isPreviewing = false);
+            }
             final tapFraction =
                 (details.localPosition.dx / width).clamp(0.0, 1.0);
             final tapMs = (tapFraction * totalMs).round();
@@ -647,6 +670,7 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
   // ── Quick Presets ───────────────────────────────────────────────────
 
   Widget _buildPresets(PulseColors colors, int totalMs) {
+    if (totalMs <= 0) return const SizedBox.shrink();
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -666,6 +690,10 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
           _presetChip(
             'Ending 30s',
             () {
+              if (_isPreviewing) {
+                _ringtoneService.previewPlayer.pause();
+                setState(() => _isPreviewing = false);
+              }
               final s = math.max(0, totalMs - 30000);
               _updateTrim(s, totalMs);
             },
@@ -673,8 +701,14 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
           ),
           const SizedBox(width: 8),
           _presetChip(
-            'Max (60s)',
-            () => _updateTrim(0, math.min(60000, totalMs)),
+            'Full Song',
+            () {
+              if (_isPreviewing) {
+                _ringtoneService.previewPlayer.pause();
+                setState(() => _isPreviewing = false);
+              }
+              _updateTrim(0, totalMs);
+            },
             colors,
           ),
         ],
@@ -797,9 +831,26 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
   // ── Range slider ────────────────────────────────────────────────────
 
   Widget _buildRangeSlider(PulseColors colors, int totalMs) {
-    final maxMs = math.max(_minClipMs.toDouble(), totalMs.toDouble());
-    final safeStart = _startMs.clamp(0, totalMs).toDouble();
-    final safeEnd = _endMs.clamp(_startMs + _minClipMs, totalMs).toDouble();
+    if (totalMs <= 0) return const SizedBox.shrink();
+
+    final maxVal = math.max(1000.0, totalMs.toDouble());
+    final minClip = math.min(_minClipMs.toDouble(), maxVal);
+
+    double safeStart = _startMs.toDouble().clamp(0.0, maxVal);
+    double safeEnd = _endMs.toDouble().clamp(0.0, maxVal);
+
+    if (safeEnd - safeStart < minClip) {
+      if (safeStart + minClip <= maxVal) {
+        safeEnd = safeStart + minClip;
+      } else {
+        safeStart = math.max(0.0, maxVal - minClip);
+        safeEnd = maxVal;
+      }
+    }
+
+    if (safeStart < 0.0) safeStart = 0.0;
+    if (safeEnd > maxVal) safeEnd = maxVal;
+    if (safeStart > safeEnd) safeStart = safeEnd;
 
     return Column(
       children: [
@@ -825,7 +876,7 @@ class _RingtoneEditorScreenState extends State<RingtoneEditorScreen>
           child: RangeSlider(
             values: RangeValues(safeStart, safeEnd),
             min: 0,
-            max: maxMs,
+            max: maxVal,
             divisions: math.max(1, totalMs ~/ 500),
             labels: RangeLabels(
               _formatDuration(_startMs),
@@ -1061,8 +1112,10 @@ class _WaveformPainter extends CustomPainter {
     final maxBarHeight = size.height * 0.42;
 
     // ─ Selection background ──────────────────────────────────────────
-    final selStart = startFraction * size.width;
-    final selEnd = endFraction * size.width;
+    final s = math.min(startFraction, endFraction).clamp(0.0, 1.0);
+    final e = math.max(startFraction, endFraction).clamp(0.0, 1.0);
+    final selStart = s * size.width;
+    final selEnd = e * size.width;
     final selPaint = Paint()
       ..color = primaryColor.withValues(alpha: 0.08)
       ..style = PaintingStyle.fill;

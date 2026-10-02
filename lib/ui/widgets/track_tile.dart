@@ -435,6 +435,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                 title: const Text('Set as ringtone'),
                 onTap: () {
                   Navigator.pop(sheetContext);
+                  rootContext.read<MusicPlayerProvider>().pause();
                   Navigator.push(
                     rootContext,
                     MaterialPageRoute(

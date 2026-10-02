@@ -163,31 +163,34 @@ class MainActivity : AudioServiceActivity() {
                                     else           -> Environment.DIRECTORY_RINGTONES
                                 }
 
+                                val ext = if (useTrimmed) "m4a" else sourceFile.extension.ifEmpty { "m4a" }
+                                val mimeType = when (ext.lowercase()) {
+                                    "mp3" -> "audio/mpeg"
+                                    "ogg", "opus" -> "audio/ogg"
+                                    "wav" -> "audio/wav"
+                                    else -> "audio/mp4"
+                                }
+
                                 val safeName = title.replace(Regex("[^\\w\\s-]"), "")
                                     .replace(Regex("\\s+"), "_")
-                                    .take(80)
-                                val destName = "Pulse_${safeName}.m4a"
+                                    .take(60)
+                                val destName = "Pulse_${safeName}_${System.currentTimeMillis() % 100000}.$ext"
 
                                 val contentUri: Uri?
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                    // Android 10+: use MediaStore.
+                                    // Android 10+: use MediaStore with IS_PENDING to prevent premature scanning.
                                     val values = ContentValues().apply {
                                         put(MediaStore.Audio.Media.DISPLAY_NAME, destName)
-                                        put(MediaStore.Audio.Media.TITLE, title)
+                                        put(MediaStore.Audio.Media.TITLE, "$title (Pulse)")
                                         put(MediaStore.Audio.Media.ARTIST, artist)
-                                        put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+                                        put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
                                         put(MediaStore.Audio.Media.RELATIVE_PATH, "$subDir/Pulse")
                                         put(MediaStore.Audio.Media.IS_RINGTONE, type == "ringtone")
                                         put(MediaStore.Audio.Media.IS_NOTIFICATION, type == "notification")
                                         put(MediaStore.Audio.Media.IS_ALARM, type == "alarm")
                                         put(MediaStore.Audio.Media.IS_MUSIC, false)
+                                        put(MediaStore.Audio.Media.IS_PENDING, 1)
                                     }
-                                    // Remove old entry with same name if present.
-                                    app.contentResolver.delete(
-                                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                                        "${MediaStore.Audio.Media.DISPLAY_NAME} = ?",
-                                        arrayOf(destName)
-                                    )
                                     contentUri = app.contentResolver.insert(
                                         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                                         values
@@ -196,6 +199,10 @@ class MainActivity : AudioServiceActivity() {
                                         app.contentResolver.openOutputStream(contentUri)?.use { out ->
                                             inputFile.inputStream().use { inp -> inp.copyTo(out) }
                                         }
+                                        val publishValues = ContentValues().apply {
+                                            put(MediaStore.Audio.Media.IS_PENDING, 0)
+                                        }
+                                        app.contentResolver.update(contentUri, publishValues, null, null)
                                     }
                                 } else {
                                     // Pre-Q: write to external storage directly.
@@ -209,20 +216,14 @@ class MainActivity : AudioServiceActivity() {
 
                                     val values = ContentValues().apply {
                                         put(MediaStore.Audio.Media.DATA, destFile.absolutePath)
-                                        put(MediaStore.Audio.Media.TITLE, title)
+                                        put(MediaStore.Audio.Media.TITLE, "$title (Pulse)")
                                         put(MediaStore.Audio.Media.ARTIST, artist)
-                                        put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+                                        put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
                                         put(MediaStore.Audio.Media.IS_RINGTONE, type == "ringtone")
                                         put(MediaStore.Audio.Media.IS_NOTIFICATION, type == "notification")
                                         put(MediaStore.Audio.Media.IS_ALARM, type == "alarm")
                                         put(MediaStore.Audio.Media.IS_MUSIC, false)
                                     }
-                                    // Remove old entry, then insert new.
-                                    app.contentResolver.delete(
-                                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                                        "${MediaStore.Audio.Media.DATA} = ?",
-                                        arrayOf(destFile.absolutePath)
-                                    )
                                     contentUri = app.contentResolver.insert(
                                         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                                         values
@@ -249,11 +250,18 @@ class MainActivity : AudioServiceActivity() {
                         result.success(Settings.System.canWrite(app))
                     }
                     "requestWriteSettings" -> {
-                        val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
-                            data = Uri.parse("package:${app.packageName}")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                data = Uri.parse("package:${app.packageName}")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            val fallbackIntent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(fallbackIntent)
                         }
-                        startActivity(intent)
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -340,6 +348,8 @@ class MainActivity : AudioServiceActivity() {
             }
             val buffer = ByteBuffer.allocate(Math.max(maxBufferSize, 128 * 1024))
             val bufferInfo = MediaCodec.BufferInfo()
+            var firstSampleTimeUs = -1L
+            var samplesWritten = 0
 
             while (true) {
                 buffer.clear()
@@ -347,14 +357,18 @@ class MainActivity : AudioServiceActivity() {
                 if (sampleSize < 0) break
 
                 val sampleTimeUs = extractor.sampleTime
-                if (sampleTimeUs > endUs) break
+                if (sampleTimeUs > endUs && samplesWritten > 0) break
 
-                if (sampleTimeUs >= startUs) {
+                if (sampleTimeUs >= startUs || firstSampleTimeUs >= 0L) {
+                    if (firstSampleTimeUs < 0L) {
+                        firstSampleTimeUs = sampleTimeUs
+                    }
                     bufferInfo.offset = 0
                     bufferInfo.size = sampleSize
-                    bufferInfo.presentationTimeUs = sampleTimeUs - startUs
+                    bufferInfo.presentationTimeUs = Math.max(0L, sampleTimeUs - firstSampleTimeUs)
                     bufferInfo.flags = extractor.sampleFlags
                     muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    samplesWritten++
                 }
 
                 extractor.advance()
@@ -365,7 +379,7 @@ class MainActivity : AudioServiceActivity() {
             muxer = null
             extractor.release()
             extractor = null
-            return true
+            return samplesWritten > 0
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "trimAudio failed: ${e.message}")
             try { muxer?.release() } catch (_: Exception) {}

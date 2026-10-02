@@ -997,12 +997,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   row(
                     Icons.ring_volume_rounded,
                     'Set as ringtone',
-                    () => Navigator.push(
-                      rootContext,
-                      MaterialPageRoute(
-                        builder: (_) => RingtoneEditorScreen(item: track),
-                      ),
-                    ),
+                    () {
+                      provider.pause();
+                      Navigator.push(
+                        rootContext,
+                        MaterialPageRoute(
+                          builder: (_) => RingtoneEditorScreen(item: track),
+                        ),
+                      );
+                    },
                   ),
                 ],
                 row(
