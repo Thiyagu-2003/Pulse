@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../services/voice_command_service.dart';
@@ -188,7 +187,7 @@ class _VoiceCommandOverlayState extends State<VoiceCommandOverlay>
                   children: [
                     // ── Pulsating Mic ──
                     AnimatedBuilder(
-                      animation: _pulseAnimation,
+                      listenable: _pulseAnimation,
                       builder: (context, child) {
                         return _buildMicButton(_pulseAnimation.value);
                       },
@@ -281,7 +280,7 @@ class _VoiceCommandOverlayState extends State<VoiceCommandOverlay>
           // Outer pulse rings
           if (_isListening) ...[
             AnimatedBuilder(
-              animation: _waveController,
+              listenable: _waveController,
               builder: (context, _) {
                 return CustomPaint(
                   size: const Size(120, 120),

@@ -46,6 +46,7 @@ class StorageService {
   static const String homeLayoutKey = 'home_layout';
   static const String darkLauncherIconKey = 'dark_launcher_icon';
   static const String stopPlaybackOnCloseKey = 'stop_playback_on_close';
+  static const String voiceControlEnabledKey = 'voice_control_enabled';
   static const String defaultHomeLanguage = 'Tamil';
   static const int recentSearchLimit = 10;
   static const int historyLimit = 200;
@@ -268,6 +269,14 @@ class StorageService {
 
   Future<void> setStopPlaybackOnClose(bool on) =>
       setFlag(stopPlaybackOnCloseKey, on);
+
+  /// Whether hands-free voice control (speech recognition) is enabled.
+  /// Disabled by default.
+  bool isVoiceControlEnabled() =>
+      getFlag(voiceControlEnabledKey, fallback: false);
+
+  Future<void> setVoiceControlEnabled(bool on) =>
+      setFlag(voiceControlEnabledKey, on);
 
   List<String> getRecentSearches() {
     final stored = _settingsBox.get(recentSearchesKey);

@@ -20,6 +20,7 @@ import '../services/download_notifications.dart';
 import '../services/platform_bridge.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class MusicPlayerProvider extends ChangeNotifier {
   final CustomAudioHandler _audioHandler;
@@ -945,6 +946,36 @@ class MusicPlayerProvider extends ChangeNotifier {
     PlatformBridge.setStopOnClose(stop: stop);
     notifyListeners();
   }
+
+  bool get voiceControlEnabled => _storageService.isVoiceControlEnabled();
+
+  Future<bool> setVoiceControlEnabled(bool enabled, BuildContext context) async {
+    if (enabled) {
+      final status = await Permission.microphone.request();
+      if (!status.isGranted) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Microphone permission is required for hands-free voice control'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        await _storageService.setVoiceControlEnabled(false);
+        notifyListeners();
+        return false;
+      }
+    }
+    await _storageService.setVoiceControlEnabled(enabled);
+    notifyListeners();
+    return true;
+  }
+
+  bool get isPlaying => _audioHandler.playbackState.value.playing;
+
+  Future<void> pause() => _audioHandler.pause();
+
+  Future<void> play() => _audioHandler.play();
 
   Future<void> stop() async {
     await _audioHandler.stop();

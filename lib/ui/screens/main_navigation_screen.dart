@@ -69,10 +69,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         .playbackErrors
         .listen(_showPlaybackError);
     _checkForUpdate();
-    // Voice commands (Android / iOS only).
-    if (VoiceCommandService.isSupported) {
-      _voiceService = VoiceCommandService();
-    }
     // Windows: the notification-area icon and hide-to-tray on close.
     DesktopTray.start(context.read<MusicPlayerProvider>());
   }
@@ -122,12 +118,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   }
 
   void _openVoice() {
-    final service = _voiceService;
-    if (service == null) return;
+    _voiceService ??= VoiceCommandService();
     final provider = context.read<MusicPlayerProvider>();
     VoiceCommandOverlay.show(
       context,
-      service: service,
+      service: _voiceService!,
       onCommand: (cmd) => provider.handleVoiceCommand(cmd, context),
     );
   }
@@ -142,6 +137,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final voiceEnabled = context.watch<MusicPlayerProvider>().voiceControlEnabled;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -150,8 +147,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           // Floating MiniPlayer resting above bottom navigation bar
           const Positioned(left: 0, right: 0, bottom: 0, child: MiniPlayer()),
 
-          // Voice command mic FAB (mobile only)
-          if (_voiceService != null)
+          // Voice command mic FAB (mobile only, and only when enabled in settings)
+          if (VoiceCommandService.isSupported && voiceEnabled)
             Positioned(
               right: 16,
               bottom: 80,

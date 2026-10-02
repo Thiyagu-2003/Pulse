@@ -22,6 +22,7 @@ import 'equalizer_screen.dart';
 import 'folder_songs_screen.dart';
 import 'full_screen_lyrics.dart';
 import 'local_collection_screen.dart';
+import 'ringtone_editor_screen.dart';
 import 'dart:async';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -982,7 +983,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     () => _showTrackDetails(rootContext, track),
                   ),
                 ],
-                if (Platform.isAndroid)
+                if (Platform.isAndroid) ...[
                   row(
                     Icons.equalizer_rounded,
                     'Equaliser',
@@ -993,6 +994,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       ),
                     ),
                   ),
+                  row(
+                    Icons.ring_volume_rounded,
+                    'Set as ringtone',
+                    () => Navigator.push(
+                      rootContext,
+                      MaterialPageRoute(
+                        builder: (_) => RingtoneEditorScreen(item: track),
+                      ),
+                    ),
+                  ),
+                ],
                 row(
                   Icons.bedtime_rounded,
                   'Sleep timer',

@@ -7,6 +7,7 @@ import '../../models/home_sections.dart';
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/saavn_service.dart';
+import '../../services/storage_service.dart';
 import '../../services/voice_command_service.dart';
 import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
@@ -48,17 +49,16 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
   @override
   void initState() {
     super.initState();
-    if (VoiceCommandService.isSupported) {
+    if (VoiceCommandService.isSupported && StorageService().isVoiceControlEnabled()) {
       _voiceService = VoiceCommandService();
     }
   }
 
   void _voiceSearch() {
-    final service = _voiceService;
-    if (service == null) return;
+    _voiceService ??= VoiceCommandService();
     VoiceCommandOverlay.show(
       context,
-      service: service,
+      service: _voiceService!,
       onCommand: (cmd) {
         // Any voice result becomes a search query.
         final query = cmd.query ?? cmd.rawText;
@@ -186,7 +186,8 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
                 color: context.colors.mist.withValues(alpha: 0.6),
               ),
               suffixIcon: _controller.text.isEmpty
-                  ? (_voiceService != null
+                  ? (VoiceCommandService.isSupported &&
+                          StorageService().isVoiceControlEnabled()
                       ? IconButton(
                           tooltip: 'Voice search',
                           icon: Icon(

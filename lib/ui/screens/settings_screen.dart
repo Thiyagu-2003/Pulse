@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../services/playback_cache.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/update_service.dart';
+import '../../services/voice_command_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/download_folder.dart';
 import 'customize_home_screen.dart';
@@ -200,6 +201,16 @@ class SettingsScreen extends StatelessWidget {
             value: provider.stopPlaybackOnClose,
             onChanged: provider.setStopPlaybackOnClose,
           ),
+          if (VoiceCommandService.isSupported)
+            SwitchListTile(
+              secondary: const Icon(Icons.mic_none_rounded),
+              title: const Text('Hands-free voice control'),
+              subtitle: const Text(
+                'Show floating mic button on the home screen to control music and search by voice',
+              ),
+              value: provider.voiceControlEnabled,
+              onChanged: (on) => provider.setVoiceControlEnabled(on, context),
+            ),
           // Releases carry Android APKs; the check can't read a desktop
           // build's version, and would always say "latest".
           if (Platform.isAndroid)

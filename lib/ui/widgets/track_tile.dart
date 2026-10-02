@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,6 +12,7 @@ import '../screens/artist_screen.dart';
 import '../theme/app_theme.dart';
 import 'add_to_playlist_sheet.dart';
 import 'download_playlist_sheet.dart';
+import '../screens/ringtone_editor_screen.dart';
 import 'local_artwork.dart';
 import 'playing_indicator.dart';
 
@@ -420,6 +423,24 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                       icon: Icons.link_rounded,
                     );
                   }
+                },
+              ),
+            // Android-only: set song as ringtone / notification / alarm.
+            if (Platform.isAndroid)
+              ListTile(
+                leading: Icon(
+                  Icons.ring_volume_rounded,
+                  color: sheetContext.colors.accent,
+                ),
+                title: const Text('Set as ringtone'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.push(
+                    rootContext,
+                    MaterialPageRoute(
+                      builder: (_) => RingtoneEditorScreen(item: item),
+                    ),
+                  );
                 },
               ),
           ],

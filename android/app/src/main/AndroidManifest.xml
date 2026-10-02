@@ -19,6 +19,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- In-app voice commands (speech_to_text). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Required to set default phone ringtone, notification, and alarm sounds. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:label="Pulse"
