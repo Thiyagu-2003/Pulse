@@ -7,12 +7,14 @@ import '../../services/desktop_tray.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/update_service.dart';
+import '../../services/voice_command_service.dart';
 import 'settings_screen.dart';
 import 'online_music_screen.dart';
 import 'local_songs_screen.dart';
 import 'podcasts_screen.dart';
 import 'playlists_screen.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/voice_command_overlay.dart';
 import '../theme/app_theme.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -26,6 +28,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     with WidgetsBindingObserver {
   int _currentIndex = 0;
   StreamSubscription<String>? _errorSubscription;
+  VoiceCommandService? _voiceService;
 
   final List<Widget> _screens = const [
     OnlineMusicScreen(),
@@ -66,6 +69,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         .playbackErrors
         .listen(_showPlaybackError);
     _checkForUpdate();
+    // Voice commands (Android / iOS only).
+    if (VoiceCommandService.isSupported) {
+      _voiceService = VoiceCommandService();
+    }
     // Windows: the notification-area icon and hide-to-tray on close.
     DesktopTray.start(context.read<MusicPlayerProvider>());
   }
@@ -114,10 +121,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       );
   }
 
+  void _openVoice() {
+    final service = _voiceService;
+    if (service == null) return;
+    final provider = context.read<MusicPlayerProvider>();
+    VoiceCommandOverlay.show(
+      context,
+      service: service,
+      onCommand: (cmd) => provider.handleVoiceCommand(cmd, context),
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _errorSubscription?.cancel();
+    _voiceService?.dispose();
     super.dispose();
   }
 
@@ -130,6 +149,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
           // Floating MiniPlayer resting above bottom navigation bar
           const Positioned(left: 0, right: 0, bottom: 0, child: MiniPlayer()),
+
+          // Voice command mic FAB (mobile only)
+          if (_voiceService != null)
+            Positioned(
+              right: 16,
+              bottom: 80,
+              child: _VoiceFab(onTap: _openVoice),
+            ),
         ],
       ),
       // Material 3 NavigationBar: the selection pill slides between
@@ -171,4 +198,87 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       ),
     );
   }
+}
+
+/// A small, glowing mic FAB that invites voice interaction.
+class _VoiceFab extends StatefulWidget {
+  final VoidCallback onTap;
+  const _VoiceFab({required this.onTap});
+
+  @override
+  State<_VoiceFab> createState() => _VoiceFabState();
+}
+
+class _VoiceFabState extends State<_VoiceFab>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glow;
+
+  @override
+  void initState() {
+    super.initState();
+    _glow = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _glow,
+      builder: (context, _) {
+        return GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.primary,
+                  AppTheme.primary.withValues(alpha: 0.8),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withValues(
+                    alpha: 0.2 + _glow.value * 0.3,
+                  ),
+                  blurRadius: 12 + _glow.value * 8,
+                  spreadRadius: _glow.value * 2,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.mic_rounded,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Lightweight AnimatedWidget wrapper used in this file.
+class AnimatedBuilder extends AnimatedWidget {
+  final TransitionBuilder builder;
+  const AnimatedBuilder({
+    super.key,
+    required Animation<double> animation,
+    required this.builder,
+  }) : super(listenable: animation);
+
+  @override
+  Widget build(BuildContext context) => builder(context, null);
 }

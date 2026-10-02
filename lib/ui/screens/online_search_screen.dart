@@ -7,10 +7,12 @@ import '../../models/home_sections.dart';
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/saavn_service.dart';
+import '../../services/voice_command_service.dart';
 import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/track_tile.dart';
+import '../widgets/voice_command_overlay.dart';
 import 'artist_screen.dart';
 
 /// Online search. Empty box: recent searches. While typing: YouTube's own
@@ -25,6 +27,7 @@ class OnlineSearchScreen extends StatefulWidget {
 
 class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
   final _controller = TextEditingController();
+  VoiceCommandService? _voiceService;
 
   /// The submitted search; null while showing recent searches/suggestions.
   String? _query;
@@ -41,6 +44,28 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
   bool _isLoading = false;
   // Bumped per request; a slower earlier response must not overwrite a newer one.
   int _request = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (VoiceCommandService.isSupported) {
+      _voiceService = VoiceCommandService();
+    }
+  }
+
+  void _voiceSearch() {
+    final service = _voiceService;
+    if (service == null) return;
+    VoiceCommandOverlay.show(
+      context,
+      service: service,
+      onCommand: (cmd) {
+        // Any voice result becomes a search query.
+        final query = cmd.query ?? cmd.rawText;
+        if (query.isNotEmpty) _search(query);
+      },
+    );
+  }
 
   Future<void> _search(String raw) async {
     final query = raw.trim();
@@ -133,6 +158,7 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
   void dispose() {
     _stopSuggesting();
     _controller.dispose();
+    _voiceService?.dispose();
     super.dispose();
   }
 
@@ -160,7 +186,16 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
                 color: context.colors.mist.withValues(alpha: 0.6),
               ),
               suffixIcon: _controller.text.isEmpty
-                  ? null
+                  ? (_voiceService != null
+                      ? IconButton(
+                          tooltip: 'Voice search',
+                          icon: Icon(
+                            Icons.mic_rounded,
+                            color: context.colors.mist.withValues(alpha: 0.6),
+                          ),
+                          onPressed: _voiceSearch,
+                        )
+                      : null)
                   : IconButton(
                       tooltip: 'Clear search',
                       icon: const Icon(Icons.clear_rounded),

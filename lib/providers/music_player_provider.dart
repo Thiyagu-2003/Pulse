@@ -14,6 +14,7 @@ import '../services/audio_handler.dart';
 import '../services/saavn_service.dart';
 import '../services/storage_service.dart';
 import '../services/lyrics_service.dart';
+import '../services/voice_command_service.dart';
 import '../services/youtube_service.dart';
 import '../services/download_notifications.dart';
 import '../services/platform_bridge.dart';
@@ -50,6 +51,8 @@ class MusicPlayerProvider extends ChangeNotifier {
     _audioHandler.onTrackCompleted = _advanceOnCompletion;
     _audioHandler.onBrowse = browseForAuto;
     _audioHandler.onPlayFromMediaId = playFromAuto;
+    // Google Assistant / Gemini: "Play <query> on Pulse".
+    _audioHandler.onPlayFromSearch = searchAndPlay;
     // A reload after Stop or an error resumes a podcast where it was.
     _audioHandler.resumePositionFor = (track) {
       final at = _resumePositionFor(track);
@@ -1183,5 +1186,61 @@ class MusicPlayerProvider extends ChangeNotifier {
   void dispose() {
     _sleepTimer?.cancel();
     super.dispose();
+  }
+
+  // ─── Voice commands ───
+
+  /// Search online and play the first matching song.
+  /// Used by both in-app voice and Google Assistant / Gemini.
+  Future<void> searchAndPlay(String query) async {
+    if (query.trim().isEmpty) return;
+    try {
+      final results = await ytService.searchMusic(query);
+      if (results.isNotEmpty) {
+        await playTrack(results.first, playlist: results);
+      }
+    } catch (e) {
+      debugPrint('Voice search-and-play failed: $e');
+    }
+  }
+
+  /// Dispatch a parsed [VoiceCommand] to the appropriate action.
+  /// [context] is needed only for navigation (opening search screen).
+  Future<void> handleVoiceCommand(VoiceCommand cmd, BuildContext context) async {
+    switch (cmd.action) {
+      case VoiceAction.play:
+        if (cmd.query != null) {
+          await searchAndPlay(cmd.query!);
+        } else {
+          await _audioHandler.play();
+        }
+      case VoiceAction.pause:
+        await _audioHandler.pause();
+      case VoiceAction.resume:
+        await _audioHandler.play();
+      case VoiceAction.stop:
+        await _audioHandler.stop();
+      case VoiceAction.next:
+        await skipToNext();
+      case VoiceAction.previous:
+        await skipToPrevious();
+      case VoiceAction.shuffle:
+        toggleShuffle();
+      case VoiceAction.repeat:
+        cycleRepeat();
+      case VoiceAction.favorite:
+        final track = _currentTrack;
+        if (track != null) await toggleFavorite(track);
+      case VoiceAction.search:
+        if (cmd.query != null) {
+          await searchAndPlay(cmd.query!);
+        }
+      case VoiceAction.volumeUp:
+      case VoiceAction.volumeDown:
+        // Volume is controlled at the OS level; these are no-ops in-app.
+        break;
+      case VoiceAction.none:
+        break;
+    }
   }
 }

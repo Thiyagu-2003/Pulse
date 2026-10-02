@@ -77,6 +77,16 @@ class CustomAudioHandler extends BaseAudioHandler
     Map<String, dynamic>? extras,
   ]) async => onPlayFromMediaId?.call(mediaId);
 
+  /// Google Assistant / Gemini: "Play <query> on Pulse".
+  /// The provider registers a callback that searches and plays.
+  Future<void> Function(String query)? onPlayFromSearch;
+
+  @override
+  Future<void> playFromSearch(
+    String query, [
+    Map<String, dynamic>? extras,
+  ]) async => onPlayFromSearch?.call(query);
+
   /// Separate from [onSkipNext] so end-of-track advance can stop at the end of
   /// the queue while the skip button still wraps around.
   VoidCallback? onTrackCompleted;
