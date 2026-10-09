@@ -149,70 +149,81 @@ class TrackTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (selected != null)
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: selected!
-                          ? AppTheme.primary.withValues(alpha: 0.85)
-                          : Colors.black.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      selected!
-                          ? Icons.check_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      color: Colors.white,
-                    ),
-                  ),
               ],
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Downloads go through YouTube extraction; a podcast id is a
-                // hash of its URL, so that could only ever fail.
-                if (item.sourceType.isOnline) DownloadButton(item: item),
-                IconButton(
-                  // Scales up as it fills in, so the tap has a result you can see
-                  // without moving your eyes to a toast.
-                  icon: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 260),
-                    transitionBuilder: (child, animation) => ScaleTransition(
-                      scale: CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutBack,
+            trailing: selected != null
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: selected!
+                            ? AppTheme.primary
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: selected!
+                              ? AppTheme.primary
+                              : context.colors.mist.withValues(alpha: 0.35),
+                          width: 2,
+                        ),
                       ),
-                      child: child,
+                      child: selected!
+                          ? const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            )
+                          : null,
                     ),
-                    child: Icon(
-                      isFav
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      key: ValueKey(isFav),
-                      color: isFav
-                          ? const Color(0xFFFF5C7A)
-                          : context.colors.mist.withValues(alpha: 0.35),
-                      size: 20,
-                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Downloads go through YouTube extraction; a podcast id is a
+                      // hash of its URL, so that could only ever fail.
+                      if (item.sourceType.isOnline) DownloadButton(item: item),
+                      IconButton(
+                        // Scales up as it fills in, so the tap has a result you can see
+                        // without moving your eyes to a toast.
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 260),
+                          transitionBuilder: (child, animation) => ScaleTransition(
+                            scale: CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutBack,
+                            ),
+                            child: child,
+                          ),
+                          child: Icon(
+                            isFav
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            key: ValueKey(isFav),
+                            color: isFav
+                                ? const Color(0xFFFF5C7A)
+                                : context.colors.mist.withValues(alpha: 0.35),
+                            size: 20,
+                          ),
+                        ),
+                        tooltip:
+                            isFav ? 'Remove from favorites' : 'Add to favorites',
+                        onPressed: () => playerProvider.toggleFavorite(item),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.more_vert_rounded,
+                          color: context.colors.mist.withValues(alpha: 0.55),
+                          size: 20,
+                        ),
+                        tooltip: 'More actions',
+                        onPressed: () => showTrackActions(context, item),
+                      ),
+                    ],
                   ),
-                  tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
-                  onPressed: () => playerProvider.toggleFavorite(item),
-                ),
-                if (selected == null)
-                  IconButton(
-                    icon: Icon(
-                      Icons.more_vert_rounded,
-                      color: context.colors.mist.withValues(alpha: 0.55),
-                      size: 20,
-                    ),
-                    tooltip: 'More actions',
-                    onPressed: () => showTrackActions(context, item),
-                  ),
-              ],
-            ),
           ),
         ),
       ),

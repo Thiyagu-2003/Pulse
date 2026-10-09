@@ -9,6 +9,7 @@ import '../../models/playlist.dart';
 import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/local_artwork.dart';
 import '../widgets/selectable_track_list.dart';
 import '../widgets/track_filter_bar.dart';
@@ -755,9 +756,130 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
     );
   }
 
-  Widget _buildFolderGridCard(BuildContext context, MediaFolder folder) {
+  List<PopupMenuEntry<String>> _buildFolderMenuItems(BuildContext context) {
+    return const [
+      PopupMenuItem(value: 'play', child: Text('Play folder')),
+      PopupMenuItem(value: 'shuffle', child: Text('Shuffle folder')),
+      PopupMenuItem(value: 'play_next', child: Text('Play next')),
+      PopupMenuItem(value: 'add_to_queue', child: Text('Add to play queue')),
+      PopupMenuItem(value: 'add_to_playlist', child: Text('Add to playlist')),
+    ];
+  }
+
+  void _handleFolderAction(BuildContext context, String action, MediaFolder folder) {
+    final messenger = ScaffoldMessenger.of(context);
+    if (folder.items.isEmpty) {
+      showCompactSnack(
+        messenger,
+        'Folder is empty',
+        icon: Icons.info_outline_rounded,
+      );
+      return;
+    }
     final provider = context.read<MusicPlayerProvider>();
 
+    switch (action) {
+      case 'play':
+        provider.playTrack(folder.items.first, playlist: folder.items);
+        break;
+      case 'shuffle':
+        provider.shuffleAll(folder.items);
+        break;
+      case 'play_next':
+        provider.playNextAll(folder.items);
+        showCompactSnack(
+          messenger,
+          folder.items.length == 1
+              ? 'Playing next: ${folder.items.first.title}'
+              : 'Playing next: ${folder.items.length} songs',
+          icon: Icons.playlist_play_rounded,
+        );
+        break;
+      case 'add_to_queue':
+        provider.addAllToQueue(folder.items);
+        showCompactSnack(
+          messenger,
+          folder.items.length == 1
+              ? 'Added to queue: ${folder.items.first.title}'
+              : 'Added ${folder.items.length} songs to queue',
+          icon: Icons.queue_music_rounded,
+        );
+        break;
+      case 'add_to_playlist':
+        showAddToPlaylistSheet(context, folder.items);
+        break;
+    }
+  }
+
+  void _showFolderBottomSheet(BuildContext context, MediaFolder folder) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  folder.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.play_arrow_rounded, color: sheetContext.colors.accent),
+                title: const Text('Play folder'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleFolderAction(context, 'play', folder);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.shuffle_rounded, color: sheetContext.colors.accent),
+                title: const Text('Shuffle folder'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleFolderAction(context, 'shuffle', folder);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.playlist_play_rounded, color: sheetContext.colors.accent),
+                title: const Text('Play next'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleFolderAction(context, 'play_next', folder);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.queue_music_rounded, color: sheetContext.colors.accent),
+                title: const Text('Add to play queue'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleFolderAction(context, 'add_to_queue', folder);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.playlist_add_rounded, color: sheetContext.colors.accent),
+                title: const Text('Add to playlist'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleFolderAction(context, 'add_to_playlist', folder);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFolderGridCard(BuildContext context, MediaFolder folder) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () {
@@ -766,6 +888,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
           MaterialPageRoute(builder: (_) => FolderSongsScreen(folder: folder)),
         );
       },
+      onLongPress: () => _showFolderBottomSheet(context, folder),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -801,15 +924,10 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
                       offset.dx + 1,
                       offset.dy + 1,
                     ),
-                    items: const [
-                      PopupMenuItem(value: 'play', child: Text('Play folder')),
-                      PopupMenuItem(value: 'shuffle', child: Text('Shuffle folder')),
-                    ],
+                    items: _buildFolderMenuItems(context),
                   ).then((action) {
-                    if (action == 'play' && folder.items.isNotEmpty) {
-                      provider.playTrack(folder.items.first, playlist: folder.items);
-                    } else if (action == 'shuffle' && folder.items.isNotEmpty) {
-                      provider.shuffleAll(folder.items);
+                    if (context.mounted && action != null) {
+                      _handleFolderAction(context, action, folder);
                     }
                   });
                 },
@@ -886,6 +1004,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
           MaterialPageRoute(builder: (_) => FolderSongsScreen(folder: folder)),
         );
       },
+      onLongPress: () => _showFolderBottomSheet(context, folder),
       child: SizedBox(
         width: 115,
         child: Column(
@@ -1056,18 +1175,8 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
                 Icons.more_vert_rounded,
                 color: context.colors.mist.withValues(alpha: 0.5),
               ),
-              onSelected: (action) {
-                final provider = context.read<MusicPlayerProvider>();
-                if (action == 'play' && folder.items.isNotEmpty) {
-                  provider.playTrack(folder.items.first, playlist: folder.items);
-                } else if (action == 'shuffle' && folder.items.isNotEmpty) {
-                  provider.shuffleAll(folder.items);
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'play', child: Text('Play folder')),
-                const PopupMenuItem(value: 'shuffle', child: Text('Shuffle folder')),
-              ],
+              onSelected: (action) => _handleFolderAction(context, action, folder),
+              itemBuilder: (ctx) => _buildFolderMenuItems(ctx),
             ),
             onTap: () {
               Navigator.push(
@@ -1075,6 +1184,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
                 MaterialPageRoute(builder: (_) => FolderSongsScreen(folder: folder)),
               );
             },
+            onLongPress: () => _showFolderBottomSheet(context, folder),
           );
         },
       ),

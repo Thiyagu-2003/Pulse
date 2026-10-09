@@ -201,62 +201,211 @@ class _SelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = context.colors.accent;
-    return Material(
-      color: AppTheme.primary.withValues(alpha: 0.14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Cancel selection',
-              icon: const Icon(Icons.close_rounded),
-              onPressed: onClose,
-            ),
-            Expanded(
-              child: Text(
-                '$count selected',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            IconButton(
-              tooltip: allSelected ? 'Select none' : 'Select all',
-              icon: Icon(
-                allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
-                color: accent,
-              ),
-              onPressed: onSelectAll,
-            ),
-            IconButton(
-              tooltip: 'Play selected',
-              icon: Icon(Icons.play_arrow_rounded, color: accent),
-              onPressed: onPlay,
-            ),
-            IconButton(
-              tooltip: 'Play next',
-              icon: Icon(Icons.playlist_play_rounded, color: accent),
-              onPressed: onPlayNext,
-            ),
-            IconButton(
-              tooltip: 'Add to queue',
-              icon: Icon(Icons.queue_music_rounded, color: accent),
-              onPressed: onQueue,
-            ),
-            IconButton(
-              tooltip: 'Add to playlist',
-              icon: Icon(Icons.playlist_add_rounded, color: accent),
-              onPressed: onAddToPlaylist,
-            ),
-            if (onDelete != null)
-              IconButton(
-                tooltip: 'Delete',
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.redAccent,
+    final colors = context.colors;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.lift,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppTheme.primary.withValues(alpha: 0.25),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.20),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header Row: Close button, Count, and Select All / Deselect All button
+          Padding(
+            padding: const EdgeInsets.only(left: 6, right: 10, top: 4, bottom: 4),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Cancel selection',
+                  icon: const Icon(Icons.close_rounded, size: 22),
+                  onPressed: onClose,
                 ),
-                onPressed: onDelete,
-              ),
-          ],
+                const SizedBox(width: 4),
+                Text(
+                  '$count selected',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.primarySoft,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: onSelectAll,
+                  icon: Icon(
+                    allSelected
+                        ? Icons.deselect_rounded
+                        : Icons.select_all_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    allSelected ? 'Deselect all' : 'Select all',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            color: colors.mist.withValues(alpha: 0.08),
+          ),
+          // Actions Row: Each button has explicit text, relevant icon, and distinct styling
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              children: [
+                _SelectionActionButton(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Play',
+                  tooltip: 'Play selected songs',
+                  isPrimary: true,
+                  onPressed: onPlay,
+                ),
+                const SizedBox(width: 8),
+                _SelectionActionButton(
+                  icon: Icons.playlist_play_rounded,
+                  label: 'Play next',
+                  tooltip: 'Play selected songs next',
+                  onPressed: onPlayNext,
+                ),
+                const SizedBox(width: 8),
+                _SelectionActionButton(
+                  icon: Icons.queue_music_rounded,
+                  label: 'Add to queue',
+                  tooltip: 'Add selected songs to queue',
+                  onPressed: onQueue,
+                ),
+                const SizedBox(width: 8),
+                _SelectionActionButton(
+                  icon: Icons.playlist_add_rounded,
+                  label: 'Add to playlist',
+                  tooltip: 'Add selected songs to playlist',
+                  onPressed: onAddToPlaylist,
+                ),
+                if (onDelete != null) ...[
+                  const SizedBox(width: 8),
+                  _SelectionActionButton(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete',
+                    tooltip: 'Delete selected songs',
+                    isDestructive: true,
+                    onPressed: onDelete!,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectionActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool isPrimary;
+  final bool isDestructive;
+
+  const _SelectionActionButton({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onPressed,
+    this.isPrimary = false,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final Color bgColor;
+    final Color fgColor;
+    final Border? border;
+
+    if (isPrimary) {
+      bgColor = AppTheme.primary;
+      fgColor = Colors.white;
+      border = null;
+    } else if (isDestructive) {
+      bgColor = Colors.redAccent.withValues(alpha: 0.12);
+      fgColor = Colors.redAccent;
+      border = Border.all(
+        color: Colors.redAccent.withValues(alpha: 0.35),
+        width: 1,
+      );
+    } else {
+      bgColor = colors.surface;
+      fgColor = colors.mist;
+      border = Border.all(
+        color: colors.mist.withValues(alpha: 0.10),
+        width: 1,
+      );
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: border,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 19,
+                  color: isPrimary
+                      ? Colors.white
+                      : isDestructive
+                          ? Colors.redAccent
+                          : AppTheme.primarySoft,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isPrimary ? FontWeight.w700 : FontWeight.w600,
+                    color: fgColor,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/local_artwork.dart';
 import '../widgets/selectable_track_list.dart';
+import '../widgets/track_tile.dart';
 
 /// Screen displaying tracks for a specific local Album, Artist, Folder, or Genre.
 class LocalCollectionScreen extends StatelessWidget {
@@ -63,6 +65,51 @@ class LocalCollectionScreen extends StatelessWidget {
                       songs.first,
                       playlist: songs,
                     ),
+          ),
+          PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: context.colors.mist.withValues(alpha: 0.7),
+            ),
+            tooltip: 'More options',
+            onSelected: (action) {
+              final messenger = ScaffoldMessenger.of(context);
+              if (songs.isEmpty) {
+                showCompactSnack(
+                  messenger,
+                  'Collection is empty',
+                  icon: Icons.info_outline_rounded,
+                );
+                return;
+              }
+              final provider = context.read<MusicPlayerProvider>();
+              if (action == 'play_next') {
+                provider.playNextAll(songs);
+                showCompactSnack(
+                  messenger,
+                  songs.length == 1
+                      ? 'Playing next: ${songs.first.title}'
+                      : 'Playing next: ${songs.length} songs',
+                  icon: Icons.playlist_play_rounded,
+                );
+              } else if (action == 'add_to_queue') {
+                provider.addAllToQueue(songs);
+                showCompactSnack(
+                  messenger,
+                  songs.length == 1
+                      ? 'Added to queue: ${songs.first.title}'
+                      : 'Added ${songs.length} songs to queue',
+                  icon: Icons.queue_music_rounded,
+                );
+              } else if (action == 'add_to_playlist') {
+                showAddToPlaylistSheet(context, songs);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'play_next', child: Text('Play next')),
+              PopupMenuItem(value: 'add_to_queue', child: Text('Add to play queue')),
+              PopupMenuItem(value: 'add_to_playlist', child: Text('Add to playlist')),
+            ],
           ),
         ],
       ),

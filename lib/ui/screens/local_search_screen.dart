@@ -7,6 +7,7 @@ import '../../models/media_folder.dart';
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/local_artwork.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/track_tile.dart';
@@ -491,7 +492,59 @@ class _LocalSearchScreenState extends State<LocalSearchScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded),
+                onSelected: (action) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  if (f.items.isEmpty) {
+                    showCompactSnack(
+                      messenger,
+                      'Folder is empty',
+                      icon: Icons.info_outline_rounded,
+                    );
+                    return;
+                  }
+                  final provider = context.read<MusicPlayerProvider>();
+                  switch (action) {
+                    case 'play':
+                      provider.playTrack(f.items.first, playlist: f.items);
+                      break;
+                    case 'shuffle':
+                      provider.shuffleAll(f.items);
+                      break;
+                    case 'play_next':
+                      provider.playNextAll(f.items);
+                      showCompactSnack(
+                        messenger,
+                        f.items.length == 1
+                            ? 'Playing next: ${f.items.first.title}'
+                            : 'Playing next: ${f.items.length} songs',
+                        icon: Icons.playlist_play_rounded,
+                      );
+                      break;
+                    case 'add_to_queue':
+                      provider.addAllToQueue(f.items);
+                      showCompactSnack(
+                        messenger,
+                        f.items.length == 1
+                            ? 'Added to queue: ${f.items.first.title}'
+                            : 'Added ${f.items.length} songs to queue',
+                        icon: Icons.queue_music_rounded,
+                      );
+                      break;
+                    case 'add_to_playlist':
+                      showAddToPlaylistSheet(context, f.items);
+                      break;
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'play', child: Text('Play folder')),
+                  PopupMenuItem(value: 'shuffle', child: Text('Shuffle folder')),
+                  PopupMenuItem(value: 'play_next', child: Text('Play next')),
+                  PopupMenuItem(value: 'add_to_queue', child: Text('Add to play queue')),
+                  PopupMenuItem(value: 'add_to_playlist', child: Text('Add to playlist')),
+                ],
+              ),
               onTap: () {
                 Navigator.push(
                   context,

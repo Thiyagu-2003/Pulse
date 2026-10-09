@@ -779,6 +779,10 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Queue [item] directly after whatever is playing. False if [item] is
   /// what's playing, so the UI doesn't claim it was queued.
   bool playNext(AppMediaItem item) {
+    if (_currentTrack == null) {
+      playTrack(item);
+      return true;
+    }
     final added = _queueState.insertNext(item);
     notifyListeners();
     _prefetchUpcoming();
@@ -787,6 +791,11 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   /// Several songs at once, in order, right after the one playing.
   void playNextAll(List<AppMediaItem> items) {
+    if (items.isEmpty) return;
+    if (_currentTrack == null) {
+      playTrack(items.first, playlist: items);
+      return;
+    }
     for (final item in items.reversed) {
       _queueState.insertNext(item);
     }
