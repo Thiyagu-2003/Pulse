@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/mini_player.dart';
 import '../widgets/track_tile.dart';
 
 /// Settings > Listening stats: totals, most played songs and artists.
@@ -16,6 +17,7 @@ class StatsScreen extends StatelessWidget {
     final muted = TextStyle(color: context.colors.mist.withValues(alpha: 0.6));
     return Scaffold(
       appBar: AppBar(title: const Text('Listening stats')),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       body: stats.plays == 0
           ? Center(
               child: Text('Play some songs to see your stats.', style: muted),

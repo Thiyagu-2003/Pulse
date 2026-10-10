@@ -20,11 +20,16 @@ class SelectableTrackList extends StatefulWidget {
   /// selection bar (after a confirmation), and swipe left on a song.
   final Future<void> Function(List<AppMediaItem> songs)? onDelete;
 
+  /// Custom bottom padding for the scrollable list. Defaults to 110 (to float
+  /// cleanly above main navigation's floating mini player).
+  final double? bottomPadding;
+
   const SelectableTrackList({
     super.key,
     required this.songs,
     this.header,
     this.onDelete,
+    this.bottomPadding,
   });
 
   @override
@@ -139,7 +144,7 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
             ?widget.header,
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.only(bottom: 110),
+              padding: EdgeInsets.only(bottom: widget.bottomPadding ?? 110),
               itemCount: songs.length,
               itemBuilder: (context, i) {
                 final song = songs[i];

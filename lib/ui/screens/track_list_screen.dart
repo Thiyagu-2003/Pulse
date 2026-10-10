@@ -39,7 +39,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       // Pushed over the tabs, so it needs its own mini player.
-      bottomNavigationBar: const SafeArea(top: false, child: MiniPlayer()),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       body: FutureBuilder<List<AppMediaItem>>(
         future: _tracks,
         builder: (context, snapshot) {

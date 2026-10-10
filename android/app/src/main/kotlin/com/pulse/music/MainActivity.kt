@@ -1,6 +1,7 @@
 package com.pulse.music
 
 import android.app.ActivityManager
+import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.ContentValues
 import android.content.Context
@@ -79,6 +80,35 @@ class MainActivity : AudioServiceActivity() {
                             .apply()
                         PulseWidgetHelper.refreshAll(app)
                         result.success(null)
+                    }
+                    "isPinWidgetSupported" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val manager = getSystemService(AppWidgetManager::class.java)
+                            result.success(manager?.isRequestPinAppWidgetSupported ?: false)
+                        } else {
+                            result.success(false)
+                        }
+                    }
+                    "pinWidget" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val manager = getSystemService(AppWidgetManager::class.java)
+                            val type = call.argument<String>("type") ?: "bar"
+                            val provider = when (type) {
+                                "compact" -> PulseCompactWidgetProvider::class.java
+                                "square" -> PulseSquareWidgetProvider::class.java
+                                "card" -> PulseCardWidgetProvider::class.java
+                                else -> PulseWidgetProvider::class.java
+                            }
+                            val component = ComponentName(this, provider)
+                            if (manager?.isRequestPinAppWidgetSupported == true) {
+                                val pinned = manager.requestPinAppWidget(component, null, null)
+                                result.success(pinned)
+                            } else {
+                                result.success(false)
+                            }
+                        } else {
+                            result.success(false)
+                        }
                     }
                     "appVersion" -> {
                         result.success(packageManager.getPackageInfo(packageName, 0).versionName)

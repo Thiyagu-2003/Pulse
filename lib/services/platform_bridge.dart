@@ -24,6 +24,29 @@ class PlatformBridge {
         'playing': playing,
       });
 
+  /// Whether the Android launcher supports pinning widgets directly from the app (Android 8.0+).
+  static Future<bool> isPinWidgetSupported() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('isPinWidgetSupported');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Request the device launcher to pin a widget to the home screen.
+  /// [type] is 'bar', 'compact', 'square', or 'card'.
+  static Future<bool> pinWidget(String type) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('pinWidget', {'type': type});
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<void> setLauncherIcon({required bool dark}) =>
       _call('setLauncherIcon', {'dark': dark});
 

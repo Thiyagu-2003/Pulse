@@ -102,7 +102,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.name)),
-      bottomNavigationBar: const SafeArea(top: false, child: MiniPlayer()),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       body: FutureBuilder<SaavnArtist?>(
         future: _artist,
         builder: (context, snapshot) {

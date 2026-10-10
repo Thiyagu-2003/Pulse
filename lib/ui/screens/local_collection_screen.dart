@@ -5,6 +5,7 @@ import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/local_artwork.dart';
+import '../widgets/mini_player.dart';
 import '../widgets/selectable_track_list.dart';
 import '../widgets/track_tile.dart';
 
@@ -155,10 +156,11 @@ class LocalCollectionScreen extends StatelessWidget {
           ),
           const Divider(height: 1),
           Expanded(
-            child: SelectableTrackList(songs: songs),
+            child: SelectableTrackList(songs: songs, bottomPadding: 16),
           ),
         ],
       ),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
     );
   }
 }

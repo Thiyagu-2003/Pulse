@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/mini_player.dart';
 
 enum EqPreset { flat, bassBoost, vocal, treble }
 
@@ -67,6 +68,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       body: _parameters == null
           ? const Center(child: Text('The equalizer needs Android.'))
           : FutureBuilder<AndroidEqualizerParameters>(

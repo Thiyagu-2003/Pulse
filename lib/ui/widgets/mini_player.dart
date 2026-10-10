@@ -11,7 +11,9 @@ import 'local_artwork.dart';
 import 'play_pause_button.dart';
 
 class MiniPlayer extends StatelessWidget {
-  const MiniPlayer({super.key});
+  final bool useSafeArea;
+
+  const MiniPlayer({super.key, this.useSafeArea = false});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +24,7 @@ class MiniPlayer extends StatelessWidget {
 
     // Swipe sideways to change song, up to open Now Playing — the gestures
     // every music app's mini player has.
-    return GestureDetector(
+    final player = GestureDetector(
       onHorizontalDragEnd: (d) {
         final v = d.primaryVelocity ?? 0;
         if (v < -300) playerProvider.skipToNext();
@@ -41,6 +43,11 @@ class MiniPlayer extends StatelessWidget {
         ),
       ),
     );
+
+    if (useSafeArea) {
+      return SafeArea(top: false, child: player);
+    }
+    return player;
   }
 
   static void _openNowPlaying(BuildContext context) {

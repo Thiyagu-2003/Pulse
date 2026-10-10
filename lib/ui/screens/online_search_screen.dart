@@ -214,7 +214,7 @@ class _OnlineSearchScreenState extends State<OnlineSearchScreen> {
         ),
       ),
       // Pushed over the tabs, so it needs its own mini player.
-      bottomNavigationBar: const SafeArea(top: false, child: MiniPlayer()),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       body: _query != null
           ? _buildResults()
           : _typed.isEmpty

@@ -122,6 +122,14 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           ListTile(
+            leading: const Icon(Icons.widgets_rounded),
+            title: const Text('Home screen widgets'),
+            subtitle: const Text(
+              'Add a Now Playing widget to your device home screen',
+            ),
+            onTap: () => _showWidgetsSheet(context),
+          ),
+          ListTile(
             leading: const Icon(Icons.tune_rounded),
             title: const Text('Customize home'),
             subtitle: const Text(
@@ -367,6 +375,180 @@ class SettingsScreen extends StatelessWidget {
                     Navigator.pop(sheetContext);
                     onPicked(option);
                   },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showWidgetsSheet(BuildContext context) {
+    final widgets = [
+      (
+        id: 'bar',
+        name: 'Classic Bar',
+        size: '4 × 1',
+        desc: 'Horizontal music bar with album art and full playback controls.',
+        icon: Icons.view_stream_rounded,
+      ),
+      (
+        id: 'compact',
+        name: 'Mini',
+        size: '2 × 1',
+        desc: 'Compact space-saving music widget with quick play/pause.',
+        icon: Icons.crop_16_9_rounded,
+      ),
+      (
+        id: 'square',
+        name: 'Square',
+        size: '2 × 2',
+        desc: 'Modern square music card with prominent artwork and controls.',
+        icon: Icons.crop_square_rounded,
+      ),
+      (
+        id: 'card',
+        name: 'Expanded Card',
+        size: '4 × 2',
+        desc: 'Large music card with prominent artwork and controls.',
+        icon: Icons.calendar_view_day_rounded,
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.colors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: context.colors.mist.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Home screen widgets',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Choose a widget style to add to your phone home screen, or long-press an empty space on your phone home screen and select Widgets > Pulse.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.colors.mist.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 16),
+              for (final w in widgets)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: context.colors.mist.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: context.colors.mist.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(w.icon, color: AppTheme.primary),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  w.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: context.colors.mist.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    w.size,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.colors.mist.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              w.desc,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.colors.mist.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.tonal(
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () async {
+                          Navigator.pop(sheetContext);
+                          final supported = await PlatformBridge.isPinWidgetSupported();
+                          if (supported) {
+                            await PlatformBridge.pinWidget(w.id);
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'To add this widget: long-press on your phone\'s home screen, tap "Widgets", and select Pulse.',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text('Add'),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),

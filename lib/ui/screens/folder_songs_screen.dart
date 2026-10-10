@@ -4,6 +4,7 @@ import '../../models/media_folder.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/mini_player.dart';
 import '../widgets/selectable_track_list.dart';
 import '../widgets/track_tile.dart';
 
@@ -102,9 +103,11 @@ class FolderSongsScreen extends StatelessWidget {
           ),
         ],
       ),
+      // Pushed over the tabs, so it needs its own mini player.
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       // Queue only this folder, so a call recording can't run on into the
       // next one just because it happened to be next on disk.
-      body: SelectableTrackList(songs: folder.items),
+      body: SelectableTrackList(songs: folder.items, bottomPadding: 16),
     );
   }
 }

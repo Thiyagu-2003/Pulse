@@ -186,7 +186,7 @@ class _LocalSearchScreenState extends State<LocalSearchScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: const MiniPlayer(),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       body: q.isEmpty
           ? _buildInitialView(context)
           : !hasResults

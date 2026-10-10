@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/mini_player.dart';
 import '../widgets/track_tile.dart';
 
 class PlaylistDetailScreen extends StatelessWidget {
@@ -112,6 +113,7 @@ class PlaylistDetailScreen extends StatelessWidget {
                 ),
                 Expanded(
                   child: ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 16),
                     itemCount: playlist.items.length,
                     itemBuilder: (_, index) {
                       final item = playlist.items[index];
@@ -143,6 +145,7 @@ class PlaylistDetailScreen extends StatelessWidget {
                 ),
               ],
             ),
+      bottomNavigationBar: const MiniPlayer(useSafeArea: true),
     );
   }
 }
