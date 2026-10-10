@@ -100,7 +100,7 @@ class PulseTaskService : Service() {
                     .edit()
                     .putBoolean("playing", false)
                     .apply()
-                PulseWidgetProvider.refresh(context)
+                PulseWidgetHelper.refreshAll(context)
             } catch (_: Exception) {}
         }
     }

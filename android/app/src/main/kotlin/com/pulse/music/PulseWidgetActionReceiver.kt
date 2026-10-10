@@ -36,7 +36,7 @@ class PulseWidgetActionReceiver : BroadcastReceiver() {
 
         context.getSharedPreferences(PulseWidgetProvider.PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean("playing", false).apply()
-        PulseWidgetProvider.refresh(context)
+        PulseWidgetHelper.refreshAll(context)
         try {
             context.startActivity(
                 Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

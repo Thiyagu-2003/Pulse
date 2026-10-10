@@ -7,4 +7,12 @@
     <string name="widget_previous">Previous</string>
     <string name="widget_play_pause">Play or pause</string>
     <string name="widget_next">Next</string>
+    <string name="widget_bar_name">Pulse (Classic Bar)</string>
+    <string name="widget_bar_description">Classic horizontal music bar with artwork and playback controls</string>
+    <string name="widget_compact_name">Pulse (Mini)</string>
+    <string name="widget_compact_description">Compact space-saving music widget with quick play/pause</string>
+    <string name="widget_square_name">Pulse (Square)</string>
+    <string name="widget_square_description">Modern square music card with artwork and controls</string>
+    <string name="widget_card_name">Pulse (Expanded Card)</string>
+    <string name="widget_card_description">Large music card with prominent artwork and full playback controls</string>
 </resources>

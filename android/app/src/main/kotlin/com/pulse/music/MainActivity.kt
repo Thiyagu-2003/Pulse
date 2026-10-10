@@ -77,7 +77,7 @@ class MainActivity : AudioServiceActivity() {
                             .putString("artPath", call.argument<String>("artPath"))
                             .putBoolean("playing", call.argument<Boolean>("playing") ?: false)
                             .apply()
-                        PulseWidgetProvider.refresh(app)
+                        PulseWidgetHelper.refreshAll(app)
                         result.success(null)
                     }
                     "appVersion" -> {
@@ -115,7 +115,7 @@ class MainActivity : AudioServiceActivity() {
                         // launcher entry itself switches on leaving the app.
                         IconStyle.setDark(app, call.argument<Boolean>("dark") ?: false)
                         applyTaskIcon()
-                        PulseWidgetProvider.refresh(app)
+                        PulseWidgetHelper.refreshAll(app)
                         result.success(null)
                     }
                     "setLauncherIcon" -> {

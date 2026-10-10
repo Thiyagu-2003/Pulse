@@ -215,6 +215,11 @@ class MusicPlayerProvider extends ChangeNotifier {
       artPath = await _widgetArt;
       // A failed fetch shouldn't stick for this track; try again next time.
       if (artPath == null && url == _widgetArtUrl) _widgetArtUrl = null;
+    } else if (url != null && url.isNotEmpty) {
+      final local = url.startsWith('file://') ? Uri.parse(url).toFilePath() : url;
+      if (File(local).existsSync()) {
+        artPath = local;
+      }
     }
     if (!identical(track, _currentTrack)) return; // changed while fetching
     await PlatformBridge.updateWidget(
