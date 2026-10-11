@@ -414,7 +414,23 @@ class _LocalSearchScreenState extends State<LocalSearchScreen> {
               ),
               title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text('${a.artist} · ${a.length} songs'),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded),
+                onSelected: (action) {
+                  if (action == 'add_to_playlist') {
+                    showAddToPlaylistSheet(context, a.songs);
+                  } else if (action == 'play' && a.songs.isNotEmpty) {
+                    context.read<MusicPlayerProvider>().playTrack(a.songs.first, playlist: a.songs);
+                  } else if (action == 'shuffle' && a.songs.isNotEmpty) {
+                    context.read<MusicPlayerProvider>().shuffleAll(a.songs);
+                  }
+                },
+                itemBuilder: (ctx) => const [
+                  PopupMenuItem(value: 'add_to_playlist', child: Text('Add to playlist')),
+                  PopupMenuItem(value: 'play', child: Text('Play album')),
+                  PopupMenuItem(value: 'shuffle', child: Text('Shuffle album')),
+                ],
+              ),
               onTap: () {
                 Navigator.push(
                   context,
@@ -427,6 +443,7 @@ class _LocalSearchScreenState extends State<LocalSearchScreen> {
                   ),
                 );
               },
+              onLongPress: () => showAddToPlaylistSheet(context, a.songs),
             );
           }),
         ],

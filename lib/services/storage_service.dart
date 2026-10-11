@@ -47,6 +47,11 @@ class StorageService {
   static const String darkLauncherIconKey = 'dark_launcher_icon';
   static const String stopPlaybackOnCloseKey = 'stop_playback_on_close';
   static const String voiceControlEnabledKey = 'voice_control_enabled';
+  static const String playbackNotificationKey = 'playback_notification_enabled';
+  static const String localAlbumsViewKey = 'local_albums_view';
+  static const String localFoldersViewKey = 'local_folders_view';
+  static const String localArtistsViewKey = 'local_artists_view';
+  static const String onlineViewModeKey = 'online_view_mode';
   static const String defaultHomeLanguage = 'Tamil';
   static const int recentSearchLimit = 10;
   static const int historyLimit = 200;
@@ -277,6 +282,26 @@ class StorageService {
 
   Future<void> setVoiceControlEnabled(bool on) =>
       setFlag(voiceControlEnabledKey, on);
+
+  /// Whether Android playback notification and lock screen controls are enabled.
+  /// Enabled by default.
+  bool getPlaybackNotificationEnabled() =>
+      getFlag(playbackNotificationKey, fallback: true);
+
+  Future<void> setPlaybackNotificationEnabled(bool on) =>
+      setFlag(playbackNotificationKey, on);
+
+  String getLocalAlbumsView() => _settingsBox.get(localAlbumsViewKey) ?? 'grid';
+  Future<void> setLocalAlbumsView(String view) => _settingsBox.put(localAlbumsViewKey, view);
+
+  String getLocalFoldersView() => _settingsBox.get(localFoldersViewKey) ?? 'list';
+  Future<void> setLocalFoldersView(String view) => _settingsBox.put(localFoldersViewKey, view);
+
+  String getLocalArtistsView() => _settingsBox.get(localArtistsViewKey) ?? 'list';
+  Future<void> setLocalArtistsView(String view) => _settingsBox.put(localArtistsViewKey, view);
+
+  String getOnlineViewMode() => _settingsBox.get(onlineViewModeKey) ?? 'standard';
+  Future<void> setOnlineViewMode(String mode) => _settingsBox.put(onlineViewModeKey, mode);
 
   List<String> getRecentSearches() {
     final stored = _settingsBox.get(recentSearchesKey);

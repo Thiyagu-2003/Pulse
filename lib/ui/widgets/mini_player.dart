@@ -211,8 +211,11 @@ class MiniPlayer extends StatelessWidget {
         StreamBuilder<Duration>(
           stream: playerProvider.positionStream,
           builder: (context, snapshot) {
-            final position = (snapshot.data ?? Duration.zero).inMilliseconds
-                .toDouble();
+            final currentPos = snapshot.data ?? Duration.zero;
+            final displayPos = currentPos > Duration.zero
+                ? currentPos
+                : (playerProvider.getSavedPosition(track.id) ?? Duration.zero);
+            final position = displayPos.inMilliseconds.toDouble();
             final duration =
                 playerProvider.currentDuration?.inMilliseconds.toDouble() ??
                 1.0;

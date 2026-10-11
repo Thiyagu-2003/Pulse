@@ -392,13 +392,13 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (playlist.items.isNotEmpty)
+            if (playlist.items.isNotEmpty) ...[
               ListTile(
                 leading: Icon(
                   Icons.play_arrow_rounded,
                   color: context.colors.accent,
                 ),
-                title: Text('Play all'),
+                title: const Text('Play all'),
                 onTap: () {
                   provider.playTrack(
                     playlist.items.first,
@@ -407,6 +407,50 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   Navigator.pop(sheetContext);
                 },
               ),
+              ListTile(
+                leading: Icon(
+                  Icons.shuffle_rounded,
+                  color: context.colors.accent,
+                ),
+                title: const Text('Shuffle playlist'),
+                onTap: () {
+                  provider.shuffleAll(playlist.items);
+                  Navigator.pop(sheetContext);
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.playlist_play_rounded,
+                  color: context.colors.accent,
+                ),
+                title: const Text('Play next'),
+                onTap: () {
+                  provider.playNextAll(playlist.items);
+                  Navigator.pop(sheetContext);
+                  showCompactSnack(
+                    ScaffoldMessenger.of(context),
+                    'Playing playlist next (${playlist.items.length} songs)',
+                    icon: Icons.playlist_play_rounded,
+                  );
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.queue_music_rounded,
+                  color: context.colors.accent,
+                ),
+                title: const Text('Add to queue'),
+                onTap: () {
+                  provider.addAllToQueue(playlist.items);
+                  Navigator.pop(sheetContext);
+                  showCompactSnack(
+                    ScaffoldMessenger.of(context),
+                    'Added ${playlist.items.length} songs to queue',
+                    icon: Icons.queue_music_rounded,
+                  );
+                },
+              ),
+            ],
             ListTile(
               leading: Icon(Icons.edit_rounded, color: context.colors.accent),
               title: Text('Rename'),

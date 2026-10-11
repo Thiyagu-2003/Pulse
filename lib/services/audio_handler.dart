@@ -80,7 +80,7 @@ class CustomAudioHandler extends BaseAudioHandler
     Map<String, dynamic>? extras,
   ]) async => onPlayFromMediaId?.call(mediaId);
 
-  /// Google Assistant / Gemini: "Play <query> on Pulse".
+  /// Google Assistant / Gemini: "Play `query` on Pulse".
   /// The provider registers a callback that searches and plays.
   Future<void> Function(String query)? onPlayFromSearch;
 
@@ -100,6 +100,19 @@ class CustomAudioHandler extends BaseAudioHandler
 
   bool _loopOne = false;
   int _loadGeneration = 0;
+  bool _notificationEnabled = true;
+  AppMediaItem? _currentAppMediaItem;
+
+  void setNotificationEnabled(bool enabled) {
+    if (_notificationEnabled == enabled) return;
+    _notificationEnabled = enabled;
+    if (!enabled) {
+      mediaItem.add(null);
+    } else if (_currentAppMediaItem != null) {
+      mediaItem.add(_currentAppMediaItem!.toAudioServiceMediaItem());
+    }
+    _broadcastState();
+  }
 
   /// True from a tap until the new track starts (or fails). Meanwhile the
   /// player still holds the *previous* source, paused — so its events must
@@ -154,18 +167,23 @@ class CustomAudioHandler extends BaseAudioHandler
     final playing = _loading ? !_pauseRequested : _player.playing;
     playbackState.add(
       playbackState.value.copyWith(
-        controls: [
-          MediaControl.skipToPrevious,
-          if (playing) MediaControl.pause else MediaControl.play,
-          MediaControl.skipToNext,
-          MediaControl.stop,
-        ],
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
-        androidCompactActionIndices: const [0, 1, 2],
+        controls: _notificationEnabled
+            ? [
+                MediaControl.skipToPrevious,
+                if (playing) MediaControl.pause else MediaControl.play,
+                MediaControl.skipToNext,
+                MediaControl.stop,
+              ]
+            : const [],
+        systemActions: _notificationEnabled
+            ? const {
+                MediaAction.seek,
+                MediaAction.seekForward,
+                MediaAction.seekBackward,
+              }
+            : const {},
+        androidCompactActionIndices:
+            _notificationEnabled ? const [0, 1, 2] : const [],
         processingState: const {
           ProcessingState.idle: AudioProcessingState.idle,
           ProcessingState.loading: AudioProcessingState.loading,
@@ -221,8 +239,13 @@ class CustomAudioHandler extends BaseAudioHandler
     _loading = true;
     _pauseRequested = false;
 
+    _currentAppMediaItem = item;
     // Immediately broadcast the mediaItem so the UI updates with track info
-    mediaItem.add(item.toAudioServiceMediaItem());
+    if (_notificationEnabled) {
+      mediaItem.add(item.toAudioServiceMediaItem());
+    } else {
+      mediaItem.add(null);
+    }
 
     // Set state to loading immediately
     playbackState.add(
@@ -307,7 +330,12 @@ class CustomAudioHandler extends BaseAudioHandler
         lyrics: item.lyrics,
         extras: item.extras,
       );
-      mediaItem.add(updatedItem.toAudioServiceMediaItem());
+      _currentAppMediaItem = updatedItem;
+      if (_notificationEnabled) {
+        mediaItem.add(updatedItem.toAudioServiceMediaItem());
+      } else {
+        mediaItem.add(null);
+      }
 
       // Set audio source based on URI type
       if (uri.startsWith('content://')) {
@@ -589,13 +617,14 @@ class CustomAudioHandler extends BaseAudioHandler
       _broadcastState();
       return;
     }
+    final currentItem = _currentAppMediaItem;
     final current = mediaItem.value;
     // Nothing selected (queue emptied, or nothing played yet): there is no
     // song to resume, and the player may still hold a removed one.
-    if (current == null) return;
+    if (currentItem == null && current == null) return;
     if (_player.audioSource == null ||
         _player.processingState == ProcessingState.idle) {
-      final track = AppMediaItem.fromAudioServiceMediaItem(current);
+      final track = currentItem ?? AppMediaItem.fromAudioServiceMediaItem(current!);
       await playAppMediaItem(track, startAt: resumePositionFor?.call(track));
       return;
     }

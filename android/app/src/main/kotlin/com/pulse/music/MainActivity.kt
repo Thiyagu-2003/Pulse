@@ -1,6 +1,8 @@
 package com.pulse.music
 
 import android.app.ActivityManager
+import android.app.NotificationManager
+import androidx.core.app.ServiceCompat
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.ContentValues
@@ -68,6 +70,68 @@ class MainActivity : AudioServiceActivity() {
                             .edit()
                             .putBoolean("stop_on_close", stop)
                             .apply()
+                        result.success(null)
+                    }
+                    "setPlaybackNotificationEnabled" -> {
+                        val enabled = call.argument<Boolean>("enabled") ?: true
+                        val notificationManager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        if (!enabled) {
+                            notificationManager.cancel(1124)
+                            try {
+                                val audioServiceClass = Class.forName("com.ryanheise.audioservice.AudioService")
+                                val instanceField = audioServiceClass.getDeclaredField("instance")
+                                instanceField.isAccessible = true
+                                val serviceInstance = instanceField.get(null)
+                                if (serviceInstance != null) {
+                                    val notifCreatedField = audioServiceClass.getDeclaredField("notificationCreated")
+                                    notifCreatedField.isAccessible = true
+                                    notifCreatedField.set(serviceInstance, false)
+
+                                    val mediaSessionField = audioServiceClass.getDeclaredField("mediaSession")
+                                    mediaSessionField.isAccessible = true
+                                    val session = mediaSessionField.get(serviceInstance)
+                                    if (session != null) {
+                                        try {
+                                            val setActiveMethod = session.javaClass.getMethod("setActive", Boolean::class.javaPrimitiveType)
+                                            setActiveMethod.invoke(session, false)
+                                        } catch (_: Exception) {}
+                                    }
+
+                                    if (serviceInstance is android.app.Service) {
+                                        ServiceCompat.stopForeground(
+                                            serviceInstance,
+                                            ServiceCompat.STOP_FOREGROUND_REMOVE
+                                        )
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("Pulse", "Error disabling notification", e)
+                            }
+                        } else {
+                            try {
+                                val audioServiceClass = Class.forName("com.ryanheise.audioservice.AudioService")
+                                val instanceField = audioServiceClass.getDeclaredField("instance")
+                                instanceField.isAccessible = true
+                                val serviceInstance = instanceField.get(null)
+                                if (serviceInstance != null) {
+                                    val mediaSessionField = audioServiceClass.getDeclaredField("mediaSession")
+                                    mediaSessionField.isAccessible = true
+                                    val session = mediaSessionField.get(serviceInstance)
+                                    if (session != null) {
+                                        try {
+                                            val setActiveMethod = session.javaClass.getMethod("setActive", Boolean::class.javaPrimitiveType)
+                                            setActiveMethod.invoke(session, true)
+                                        } catch (_: Exception) {}
+                                    }
+
+                                    val startForeMethod = audioServiceClass.getDeclaredMethod("internalStartForeground")
+                                    startForeMethod.isAccessible = true
+                                    startForeMethod.invoke(serviceInstance)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("Pulse", "Error enabling notification", e)
+                            }
+                        }
                         result.success(null)
                     }
                     "updateWidget" -> {

@@ -9,6 +9,8 @@ import '../../providers/music_player_provider.dart';
 import '../../services/network_status.dart';
 import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/local_artwork.dart';
 import '../widgets/track_tile.dart';
 import 'customize_home_screen.dart';
 import 'online_search_screen.dart';
@@ -241,6 +243,21 @@ class _Header extends StatelessWidget {
             ),
           ),
           // Up here rather than at the foot of a long page.
+          Consumer<MusicPlayerProvider>(
+            builder: (context, provider, _) {
+              final isList = provider.onlineViewMode == 'list';
+              return IconButton(
+                tooltip: isList ? 'Show grid' : 'Show list',
+                icon: Icon(
+                  isList ? Icons.grid_view_rounded : Icons.view_list_rounded,
+                  size: 26,
+                ),
+                onPressed: () {
+                  provider.setOnlineViewMode(isList ? 'grid' : 'list');
+                },
+              );
+            },
+          ),
           IconButton(
             tooltip: 'Customize home',
             icon: const Icon(Icons.tune_rounded, size: 26),
@@ -289,7 +306,7 @@ class _QuickPicks extends StatelessWidget {
         .getHistory()
         .take(8)
         .toList();
-    if (history.isNotEmpty) return _grid(history);
+    if (history.isNotEmpty) return _grid(context, history);
 
     return FutureBuilder<List<AppMediaItem>>(
       future: YoutubeService().cachedSearch(fallbackQuery),
@@ -298,12 +315,27 @@ class _QuickPicks extends StatelessWidget {
             .where((t) => isSongLength(t.duration))
             .take(8)
             .toList();
-        return items.isEmpty ? const SizedBox(height: 8) : _grid(items);
+        return items.isEmpty ? const SizedBox(height: 8) : _grid(context, items);
       },
     );
   }
 
-  Widget _grid(List<AppMediaItem> items) {
+  Widget _grid(BuildContext context, List<AppMediaItem> items) {
+    final isList = context.watch<MusicPlayerProvider>().onlineViewMode == 'list';
+    if (isList) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: Column(
+          children: [
+            for (final item in items.take(6))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _QuickPickTile(item: item, playlist: items),
+              ),
+          ],
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         // Two columns on a phone; more on a wide (desktop) window, so each
@@ -362,7 +394,7 @@ class _QuickPickTile extends StatelessWidget {
           height: 56,
           child: Row(
             children: [
-              _Artwork(url: item.artUri, size: 56, radius: 0),
+              _Artwork(item: item, size: 56, radius: 0),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -536,6 +568,21 @@ class _RowsSectionState extends State<_RowsSection> {
                     onRetry: () => setState(() => _tracks = _load()),
                   );
                 }
+                final isList =
+                    context.watch<MusicPlayerProvider>().onlineViewMode ==
+                    'list';
+                if (isList) {
+                  return Column(
+                    children: [
+                      for (final track in tracks.take(8))
+                        _TrackRow(
+                          item: track,
+                          playlist: tracks,
+                          height: rowHeight,
+                        ),
+                    ],
+                  );
+                }
                 final pageCount = (tracks.length / _rowsPerPage).ceil();
                 return SizedBox(
                   height: _rowsPerPage * rowHeight,
@@ -652,6 +699,20 @@ class _CardsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isList =
+        context.watch<MusicPlayerProvider>().onlineViewMode == 'list';
+
+    if (isList) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionTitle(section.title),
+          for (final card in section.cards)
+            _PlaylistListTile(card: card),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -664,7 +725,7 @@ class _CardsSection extends StatelessWidget {
               MediaQuery.textScalerOf(context).scale(14) *
                   _titleLineHeight *
                   2 +
-              2,
+              18,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -675,6 +736,287 @@ class _CardsSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+List<PopupMenuEntry<String>> _buildOnlineCardMenuItems(BuildContext context) {
+  return const [
+    PopupMenuItem(
+      value: 'add_to_playlist',
+      child: Row(
+        children: [
+          Icon(Icons.playlist_add_rounded, size: 20),
+          SizedBox(width: 10),
+          Text('Add to playlist'),
+        ],
+      ),
+    ),
+    PopupMenuItem(
+      value: 'play',
+      child: Row(
+        children: [
+          Icon(Icons.play_arrow_rounded, size: 20),
+          SizedBox(width: 10),
+          Text('Play collection'),
+        ],
+      ),
+    ),
+    PopupMenuItem(
+      value: 'shuffle',
+      child: Row(
+        children: [
+          Icon(Icons.shuffle_rounded, size: 20),
+          SizedBox(width: 10),
+          Text('Shuffle collection'),
+        ],
+      ),
+    ),
+    PopupMenuItem(
+      value: 'play_next',
+      child: Row(
+        children: [
+          Icon(Icons.playlist_play_rounded, size: 20),
+          SizedBox(width: 10),
+          Text('Play next'),
+        ],
+      ),
+    ),
+    PopupMenuItem(
+      value: 'add_to_queue',
+      child: Row(
+        children: [
+          Icon(Icons.queue_music_rounded, size: 20),
+          SizedBox(width: 10),
+          Text('Add to play queue'),
+        ],
+      ),
+    ),
+  ];
+}
+
+Future<void> _handleOnlineCardAction(
+  BuildContext context,
+  String action,
+  HomeCard card,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final provider = context.read<MusicPlayerProvider>();
+
+  showCompactSnack(
+    messenger,
+    'Loading "${card.title}"...',
+    icon: Icons.hourglass_top_rounded,
+  );
+
+  try {
+    final all = await YoutubeService().cachedSearch(card.query);
+    final songs = all.where((t) => isSongLength(t.duration)).toList();
+    if (!context.mounted) return;
+
+    if (songs.isEmpty) {
+      showCompactSnack(
+        messenger,
+        'No songs found in this collection',
+        icon: Icons.info_outline_rounded,
+      );
+      return;
+    }
+
+    switch (action) {
+      case 'add_to_playlist':
+        showAddToPlaylistSheet(context, songs);
+        break;
+      case 'play':
+        provider.playTrack(songs.first, playlist: songs);
+        break;
+      case 'shuffle':
+        provider.shuffleAll(songs);
+        break;
+      case 'play_next':
+        provider.playNextAll(songs);
+        showCompactSnack(
+          messenger,
+          songs.length == 1
+              ? 'Playing next: ${songs.first.title}'
+              : 'Playing next: ${songs.length} songs',
+          icon: Icons.playlist_play_rounded,
+        );
+        break;
+      case 'add_to_queue':
+        provider.addAllToQueue(songs);
+        showCompactSnack(
+          messenger,
+          songs.length == 1
+              ? 'Added to queue: ${songs.first.title}'
+              : 'Added ${songs.length} songs to queue',
+          icon: Icons.queue_music_rounded,
+        );
+        break;
+    }
+  } catch (e) {
+    if (context.mounted) {
+      showCompactSnack(
+        messenger,
+        'Failed to load songs',
+        icon: Icons.error_outline_rounded,
+      );
+    }
+  }
+}
+
+void _showOnlineCardBottomSheet(BuildContext context, HomeCard card) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  FutureBuilder<List<AppMediaItem>>(
+                    future: YoutubeService().cachedSearch(card.query),
+                    builder: (context, snapshot) {
+                      final tracks = snapshot.data;
+                      return _Artwork(
+                        url: tracks != null && tracks.isNotEmpty
+                            ? tracks.first.artUri
+                            : null,
+                        size: 52,
+                        radius: 10,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          card.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Online collection',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: sheetContext.colors.mist.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(Icons.playlist_add_rounded, color: sheetContext.colors.accent),
+              title: const Text('Add to playlist'),
+              subtitle: const Text('Add all songs in this collection to a playlist'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleOnlineCardAction(context, 'add_to_playlist', card);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.play_arrow_rounded, color: sheetContext.colors.accent),
+              title: const Text('Play collection'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleOnlineCardAction(context, 'play', card);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.shuffle_rounded, color: sheetContext.colors.accent),
+              title: const Text('Shuffle collection'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleOnlineCardAction(context, 'shuffle', card);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.playlist_play_rounded, color: sheetContext.colors.accent),
+              title: const Text('Play next'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleOnlineCardAction(context, 'play_next', card);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.queue_music_rounded, color: sheetContext.colors.accent),
+              title: const Text('Add to play queue'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleOnlineCardAction(context, 'add_to_queue', card);
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _PlaylistListTile extends StatelessWidget {
+  final HomeCard card;
+  const _PlaylistListTile({required this.card});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: FutureBuilder<List<AppMediaItem>>(
+        future: YoutubeService().cachedSearch(card.query),
+        builder: (context, snapshot) {
+          final tracks = snapshot.data;
+          return _Artwork(
+            url: tracks != null && tracks.isNotEmpty ? tracks.first.artUri : null,
+            size: 52,
+            radius: 10,
+          );
+        },
+      ),
+      title: Text(
+        card.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+      ),
+      subtitle: Text(
+        'Online collection',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 12,
+          color: context.colors.mist.withValues(alpha: 0.55),
+        ),
+      ),
+      trailing: PopupMenuButton<String>(
+        icon: Icon(
+          Icons.more_vert_rounded,
+          color: context.colors.mist.withValues(alpha: 0.65),
+        ),
+        onSelected: (action) => _handleOnlineCardAction(context, action, card),
+        itemBuilder: (ctx) => _buildOnlineCardMenuItems(ctx),
+      ),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TrackListScreen(title: card.title, query: card.query),
+        ),
+      ),
+      onLongPress: () => _showOnlineCardBottomSheet(context, card),
     );
   }
 }
@@ -694,6 +1036,7 @@ class _PlaylistCard extends StatelessWidget {
           builder: (_) => TrackListScreen(title: card.title, query: card.query),
         ),
       ),
+      onLongPress: () => _showOnlineCardBottomSheet(context, card),
       child: SizedBox(
         width: size,
         child: Column(
@@ -713,15 +1056,33 @@ class _PlaylistCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 8),
-            Text(
-              card.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14,
-                height: _CardsSection._titleLineHeight,
-                color: context.colors.mist,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    card.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: _CardsSection._titleLineHeight,
+                      color: context.colors.mist,
+                    ),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  iconSize: 18,
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    color: context.colors.mist.withValues(alpha: 0.65),
+                  ),
+                  onSelected: (action) =>
+                      _handleOnlineCardAction(context, action, card),
+                  itemBuilder: (ctx) => _buildOnlineCardMenuItems(ctx),
+                ),
+              ],
             ),
           ],
         ),
@@ -732,12 +1093,14 @@ class _PlaylistCard extends StatelessWidget {
 
 class _Artwork extends StatelessWidget {
   final String? url;
+  final AppMediaItem? item;
   final double size;
   final double radius;
-  const _Artwork({required this.url, required this.size, required this.radius});
+  const _Artwork({this.url, this.item, required this.size, required this.radius});
 
   @override
   Widget build(BuildContext context) {
+    final effectiveUrl = url ?? item?.artUri;
     final placeholder = Container(
       width: size,
       height: size,
@@ -750,16 +1113,24 @@ class _Artwork extends StatelessWidget {
     );
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: url != null && url!.startsWith('http')
+      child: effectiveUrl != null && effectiveUrl.startsWith('http')
           ? CachedNetworkImage(
-              imageUrl: url!,
+              imageUrl: effectiveUrl,
               width: size,
               height: size,
               fit: BoxFit.cover,
               placeholder: (_, _) => placeholder,
               errorWidget: (_, _, _) => placeholder,
             )
-          : placeholder,
+          : item?.sourceType == MediaSourceType.local
+              ? LocalArtwork(
+                  id: (item!.extras?['songId'] as int?) ?? int.tryParse(item!.id),
+                  width: size,
+                  height: size,
+                  borderRadius: BorderRadius.circular(radius),
+                  fallback: placeholder,
+                )
+              : placeholder,
     );
   }
 }

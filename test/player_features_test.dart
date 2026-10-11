@@ -178,4 +178,51 @@ void main() {
     expect(provider.hasSleepTimer, isFalse);
     expect(provider.sleepTimerEndOfQueue, isFalse);
   });
+
+  test('playing a song from a new playlist replaces the queue with new playlist', () async {
+    await provider.setAutoplay(false);
+    final playlist1 = [_song('p1_a'), _song('p1_b'), _song('p1_c')];
+    final playlist2 = [_song('p2_x'), _song('p2_y')];
+
+    // Start with playlist 1
+    await provider.playTrack(playlist1[0], playlist: playlist1);
+    expect(provider.queue.map((t) => t.id), ['p1_a', 'p1_b', 'p1_c']);
+    expect(provider.currentTrack?.id, 'p1_a');
+
+    // Switch to playlist 2
+    await provider.playTrack(playlist2[1], playlist: playlist2);
+    expect(provider.queue.map((t) => t.id), ['p2_x', 'p2_y']);
+    expect(provider.currentTrack?.id, 'p2_y');
+  });
+
+  test('playing a single song starts a clean queue without leftover tracks', () async {
+    await provider.setAutoplay(false);
+    final playlist = [_song('p_1'), _song('p_2'), _song('p_3')];
+    await provider.playTrack(playlist[0], playlist: playlist);
+    expect(provider.queue.length, 3);
+
+    // Play a single song directly
+    final singleSong = _song('single_1');
+    await provider.playTrack(singleSong);
+    expect(provider.queue.map((t) => t.id), ['single_1']);
+    expect(provider.currentTrack?.id, 'single_1');
+  });
+
+  test('moveQueueItemToNext moves track to right after current playing index', () async {
+    await provider.setAutoplay(false);
+    final list = [_song('m0'), _song('m1'), _song('m2'), _song('m3')];
+    await provider.playTrack(list[0], playlist: list);
+    expect(provider.currentIndex, 0);
+
+    // Move m3 (index 3) to play next
+    provider.moveQueueItemToNext(3);
+    expect(provider.queue.map((t) => t.id), ['m0', 'm3', 'm1', 'm2']);
+    expect(provider.currentIndex, 0);
+    expect(provider.currentTrack?.id, 'm0');
+
+    // Skip to next to verify it plays m3
+    await provider.skipToNext();
+    expect(provider.currentTrack?.id, 'm3');
+  });
 }
+

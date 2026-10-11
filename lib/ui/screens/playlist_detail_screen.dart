@@ -39,6 +39,15 @@ class PlaylistDetailScreen extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          if (playlist.items.isNotEmpty)
+            IconButton(
+              icon: Icon(
+                Icons.shuffle_rounded,
+                color: context.colors.mist.withValues(alpha: 0.70),
+              ),
+              tooltip: 'Shuffle',
+              onPressed: () => provider.shuffleAll(playlist.items),
+            ),
           DownloadAllButton(
             items: playlist.items,
             playlistName: playlist.name,
@@ -91,22 +100,50 @@ class PlaylistDetailScreen extends StatelessWidget {
                           color: context.colors.mist.withValues(alpha: 0.60),
                         ),
                       ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: context.colors.mist,
+                              side: BorderSide(
+                                color: context.colors.mist.withValues(alpha: 0.25),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            icon: const Icon(Icons.playlist_play_rounded, size: 20),
+                            label: const Text('Play Next'),
+                            onPressed: () {
+                              provider.playNextAll(playlist.items);
+                              showCompactSnack(
+                                ScaffoldMessenger.of(context),
+                                'Playing playlist next (${playlist.items.length} songs)',
+                                icon: Icons.playlist_play_rounded,
+                              );
+                            },
                           ),
-                        ),
-                        icon: const Icon(Icons.play_arrow, color: Colors.white),
-                        label: const Text(
-                          'Play All',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        onPressed: () => provider.playTrack(
-                          playlist.items.first,
-                          playlist: playlist.items,
-                        ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                            ),
+                            icon: const Icon(Icons.play_arrow, color: Colors.white),
+                            label: const Text(
+                              'Play All',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            onPressed: () => provider.playTrack(
+                              playlist.items.first,
+                              playlist: playlist.items,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

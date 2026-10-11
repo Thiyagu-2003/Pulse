@@ -5,6 +5,7 @@ import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/track_tile.dart';
 
@@ -76,6 +77,12 @@ class _TrackListScreenState extends State<TrackListScreen> {
                             .playTrack(tracks.first, playlist: tracks),
                       ),
                       const Spacer(),
+                      IconButton.filledTonal(
+                        tooltip: 'Add all to playlist',
+                        icon: const Icon(Icons.playlist_add_rounded),
+                        onPressed: () => showAddToPlaylistSheet(context, tracks),
+                      ),
+                      const SizedBox(width: 8),
                       // The whole playlist, for offline.
                       DownloadAllButton(
                         items: tracks,

@@ -209,6 +209,15 @@ class SettingsScreen extends StatelessWidget {
             value: provider.stopPlaybackOnClose,
             onChanged: provider.setStopPlaybackOnClose,
           ),
+          SwitchListTile(
+            secondary: const Icon(Icons.notifications_active_outlined),
+            title: const Text('Playback notification'),
+            subtitle: const Text(
+              'Show media controls and track info in the notification panel',
+            ),
+            value: provider.playbackNotificationEnabled,
+            onChanged: provider.setPlaybackNotificationEnabled,
+          ),
           if (VoiceCommandService.isSupported)
             SwitchListTile(
               secondary: const Icon(Icons.mic_none_rounded),

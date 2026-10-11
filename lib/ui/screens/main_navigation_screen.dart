@@ -42,11 +42,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
+      context.read<MusicPlayerProvider>().saveCurrentPosition();
       PlatformBridge.setLauncherIcon(
         dark: context.read<MusicPlayerProvider>().darkLauncherIcon,
       );
     } else if (state == AppLifecycleState.detached) {
       final provider = context.read<MusicPlayerProvider>();
+      provider.saveCurrentPosition();
       if (provider.stopPlaybackOnClose) {
         provider.stop();
       }

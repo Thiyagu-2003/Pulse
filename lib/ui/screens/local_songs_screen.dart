@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:on_audio_query_pluse/on_audio_query.dart';
@@ -127,6 +128,8 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<MusicPlayerProvider>();
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: _buildDrawer(context),
@@ -141,6 +144,84 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
           style: Theme.of(context).textTheme.displaySmall,
         ),
         actions: [
+          if (_selectedTab == LocalTab.albums)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: context.colors.lift,
+                  side: BorderSide(color: context.colors.mist.withValues(alpha: 0.15)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  foregroundColor: context.colors.mist,
+                ),
+                icon: Icon(
+                  provider.localAlbumsView == 'grid' ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                  size: 16,
+                  color: context.colors.accent,
+                ),
+                label: Text(
+                  provider.localAlbumsView == 'grid' ? 'Show list' : 'Show grid',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                onPressed: () {
+                  final next = provider.localAlbumsView == 'grid' ? 'list' : 'grid';
+                  provider.setLocalAlbumsView(next);
+                },
+              ),
+            )
+          else if (_selectedTab == LocalTab.folders)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: context.colors.lift,
+                  side: BorderSide(color: context.colors.mist.withValues(alpha: 0.15)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  foregroundColor: context.colors.mist,
+                ),
+                icon: Icon(
+                  provider.localFoldersView == 'grid' ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                  size: 16,
+                  color: context.colors.accent,
+                ),
+                label: Text(
+                  provider.localFoldersView == 'grid' ? 'Show list' : 'Show grid',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                onPressed: () {
+                  final next = provider.localFoldersView == 'grid' ? 'list' : 'grid';
+                  provider.setLocalFoldersView(next);
+                },
+              ),
+            )
+          else if (_selectedTab == LocalTab.artists)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: context.colors.lift,
+                  side: BorderSide(color: context.colors.mist.withValues(alpha: 0.15)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  foregroundColor: context.colors.mist,
+                ),
+                icon: Icon(
+                  provider.localArtistsView == 'grid' ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                  size: 16,
+                  color: context.colors.accent,
+                ),
+                label: Text(
+                  provider.localArtistsView == 'grid' ? 'Show list' : 'Show grid',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                onPressed: () {
+                  final next = provider.localArtistsView == 'grid' ? 'list' : 'grid';
+                  provider.setLocalArtistsView(next);
+                },
+              ),
+            ),
           IconButton(
             icon: Icon(Icons.search_rounded, color: context.colors.accent),
             tooltip: 'Search local music',
@@ -178,9 +259,60 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
                 );
               } else if (action == 'rescan') {
                 _initLocalMusic(forceRescan: true);
+              } else if (action == 'toggle_albums_view') {
+                final next = provider.localAlbumsView == 'grid' ? 'list' : 'grid';
+                provider.setLocalAlbumsView(next);
+              } else if (action == 'toggle_folders_view') {
+                final next = provider.localFoldersView == 'grid' ? 'list' : 'grid';
+                provider.setLocalFoldersView(next);
+              } else if (action == 'toggle_artists_view') {
+                final next = provider.localArtistsView == 'grid' ? 'list' : 'grid';
+                provider.setLocalArtistsView(next);
               }
             },
             itemBuilder: (_) => [
+              if (_selectedTab == LocalTab.albums)
+                PopupMenuItem(
+                  value: 'toggle_albums_view',
+                  child: Row(
+                    children: [
+                      Icon(
+                        provider.localAlbumsView == 'grid' ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(provider.localAlbumsView == 'grid' ? 'Show list view' : 'Show grid view'),
+                    ],
+                  ),
+                ),
+              if (_selectedTab == LocalTab.folders)
+                PopupMenuItem(
+                  value: 'toggle_folders_view',
+                  child: Row(
+                    children: [
+                      Icon(
+                        provider.localFoldersView == 'grid' ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(provider.localFoldersView == 'grid' ? 'Show list view' : 'Show grid view'),
+                    ],
+                  ),
+                ),
+              if (_selectedTab == LocalTab.artists)
+                PopupMenuItem(
+                  value: 'toggle_artists_view',
+                  child: Row(
+                    children: [
+                      Icon(
+                        provider.localArtistsView == 'grid' ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(provider.localArtistsView == 'grid' ? 'Show list view' : 'Show grid view'),
+                    ],
+                  ),
+                ),
               const PopupMenuItem(
                 value: 'rescan',
                 child: Row(
@@ -533,9 +665,19 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
     final folders = groupByFolder(_localSongs);
     final newlyAdded = getNewlyAdded(_localSongs, limit: 15);
 
-    // Build Recently Played items from provider history: local songs, folders, and newly added
-    final history = provider.getHistory().where((s) => s.sourceType == MediaSourceType.local).toList();
-    final recentSongs = history.isNotEmpty ? history.take(6).toList() : _localSongs.take(6).toList();
+    // Build Recently Played items from provider history: local songs and online songs
+    final history = provider.getHistory();
+    final recentSongs = <AppMediaItem>[];
+    for (final song in history) {
+      if (recentSongs.length >= 8) break;
+      recentSongs.add(song);
+    }
+    for (final song in _localSongs) {
+      if (recentSongs.length >= 8) break;
+      if (!recentSongs.any((s) => s.id == song.id)) {
+        recentSongs.add(song);
+      }
+    }
 
     return RefreshIndicator(
       onRefresh: () => _initLocalMusic(forceRescan: true),
@@ -561,8 +703,8 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
             ),
           ),
 
-          // 3-column Grid matching Screenshot 1
-          _buildRecentlyPlayedGrid(context, recentSongs, folders),
+          // 2-column Grid matching the screenshot
+          _buildRecentlyPlayedGrid(context, recentSongs),
 
           const SizedBox(height: 16),
 
@@ -649,109 +791,115 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
     );
   }
 
-  /// 3-column Grid matching Screenshot 1
+  /// 2-column Grid matching the screenshot
   Widget _buildRecentlyPlayedGrid(
     BuildContext context,
-    List<AppMediaItem> songs,
-    List<MediaFolder> folders,
+    List<AppMediaItem> items,
   ) {
-    // Combine songs, folders, and playlist cards for the rich Musicolet look
-    final cards = <Widget>[];
+    if (items.isEmpty) return const SizedBox.shrink();
 
-    for (var i = 0; i < songs.length && i < 4; i++) {
-      cards.add(_buildSongGridCard(context, songs[i]));
-    }
-
-    if (folders.isNotEmpty) {
-      cards.add(_buildFolderGridCard(context, folders.first));
-    }
-
-    if (folders.length > 1) {
-      cards.add(_buildFolderGridCard(context, folders[1]));
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 3,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.68,
-        children: cards.take(6).toList(),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = (constraints.maxWidth / 340).floor().clamp(2, 4);
+        final rows = <Widget>[];
+        for (var i = 0; i < items.length; i += columns) {
+          rows.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  for (var c = 0; c < columns; c++) ...[
+                    if (c > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: i + c < items.length
+                          ? _buildQuickPickTile(context, items[i + c], items)
+                          : const SizedBox(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Column(children: rows),
+        );
+      },
     );
   }
 
-  Widget _buildSongGridCard(BuildContext context, AppMediaItem song) {
+  Widget _buildQuickPickTile(
+    BuildContext context,
+    AppMediaItem item,
+    List<AppMediaItem> playlist,
+  ) {
     final provider = context.watch<MusicPlayerProvider>();
-    final isPlaying = provider.currentTrack?.id == song.id;
-    final songId = (song.extras?['songId'] as int?) ?? int.tryParse(song.id);
+    final isCurrent = provider.currentTrack?.id == item.id;
+    final songId = (item.extras?['songId'] as int?) ?? int.tryParse(item.id);
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => provider.playTrack(song, playlist: _localSongs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Square Artwork
-          Stack(
+    final placeholder = Container(
+      width: 56,
+      height: 56,
+      color: context.colors.lift,
+      child: Icon(
+        Icons.music_note_rounded,
+        color: AppTheme.primary,
+        size: 56 * 0.4,
+      ),
+    );
+
+    return Material(
+      color: context.colors.lift,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => provider.playTrack(item, playlist: playlist),
+        onLongPress: () => showTrackActions(context, item),
+        child: SizedBox(
+          height: 56,
+          child: Row(
             children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: LocalArtwork(
-                  id: songId,
-                  borderRadius: BorderRadius.circular(10),
-                ),
+              ClipRRect(
+                borderRadius: BorderRadius.zero,
+                child: item.artUri != null && item.artUri!.startsWith('http')
+                    ? CachedNetworkImage(
+                        imageUrl: item.artUri!,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        placeholder: (_, _) => placeholder,
+                        errorWidget: (_, _, _) => placeholder,
+                      )
+                    : item.sourceType == MediaSourceType.local
+                        ? LocalArtwork(
+                            id: songId,
+                            width: 56,
+                            height: 56,
+                            borderRadius: BorderRadius.zero,
+                            fallback: placeholder,
+                          )
+                        : placeholder,
               ),
-              if (isPlaying)
-                Positioned(
-                  bottom: 6,
-                  left: 6,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.65),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.pause_rounded, size: 14, color: Colors.white),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          // Title & Menu Row
-          Row(
-            children: [
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  song.title,
-                  maxLines: 1,
+                  item.title,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isCurrent
+                        ? context.colors.accent
+                        : context.colors.mist,
+                  ),
                 ),
               ),
-              GestureDetector(
-                onTap: () => showTrackActions(context, song),
-                child: Icon(
-                  Icons.more_vert_rounded,
-                  size: 16,
-                  color: context.colors.mist.withValues(alpha: 0.5),
-                ),
-              ),
+              const SizedBox(width: 8),
             ],
           ),
-          Text(
-            song.artist,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              color: context.colors.mist.withValues(alpha: 0.6),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -879,80 +1027,309 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
     );
   }
 
-  Widget _buildFolderGridCard(BuildContext context, MediaFolder folder) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => FolderSongsScreen(folder: folder)),
+  List<PopupMenuEntry<String>> _buildAlbumMenuItems(BuildContext context) {
+    return const [
+      PopupMenuItem(
+        value: 'add_to_playlist',
+        child: Row(
+          children: [
+            Icon(Icons.playlist_add_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Add to playlist'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: 'play',
+        child: Row(
+          children: [
+            Icon(Icons.play_arrow_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Play album'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: 'shuffle',
+        child: Row(
+          children: [
+            Icon(Icons.shuffle_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Shuffle album'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: 'play_next',
+        child: Row(
+          children: [
+            Icon(Icons.playlist_play_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Play next'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: 'add_to_queue',
+        child: Row(
+          children: [
+            Icon(Icons.queue_music_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Add to play queue'),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  void _handleAlbumAction(BuildContext context, String action, LocalAlbum album) {
+    final messenger = ScaffoldMessenger.of(context);
+    if (album.songs.isEmpty) {
+      showCompactSnack(
+        messenger,
+        'Album is empty',
+        icon: Icons.info_outline_rounded,
+      );
+      return;
+    }
+    final provider = context.read<MusicPlayerProvider>();
+
+    switch (action) {
+      case 'add_to_playlist':
+        showAddToPlaylistSheet(context, album.songs);
+        break;
+      case 'play':
+        provider.playTrack(album.songs.first, playlist: album.songs);
+        break;
+      case 'shuffle':
+        provider.shuffleAll(album.songs);
+        break;
+      case 'play_next':
+        provider.playNextAll(album.songs);
+        showCompactSnack(
+          messenger,
+          album.songs.length == 1
+              ? 'Playing next: ${album.songs.first.title}'
+              : 'Playing next: ${album.songs.length} songs',
+          icon: Icons.playlist_play_rounded,
         );
-      },
-      onLongPress: () => _showFolderBottomSheet(context, folder),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 2x2 Collage Artwork for Folder (Screenshot 1)
-          AspectRatio(
-            aspectRatio: 1,
-            child: CollageArtwork(
-              items: folder.items,
-              borderRadius: BorderRadius.circular(10),
-              defaultIcon: Icons.folder_rounded,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
+        break;
+      case 'add_to_queue':
+        provider.addAllToQueue(album.songs);
+        showCompactSnack(
+          messenger,
+          album.songs.length == 1
+              ? 'Added to queue: ${album.songs.first.title}'
+              : 'Added ${album.songs.length} songs to queue',
+          icon: Icons.queue_music_rounded,
+        );
+        break;
+    }
+  }
+
+  void _showAlbumBottomSheet(BuildContext context, LocalAlbum album) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Text(
-                  folder.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    LocalArtwork(
+                      id: album.albumId ??
+                          ((album.songs.first.extras?['songId'] as int?) ??
+                              int.tryParse(album.songs.first.id)),
+                      type: ArtworkType.ALBUM,
+                      size: 52,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            album.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${album.artist} · ${album.length} ${album.length == 1 ? 'track' : 'tracks'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: sheetContext.colors.mist.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) {
-                  final offset = details.globalPosition;
-                  showMenu<String>(
-                    context: context,
-                    position: RelativeRect.fromLTRB(
-                      offset.dx,
-                      offset.dy,
-                      offset.dx + 1,
-                      offset.dy + 1,
-                    ),
-                    items: _buildFolderMenuItems(context),
-                  ).then((action) {
-                    if (context.mounted && action != null) {
-                      _handleFolderAction(context, action, folder);
-                    }
-                  });
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.playlist_add_rounded, color: sheetContext.colors.accent),
+                title: const Text('Add to playlist'),
+                subtitle: const Text('Add all songs in this album to a playlist'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleAlbumAction(context, 'add_to_playlist', album);
                 },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                  child: Icon(
-                    Icons.more_vert_rounded,
-                    size: 16,
-                    color: context.colors.mist.withValues(alpha: 0.5),
-                  ),
-                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.play_arrow_rounded, color: sheetContext.colors.accent),
+                title: const Text('Play album'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleAlbumAction(context, 'play', album);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.shuffle_rounded, color: sheetContext.colors.accent),
+                title: const Text('Shuffle album'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleAlbumAction(context, 'shuffle', album);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.playlist_play_rounded, color: sheetContext.colors.accent),
+                title: const Text('Play next'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleAlbumAction(context, 'play_next', album);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.queue_music_rounded, color: sheetContext.colors.accent),
+                title: const Text('Add to play queue'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _handleAlbumAction(context, 'add_to_queue', album);
+                },
               ),
             ],
           ),
-          Text(
-            'Folder',
-            style: TextStyle(
-              fontSize: 11,
-              color: context.colors.mist.withValues(alpha: 0.6),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+
+  List<PopupMenuEntry<String>> _buildArtistMenuItems(BuildContext context) {
+    return const [
+      PopupMenuItem(
+        value: 'add_to_playlist',
+        child: Row(
+          children: [
+            Icon(Icons.playlist_add_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Add to playlist'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: 'play',
+        child: Row(
+          children: [
+            Icon(Icons.play_arrow_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Play artist'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: 'shuffle',
+        child: Row(
+          children: [
+            Icon(Icons.shuffle_rounded, size: 20),
+            SizedBox(width: 10),
+            Text('Shuffle artist'),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  void _handleArtistAction(BuildContext context, String action, LocalArtist artist) {
+    if (artist.songs.isEmpty) return;
+    final provider = context.read<MusicPlayerProvider>();
+    switch (action) {
+      case 'add_to_playlist':
+        showAddToPlaylistSheet(context, artist.songs);
+        break;
+      case 'play':
+        provider.playTrack(artist.songs.first, playlist: artist.songs);
+        break;
+      case 'shuffle':
+        provider.shuffleAll(artist.songs);
+        break;
+    }
+  }
+
+  void _showArtistBottomSheet(BuildContext context, LocalArtist artist) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                artist.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(Icons.playlist_add_rounded, color: sheetContext.colors.accent),
+              title: const Text('Add to playlist'),
+              subtitle: const Text('Add all songs by this artist to a playlist'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleArtistAction(context, 'add_to_playlist', artist);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.play_arrow_rounded, color: sheetContext.colors.accent),
+              title: const Text('Play artist'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleArtistAction(context, 'play', artist);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.shuffle_rounded, color: sheetContext.colors.accent),
+              title: const Text('Shuffle artist'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleArtistAction(context, 'shuffle', artist);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildNewlyAddedCard(BuildContext context, AppMediaItem song) {
     final songId = (song.extras?['songId'] as int?) ?? int.tryParse(song.id);
@@ -961,6 +1338,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () => provider.playTrack(song, playlist: _localSongs),
+      onLongPress: () => showTrackActions(context, song),
       child: SizedBox(
         width: 110,
         child: Column(
@@ -1110,147 +1488,543 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
   // VIEW 3: FOLDERS (Device & SD Card directories)
   // ==========================================
   Widget _buildFoldersView(BuildContext context) {
+    final provider = context.watch<MusicPlayerProvider>();
     final folders = groupByFolder(_localSongs);
+    final isGrid = provider.localFoldersView == 'grid';
 
     return RefreshIndicator(
       onRefresh: () => _initLocalMusic(forceRescan: true),
       color: context.colors.accent,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
-        itemCount: folders.length,
-        separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
-        itemBuilder: (context, index) {
-          final folder = folders[index];
-          final isSdCard = folder.path.startsWith('/storage/') &&
-              !folder.path.startsWith('/storage/emulated');
+      child: isGrid
+          ? _buildFoldersGrid(context, folders)
+          : _buildFoldersList(context, folders),
+    );
+  }
 
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: CollageArtwork(
-              items: folder.items,
-              size: 48,
-              borderRadius: BorderRadius.circular(10),
-              defaultIcon: folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    folder.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+  Widget _buildFoldersList(BuildContext context, List<MediaFolder> folders) {
+    if (folders.isEmpty) {
+      return Center(
+        child: Text(
+          'No folders found',
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.6)),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
+      itemCount: folders.length,
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
+      itemBuilder: (context, index) {
+        final folder = folders[index];
+        final isSdCard = folder.path.startsWith('/storage/') &&
+            !folder.path.startsWith('/storage/emulated');
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          leading: CollageArtwork(
+            items: folder.items,
+            size: 48,
+            borderRadius: BorderRadius.circular(10),
+            defaultIcon: folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  folder.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (isSdCard)
+                Container(
+                  margin: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.tealAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'SD Card',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.tealAccent,
+                    ),
                   ),
                 ),
-                if (isSdCard)
-                  Container(
-                    margin: const EdgeInsets.only(left: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.tealAccent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'SD Card',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.tealAccent,
-                      ),
+            ],
+          ),
+          subtitle: Text(
+            '${folder.length} tracks · ${folder.path}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.colors.mist.withValues(alpha: 0.55),
+            ),
+          ),
+          trailing: PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: context.colors.mist.withValues(alpha: 0.5),
+            ),
+            onSelected: (action) => _handleFolderAction(context, action, folder),
+            itemBuilder: (ctx) => _buildFolderMenuItems(ctx),
+          ),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => FolderSongsScreen(folder: folder)),
+            );
+          },
+          onLongPress: () => _showFolderBottomSheet(context, folder),
+        );
+      },
+    );
+  }
+
+  Widget _buildFoldersGrid(BuildContext context, List<MediaFolder> folders) {
+    if (folders.isEmpty) {
+      return Center(
+        child: Text(
+          'No folders found',
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.6)),
+        ),
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        childAspectRatio: 0.74,
+      ),
+      itemCount: folders.length,
+      itemBuilder: (context, index) {
+        final folder = folders[index];
+        final isSdCard = folder.path.startsWith('/storage/') &&
+            !folder.path.startsWith('/storage/emulated');
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => FolderSongsScreen(folder: folder)),
+            );
+          },
+          onLongPress: () => _showFolderBottomSheet(context, folder),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: CollageArtwork(
+                    items: folder.items,
+                    borderRadius: BorderRadius.circular(12),
+                    defaultIcon: folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                folder.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                            ),
+                            if (isSdCard)
+                              Container(
+                                margin: const EdgeInsets.only(left: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.tealAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'SD',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.tealAccent,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${folder.length} tracks',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colors.mist.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-              ],
-            ),
-            subtitle: Text(
-              '${folder.length} tracks · ${folder.path}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                color: context.colors.mist.withValues(alpha: 0.55),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    iconSize: 20,
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      color: context.colors.mist.withValues(alpha: 0.7),
+                    ),
+                    onSelected: (action) => _handleFolderAction(context, action, folder),
+                    itemBuilder: (ctx) => _buildFolderMenuItems(ctx),
+                  ),
+                ],
               ),
-            ),
-            trailing: PopupMenuButton<String>(
-              icon: Icon(
-                Icons.more_vert_rounded,
-                color: context.colors.mist.withValues(alpha: 0.5),
-              ),
-              onSelected: (action) => _handleFolderAction(context, action, folder),
-              itemBuilder: (ctx) => _buildFolderMenuItems(ctx),
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => FolderSongsScreen(folder: folder)),
-              );
-            },
-            onLongPress: () => _showFolderBottomSheet(context, folder),
-          );
-        },
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   // ==========================================
-  // VIEW 4: ALBUMS
+  // VIEW 4: ALBUMS (Customizable Grid / List)
   // ==========================================
   Widget _buildAlbumsView(BuildContext context) {
+    final provider = context.watch<MusicPlayerProvider>();
     final albums = groupByAlbum(_localSongs);
+    final isGrid = provider.localAlbumsView == 'grid';
 
     return RefreshIndicator(
       onRefresh: () => _initLocalMusic(forceRescan: true),
       color: context.colors.accent,
-      child: GridView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 14,
-          mainAxisSpacing: 14,
-          childAspectRatio: 0.78,
+      child: isGrid
+          ? _buildAlbumsGrid(context, albums)
+          : _buildAlbumsList(context, albums),
+    );
+  }
+
+  Widget _buildAlbumsGrid(BuildContext context, List<LocalAlbum> albums) {
+    if (albums.isEmpty) {
+      return Center(
+        child: Text(
+          'No albums found',
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.6)),
         ),
-        itemCount: albums.length,
-        itemBuilder: (context, index) {
-          final album = albums[index];
-          return InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LocalCollectionScreen(
-                    title: album.name,
-                    subtitle: album.artist,
-                    songs: album.songs,
-                    artworkId: album.albumId,
-                    fallbackIcon: Icons.album_rounded,
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        childAspectRatio: 0.74,
+      ),
+      itemCount: albums.length,
+      itemBuilder: (context, index) {
+        final album = albums[index];
+        final artId = album.albumId ??
+            ((album.songs.first.extras?['songId'] as int?) ??
+                int.tryParse(album.songs.first.id));
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LocalCollectionScreen(
+                  title: album.name,
+                  subtitle: album.artist,
+                  songs: album.songs,
+                  artworkId: album.albumId,
+                  fallbackIcon: Icons.album_rounded,
+                ),
+              ),
+            );
+          },
+          onLongPress: () => _showAlbumBottomSheet(context, album),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: LocalArtwork(
+                      id: artId,
+                      type: ArtworkType.ALBUM,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              );
-            },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          album.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${album.artist} · ${album.length} ${album.length == 1 ? 'track' : 'tracks'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colors.mist.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    iconSize: 20,
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      color: context.colors.mist.withValues(alpha: 0.7),
+                    ),
+                    onSelected: (action) => _handleAlbumAction(context, action, album),
+                    itemBuilder: (ctx) => _buildAlbumMenuItems(ctx),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAlbumsList(BuildContext context, List<LocalAlbum> albums) {
+    if (albums.isEmpty) {
+      return Center(
+        child: Text(
+          'No albums found',
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.6)),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
+      itemCount: albums.length,
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
+      itemBuilder: (context, index) {
+        final album = albums[index];
+        final artId = album.albumId ??
+            ((album.songs.first.extras?['songId'] as int?) ??
+                int.tryParse(album.songs.first.id));
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          leading: LocalArtwork(
+            id: artId,
+            size: 52,
+            type: ArtworkType.ALBUM,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          title: Text(
+            album.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          ),
+          subtitle: Text(
+            '${album.artist} · ${album.length} ${album.length == 1 ? 'track' : 'tracks'}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.colors.mist.withValues(alpha: 0.55),
+            ),
+          ),
+          trailing: PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: context.colors.mist.withValues(alpha: 0.6),
+            ),
+            onSelected: (action) => _handleAlbumAction(context, action, album),
+            itemBuilder: (ctx) => _buildAlbumMenuItems(ctx),
+          ),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LocalCollectionScreen(
+                  title: album.name,
+                  subtitle: album.artist,
+                  songs: album.songs,
+                  artworkId: album.albumId,
+                  fallbackIcon: Icons.album_rounded,
+                ),
+              ),
+            );
+          },
+          onLongPress: () => _showAlbumBottomSheet(context, album),
+        );
+      },
+    );
+  }
+
+  // ==========================================
+  // VIEW 5: ARTISTS (Customizable List / Grid)
+  // ==========================================
+  Widget _buildArtistsView(BuildContext context) {
+    final provider = context.watch<MusicPlayerProvider>();
+    final artists = groupByArtist(_localSongs);
+    final isGrid = provider.localArtistsView == 'grid';
+
+    return RefreshIndicator(
+      onRefresh: () => _initLocalMusic(forceRescan: true),
+      color: context.colors.accent,
+      child: isGrid
+          ? _buildArtistsGrid(context, artists)
+          : _buildArtistsList(context, artists),
+    );
+  }
+
+  Widget _buildArtistsList(BuildContext context, List<LocalArtist> artists) {
+    if (artists.isEmpty) {
+      return Center(
+        child: Text(
+          'No artists found',
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.6)),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
+      itemCount: artists.length,
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
+      itemBuilder: (context, index) {
+        final artist = artists[index];
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
+            child: const Icon(Icons.person_rounded, color: AppTheme.primary),
+          ),
+          title: Text(
+            artist.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '${artist.length} ${artist.length == 1 ? 'song' : 'songs'} · ${artist.albumCount} ${artist.albumCount == 1 ? 'album' : 'albums'}',
+            style: TextStyle(
+              fontSize: 12,
+              color: context.colors.mist.withValues(alpha: 0.6),
+            ),
+          ),
+          trailing: PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: context.colors.mist.withValues(alpha: 0.6),
+            ),
+            onSelected: (action) => _handleArtistAction(context, action, artist),
+            itemBuilder: (ctx) => _buildArtistMenuItems(ctx),
+          ),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LocalCollectionScreen(
+                  title: artist.name,
+                  subtitle: '${artist.length} tracks',
+                  songs: artist.songs,
+                  fallbackIcon: Icons.person_rounded,
+                ),
+              ),
+            );
+          },
+          onLongPress: () => _showArtistBottomSheet(context, artist),
+        );
+      },
+    );
+  }
+
+  Widget _buildArtistsGrid(BuildContext context, List<LocalArtist> artists) {
+    if (artists.isEmpty) {
+      return Center(
+        child: Text(
+          'No artists found',
+          style: TextStyle(color: context.colors.mist.withValues(alpha: 0.6)),
+        ),
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        childAspectRatio: 0.85,
+      ),
+      itemCount: artists.length,
+      itemBuilder: (context, index) {
+        final artist = artists[index];
+        return InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LocalCollectionScreen(
+                  title: artist.name,
+                  subtitle: '${artist.length} tracks',
+                  songs: artist.songs,
+                  fallbackIcon: Icons.person_rounded,
+                ),
+              ),
+            );
+          },
+          onLongPress: () => _showArtistBottomSheet(context, artist),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.colors.lift,
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: LocalArtwork(
-                    id: album.albumId ??
-                        ((album.songs.first.extras?['songId'] as int?) ??
-                            int.tryParse(album.songs.first.id)),
-                    type: ArtworkType.ALBUM,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                CircleAvatar(
+                  radius: 36,
+                  backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
+                  child: const Icon(Icons.person_rounded, size: 36, color: AppTheme.primary),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
-                  album.name,
+                  artist.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
+                const SizedBox(height: 2),
                 Text(
-                  '${album.artist} · ${album.length} tracks',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  '${artist.length} tracks',
                   style: TextStyle(
                     fontSize: 12,
                     color: context.colors.mist.withValues(alpha: 0.6),
@@ -1258,64 +2032,9 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
                 ),
               ],
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  // ==========================================
-  // VIEW 5: ARTISTS
-  // ==========================================
-  Widget _buildArtistsView(BuildContext context) {
-    final artists = groupByArtist(_localSongs);
-
-    return RefreshIndicator(
-      onRefresh: () => _initLocalMusic(forceRescan: true),
-      color: context.colors.accent,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 110),
-        itemCount: artists.length,
-        separatorBuilder: (_, _) => const Divider(height: 1, indent: 76),
-        itemBuilder: (context, index) {
-          final artist = artists[index];
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: CircleAvatar(
-              radius: 24,
-              backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
-              child: const Icon(Icons.person_rounded, color: AppTheme.primary),
-            ),
-            title: Text(
-              artist.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              '${artist.length} ${artist.length == 1 ? 'song' : 'songs'} · ${artist.albumCount} ${artist.albumCount == 1 ? 'album' : 'albums'}',
-              style: TextStyle(
-                fontSize: 12,
-                color: context.colors.mist.withValues(alpha: 0.6),
-              ),
-            ),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LocalCollectionScreen(
-                    title: artist.name,
-                    subtitle: '${artist.length} tracks',
-                    songs: artist.songs,
-                    fallbackIcon: Icons.person_rounded,
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 

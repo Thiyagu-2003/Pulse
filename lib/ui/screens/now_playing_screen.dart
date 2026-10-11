@@ -481,11 +481,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     // Protect against zero/negative duration
                     final maxMs = duration.inMilliseconds.toDouble();
                     final safeDuration = maxMs > 0 ? maxMs : 1.0;
-                    // While dragging, follow the thumb rather than the player.
+                    final currentPos = snapshot.data ?? Duration.zero;
+                    final displayPos = currentPos > Duration.zero
+                        ? currentPos
+                        : (playerProvider.getSavedPosition(track.id) ?? Duration.zero);
                     final rawPosition =
                         _dragMs ??
-                        (snapshot.data ?? Duration.zero).inMilliseconds
-                            .toDouble();
+                        displayPos.inMilliseconds.toDouble();
                     final safePosition = rawPosition.clamp(0.0, safeDuration);
                     final position = Duration(
                       milliseconds: safePosition.toInt(),
@@ -1766,6 +1768,23 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        if (!isCurrent)
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.playlist_play_rounded,
+                                              size: 22,
+                                            ),
+                                            color: Colors.white70,
+                                            tooltip: 'Play next',
+                                            onPressed: () {
+                                              queueProvider.moveQueueItemToNext(index);
+                                              showCompactSnack(
+                                                ScaffoldMessenger.of(context),
+                                                'Playing next: ${item.title}',
+                                                icon: Icons.playlist_play_rounded,
+                                              );
+                                            },
+                                          ),
                                         IconButton(
                                           icon: const Icon(
                                             Icons.close_rounded,

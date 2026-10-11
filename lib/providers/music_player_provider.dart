@@ -62,10 +62,17 @@ class MusicPlayerProvider extends ChangeNotifier {
     };
     _initListeners();
     if (Platform.isAndroid) applyEqualizer(equalizerSettings);
+    final notificationEnabled = playbackNotificationEnabled;
+    _audioHandler.setNotificationEnabled(notificationEnabled);
+    if (Platform.isAndroid) {
+      PlatformBridge.setPlaybackNotificationEnabled(notificationEnabled);
+    }
     PlatformBridge.ensureHandler();
     PlatformBridge.onStopPlaybackRequested = () {
+      saveCurrentPosition();
       _audioHandler.stop();
     };
+    _restoreLastPlayed();
   }
 
   CustomAudioHandler get audioHandler => _audioHandler;
@@ -182,18 +189,71 @@ class MusicPlayerProvider extends ChangeNotifier {
     // feel slow. Everything that needs live playback state uses a
     // StreamBuilder on playbackState/positionStream instead.
 
-    // Remember where we are in podcast episodes. positionStream ticks several
-    // times a second, so only write every 5s of actual progress.
+    // Remember where we are in playback. positionStream ticks several
+    // times a second, so only write every 2s of actual progress.
     _audioHandler.player.positionStream.listen((position) {
       final track = _currentTrack;
-      if (track == null || track.sourceType != MediaSourceType.podcast) return;
+      if (track == null) return;
       if (!_audioHandler.player.playing) return;
-      if ((position - _lastSavedPosition).abs() < const Duration(seconds: 5)) {
+      if ((position - _lastSavedPosition).abs() < const Duration(seconds: 2)) {
         return;
       }
       _lastSavedPosition = position;
       _storageService.savePosition(track.id, position);
     });
+
+    // Save exact position whenever playback pauses
+    _audioHandler.playbackState
+        .map((s) => s.playing)
+        .distinct()
+        .listen((playing) {
+      _syncWidget();
+      if (!playing && _currentTrack != null) {
+        final pos = _audioHandler.player.position;
+        if (pos > Duration.zero) {
+          _lastSavedPosition = pos;
+          _storageService.savePosition(_currentTrack!.id, pos);
+        }
+      }
+    });
+  }
+
+  void saveCurrentPosition() {
+    final track = _currentTrack;
+    if (track == null) return;
+    final pos = _audioHandler.player.position;
+    if (pos > Duration.zero) {
+      _lastSavedPosition = pos;
+      _storageService.savePosition(track.id, pos);
+    }
+  }
+
+  Duration? getSavedPosition(String id) => _storageService.getPosition(id);
+
+  void _restoreLastPlayed() {
+    final history = _storageService.getHistory();
+    if (history.isNotEmpty) {
+      final lastTrack = streamableFallback(history.first);
+      final download = _storageService.getDownload(lastTrack.id);
+      final track = download != null && _fileExists(download.streamUrl)
+          ? download
+          : lastTrack;
+      _currentTrack = track;
+      _queueState.replaceWith([track], track);
+      final resumeAt = _resumePositionFor(track) ?? Duration.zero;
+      _lastSavedPosition = resumeAt;
+      if (playbackNotificationEnabled) {
+        _audioHandler.mediaItem.add(track.toAudioServiceMediaItem());
+      }
+      _audioHandler.playbackState.add(
+        _audioHandler.playbackState.value.copyWith(
+          processingState: AudioProcessingState.ready,
+          playing: false,
+          updatePosition: resumeAt,
+        ),
+      );
+      _syncWidget();
+    }
   }
 
   String? _widgetArtUrl;
@@ -457,16 +517,66 @@ class MusicPlayerProvider extends ChangeNotifier {
     AppMediaItem requested, {
     List<AppMediaItem>? playlist,
   }) async {
+    final isSameTrack = _currentTrack?.id == requested.id;
+    final isPlaying = _audioHandler.playbackState.value.playing;
+
     if (playlist != null && playlist.isNotEmpty) {
-      _queueState.replaceWith(playlist, requested);
+      final currentQueueIds = _queueState.items.map((t) => t.id).toList();
+      final newPlaylistIds = playlist.map((t) => t.id).toList();
+      final isSamePlaylist = currentQueueIds.length == newPlaylistIds.length &&
+          currentQueueIds.every((id) => newPlaylistIds.contains(id));
+
+      if (!isSamePlaylist) {
+        _queueState.replaceWith(playlist, requested);
+        if (!isPlaying || !isSameTrack) {
+          await _play(requested);
+        } else {
+          notifyListeners();
+        }
+        return;
+      } else {
+        _queueState.selectOrAppend(requested);
+      }
     } else {
-      _queueState.selectOrAppend(requested);
+      // Playing a single song directly: start a clean queue with this song,
+      // so it does NOT retain leftover tracks from any previous playlist!
+      if (!isSameTrack || _queueState.length > 1) {
+        _queueState.replaceWith([requested], requested);
+        await _play(requested);
+        return;
+      }
     }
+
+    if (isSameTrack) {
+      if (isPlaying) {
+        return;
+      } else {
+        await _audioHandler.play();
+        return;
+      }
+    }
+
     await _play(requested);
+  }
+
+  /// Move a queued item to play immediately after the current track
+  void moveQueueItemToNext(int fromIndex) {
+    if (fromIndex < 0 || fromIndex >= _queueState.length) return;
+    if (fromIndex == _queueState.currentIndex) return;
+    final item = _queueState.items[fromIndex];
+    _queueState.insertNext(item);
+    notifyListeners();
+    _prefetchUpcoming();
   }
 
   /// Start [requested], which the queue already points at.
   Future<void> _play(AppMediaItem requested) async {
+    if (_currentTrack != null && _currentTrack!.id != requested.id) {
+      final prevPos = _audioHandler.player.position;
+      if (prevPos > Duration.zero) {
+        _storageService.savePosition(_currentTrack!.id, prevPos);
+      }
+    }
     final online = streamableFallback(requested);
     // If it's on disk, play that: instant, offline, and no risk of an
     // expired stream URL. This is the whole point of downloading. Only if
@@ -477,6 +587,8 @@ class MusicPlayerProvider extends ChangeNotifier {
         ? download
         : online;
     _currentTrack = track;
+    _invalidateLyrics();
+    _syncWidget();
     notifyListeners();
 
     final resumeAt = _resumePositionFor(track);
@@ -729,13 +841,15 @@ class MusicPlayerProvider extends ChangeNotifier {
   static const originKey = 'origin';
   static const originUrlKey = 'originUrl';
 
-  /// Podcasts only: dropping back into a 90-minute episode where you left off
-  /// is the expectation, whereas a song you tapped should start from the top.
+  /// Drops back into tracks where you left off if there is a saved playback position.
   Duration? _resumePositionFor(AppMediaItem track) {
-    if (track.sourceType != MediaSourceType.podcast) return null;
     final saved = _storageService.getPosition(track.id);
     if (saved == null) return null;
-    return shouldResume(saved: saved, total: track.duration) ? saved : null;
+    return shouldResume(
+      saved: saved,
+      total: track.duration,
+      threshold: const Duration(seconds: 3),
+    ) ? saved : null;
   }
 
   /// Move a queue item. [from] and [to] are positions in the final list —
@@ -961,6 +1075,42 @@ class MusicPlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool get playbackNotificationEnabled =>
+      _storageService.getPlaybackNotificationEnabled();
+
+  Future<void> setPlaybackNotificationEnabled(bool enabled) async {
+    await _storageService.setPlaybackNotificationEnabled(enabled);
+    _audioHandler.setNotificationEnabled(enabled);
+    if (Platform.isAndroid) {
+      PlatformBridge.setPlaybackNotificationEnabled(enabled);
+    }
+    notifyListeners();
+  }
+
+  String get localAlbumsView => _storageService.getLocalAlbumsView();
+  Future<void> setLocalAlbumsView(String view) async {
+    await _storageService.setLocalAlbumsView(view);
+    notifyListeners();
+  }
+
+  String get localFoldersView => _storageService.getLocalFoldersView();
+  Future<void> setLocalFoldersView(String view) async {
+    await _storageService.setLocalFoldersView(view);
+    notifyListeners();
+  }
+
+  String get localArtistsView => _storageService.getLocalArtistsView();
+  Future<void> setLocalArtistsView(String view) async {
+    await _storageService.setLocalArtistsView(view);
+    notifyListeners();
+  }
+
+  String get onlineViewMode => _storageService.getOnlineViewMode();
+  Future<void> setOnlineViewMode(String mode) async {
+    await _storageService.setOnlineViewMode(mode);
+    notifyListeners();
+  }
+
   bool get voiceControlEnabled => _storageService.isVoiceControlEnabled();
 
   Future<bool> setVoiceControlEnabled(bool enabled, BuildContext context) async {
@@ -1003,6 +1153,10 @@ class MusicPlayerProvider extends ChangeNotifier {
     if (Platform.isAndroid) applyEqualizer(equalizerSettings);
     PlatformBridge.setIconStyle(dark: darkLauncherIcon);
     PlatformBridge.setStopOnClose(stop: stopPlaybackOnClose);
+    if (Platform.isAndroid) {
+      PlatformBridge.setPlaybackNotificationEnabled(playbackNotificationEnabled);
+    }
+    _audioHandler.setNotificationEnabled(playbackNotificationEnabled);
     notifyListeners();
     return count;
   }

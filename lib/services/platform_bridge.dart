@@ -61,6 +61,10 @@ class PlatformBridge {
   static Future<void> setStopOnClose({required bool stop}) =>
       _call('setStopOnClose', {'stop': stop});
 
+  /// Tells Android whether to display playback controls in the notification panel.
+  static Future<void> setPlaybackNotificationEnabled(bool enabled) =>
+      _call('setPlaybackNotificationEnabled', {'enabled': enabled});
+
   static VoidCallback? onStopPlaybackRequested;
   static bool _handlerInstalled = false;
 
