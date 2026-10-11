@@ -10,6 +10,7 @@ import '../models/media_item_model.dart';
 import '../models/playback_mode.dart';
 import '../models/playlist.dart';
 import '../models/queue_state.dart';
+import '../services/artwork_service.dart';
 import '../services/audio_handler.dart';
 import '../services/saavn_service.dart';
 import '../services/storage_service.dart';
@@ -18,8 +19,6 @@ import '../services/voice_command_service.dart';
 import '../services/youtube_service.dart';
 import '../services/download_notifications.dart';
 import '../services/platform_bridge.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class MusicPlayerProvider extends ChangeNotifier {
@@ -243,7 +242,9 @@ class MusicPlayerProvider extends ChangeNotifier {
       final resumeAt = _resumePositionFor(track) ?? Duration.zero;
       _lastSavedPosition = resumeAt;
       if (playbackNotificationEnabled) {
-        _audioHandler.mediaItem.add(track.toAudioServiceMediaItem());
+        final artPath = ArtworkService.instance.getCachedArtPath(track) ??
+            ArtworkService.instance.defaultArtPath;
+        _audioHandler.mediaItem.add(track.toAudioServiceMediaItem(cachedArtPath: artPath));
       }
       _audioHandler.playbackState.add(
         _audioHandler.playbackState.value.copyWith(
@@ -256,64 +257,22 @@ class MusicPlayerProvider extends ChangeNotifier {
     }
   }
 
-  String? _widgetArtUrl;
-  Future<String?>? _widgetArt;
-
-  /// Push the current track to the home-screen widget. The widget can only
-  /// show a local file, so network artwork is fetched once per track.
+  /// Push the current track to the home-screen widget.
   Future<void> _syncWidget() async {
     // The home-screen widget is Android's; elsewhere don't fetch its art.
     if (!Platform.isAndroid) return;
     final track = _currentTrack;
-    final url = track?.artUri;
-    String? artPath;
-    if (url != null && url.startsWith('http')) {
-      if (url != _widgetArtUrl) {
-        _widgetArtUrl = url;
-        _widgetArt = _fetchWidgetArt(url);
-      }
-      artPath = await _widgetArt;
-      // A failed fetch shouldn't stick for this track; try again next time.
-      if (artPath == null && url == _widgetArtUrl) _widgetArtUrl = null;
-    } else if (url != null && url.isNotEmpty) {
-      final local = url.startsWith('file://') ? Uri.parse(url).toFilePath() : url;
-      if (File(local).existsSync()) {
-        artPath = local;
-      }
-    }
+    if (track == null) return;
+    final artPath = await ArtworkService.instance.resolveArtwork(track);
     if (!identical(track, _currentTrack)) return; // changed while fetching
     await PlatformBridge.updateWidget(
-      title: track?.title,
-      artist: track?.artist,
+      title: track.title,
+      artist: track.artist,
       artPath: artPath,
       playing: _audioHandler.playbackState.value.playing,
     );
   }
 
-  Future<String?> _fetchWidgetArt(String url) async {
-    try {
-      final response = await http
-          .get(Uri.parse(url))
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) return null;
-      final dir = await getTemporaryDirectory();
-      // One file per image, so the widget never reads a half-written one.
-      final file = File('${dir.path}/widget_art_${url.hashCode}.jpg');
-      await file.writeAsBytes(response.bodyBytes);
-      // Only the newest fetch cleans up: a slow, older one finishing last
-      // would otherwise delete the current track's artwork.
-      if (url != _widgetArtUrl) return file.path;
-      for (final old in dir.listSync().whereType<File>()) {
-        if (old.path.contains('widget_art_') && old.path != file.path) {
-          old.deleteSync();
-        }
-      }
-      return file.path;
-    } catch (e) {
-      debugPrint('Widget artwork unavailable: $e');
-      return null;
-    }
-  }
 
   /// Download YouTube/Online track locally for offline playback
   Future<String?> downloadTrack(AppMediaItem item, {String? folder}) async {

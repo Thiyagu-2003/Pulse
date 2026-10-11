@@ -64,9 +64,15 @@ class AppMediaItem {
     this.extras,
   });
 
-  MediaItem toAudioServiceMediaItem() {
+  MediaItem toAudioServiceMediaItem({String? cachedArtPath}) {
+    final artPath = cachedArtPath ??
+        (extras?['artCacheFile'] as String?) ??
+        (artUri != null && artUri!.startsWith('file://') ? Uri.parse(artUri!).toFilePath() : null);
+
     Uri? resolvedArtUri;
-    if (artUri != null && artUri!.isNotEmpty) {
+    if (artPath != null && artPath.isNotEmpty) {
+      resolvedArtUri = Uri.file(artPath);
+    } else if (artUri != null && artUri!.isNotEmpty) {
       resolvedArtUri = Uri.tryParse(artUri!);
     } else if (sourceType == MediaSourceType.local) {
       final songId = (extras?['songId'] as int?) ?? int.tryParse(id);
@@ -88,6 +94,7 @@ class AppMediaItem {
         ...?extras,
         'sourceType': sourceType.name,
         'streamUrl': streamUrl,
+        if (artPath != null && artPath.isNotEmpty) 'artCacheFile': artPath,
       },
     );
   }

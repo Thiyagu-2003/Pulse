@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/media_item_model.dart';
+import 'artwork_service.dart';
 import 'network_status.dart';
 import 'playback_cache.dart';
 import 'playback_log.dart';
@@ -26,6 +27,8 @@ Future<CustomAudioHandler> initAudioService() async {
       // Enforce dark background on OEM ROMs (MIUI/HyperOS) so white media
       // notification text remains high-contrast and legible.
       notificationColor: Color(0xFF13141B),
+      artDownscaleWidth: 512,
+      artDownscaleHeight: 512,
     ),
   );
 }
@@ -109,7 +112,9 @@ class CustomAudioHandler extends BaseAudioHandler
     if (!enabled) {
       mediaItem.add(null);
     } else if (_currentAppMediaItem != null) {
-      mediaItem.add(_currentAppMediaItem!.toAudioServiceMediaItem());
+      final artPath = ArtworkService.instance.getCachedArtPath(_currentAppMediaItem!) ??
+          ArtworkService.instance.defaultArtPath;
+      mediaItem.add(_currentAppMediaItem!.toAudioServiceMediaItem(cachedArtPath: artPath));
     }
     _broadcastState();
   }
@@ -240,9 +245,14 @@ class CustomAudioHandler extends BaseAudioHandler
     _pauseRequested = false;
 
     _currentAppMediaItem = item;
-    // Immediately broadcast the mediaItem so the UI updates with track info
+    // Immediately broadcast the mediaItem so the UI and notification update with track info.
+    // Using cached or default dark Pulse artwork guarantees MIUI/Android 13 will not render
+    // an unreadable cream card with low contrast.
     if (_notificationEnabled) {
-      mediaItem.add(item.toAudioServiceMediaItem());
+      final initialArt = ArtworkService.instance.getCachedArtPath(item) ??
+          ArtworkService.instance.defaultArtPath;
+      mediaItem.add(item.toAudioServiceMediaItem(cachedArtPath: initialArt));
+      _resolveArtworkInBackground(item, load, initialArt);
     } else {
       mediaItem.add(null);
     }
@@ -332,7 +342,9 @@ class CustomAudioHandler extends BaseAudioHandler
       );
       _currentAppMediaItem = updatedItem;
       if (_notificationEnabled) {
-        mediaItem.add(updatedItem.toAudioServiceMediaItem());
+        final artPath = ArtworkService.instance.getCachedArtPath(updatedItem) ??
+            ArtworkService.instance.defaultArtPath;
+        mediaItem.add(updatedItem.toAudioServiceMediaItem(cachedArtPath: artPath));
       } else {
         mediaItem.add(null);
       }
@@ -671,6 +683,20 @@ class CustomAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> setSpeed(double speed) => _player.setSpeed(speed);
+
+  void _resolveArtworkInBackground(AppMediaItem item, int generation, String? initialPath) {
+    ArtworkService.instance.resolveArtwork(item).then((resolvedPath) {
+      if (generation == _loadGeneration &&
+          _notificationEnabled &&
+          _currentAppMediaItem?.id == item.id &&
+          resolvedPath != null &&
+          resolvedPath != initialPath) {
+        mediaItem.add(item.toAudioServiceMediaItem(cachedArtPath: resolvedPath));
+      }
+    }).catchError((e) {
+      debugPrint('Background artwork resolution error: $e');
+    });
+  }
 
   AudioPlayer get player => _player;
 }

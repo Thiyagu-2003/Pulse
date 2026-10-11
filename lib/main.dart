@@ -2,6 +2,7 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'services/artwork_service.dart';
 import 'services/audio_handler.dart';
 import 'services/network_status.dart';
 import 'services/storage_service.dart';
@@ -15,6 +16,9 @@ void main() async {
   // Initialize persistent local storage (Hive)
   final storageService = StorageService();
   await storageService.init();
+
+  // Initialize artwork service and extract default dark notification artwork
+  await ArtworkService.instance.init();
 
   // Wi-Fi vs mobile data decides stream quality and pre-caching.
   await NetworkStatus.instance.start();
