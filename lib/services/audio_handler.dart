@@ -23,6 +23,9 @@ Future<CustomAudioHandler> initAudioService() async {
       // Status-bar icons are drawn from alpha only; the full-colour launcher
       // PNG showed as a white square.
       androidNotificationIcon: 'drawable/ic_stat_pulse',
+      // Enforce dark background on OEM ROMs (MIUI/HyperOS) so white media
+      // notification text remains high-contrast and legible.
+      notificationColor: Color(0xFF13141B),
     ),
   );
 }

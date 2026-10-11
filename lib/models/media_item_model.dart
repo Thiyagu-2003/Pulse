@@ -65,15 +65,23 @@ class AppMediaItem {
   });
 
   MediaItem toAudioServiceMediaItem() {
+    Uri? resolvedArtUri;
+    if (artUri != null && artUri!.isNotEmpty) {
+      resolvedArtUri = Uri.tryParse(artUri!);
+    } else if (sourceType == MediaSourceType.local) {
+      final songId = (extras?['songId'] as int?) ?? int.tryParse(id);
+      if (songId != null && songId > 0) {
+        resolvedArtUri = Uri.parse('content://media/external/audio/media/$songId/albumart');
+      }
+    }
+
     return MediaItem(
       id: id,
       album: album,
       title: title,
       artist: artist,
       duration: duration,
-      artUri: artUri != null && artUri!.isNotEmpty
-          ? Uri.tryParse(artUri!)
-          : null,
+      artUri: resolvedArtUri,
       // Canonical fields last: extras copied from an earlier MediaItem carry
       // their own stale 'streamUrl', which must not override the resolved one.
       extras: {
