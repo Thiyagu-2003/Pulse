@@ -212,8 +212,10 @@ class SettingsScreen extends StatelessWidget {
           SwitchListTile(
             secondary: const Icon(Icons.notifications_active_outlined),
             title: const Text('Playback notification'),
-            subtitle: const Text(
-              'Show media controls and track info in the notification panel',
+            subtitle: Text(
+              provider.playbackNotificationEnabled
+                  ? 'Media controls in the notification panel; music keeps playing in the background'
+                  : 'Off: music pauses when you leave Pulse (Android needs the notification for background play)',
             ),
             value: provider.playbackNotificationEnabled,
             onChanged: provider.setPlaybackNotificationEnabled,
@@ -505,7 +507,9 @@ class SettingsScreen extends StatelessWidget {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: context.colors.mist.withValues(alpha: 0.1),
+                                    color: context.colors.mist.withValues(
+                                      alpha: 0.1,
+                                    ),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -513,7 +517,9 @@ class SettingsScreen extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: context.colors.mist.withValues(alpha: 0.8),
+                                      color: context.colors.mist.withValues(
+                                        alpha: 0.8,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -524,7 +530,9 @@ class SettingsScreen extends StatelessWidget {
                               w.desc,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: context.colors.mist.withValues(alpha: 0.6),
+                                color: context.colors.mist.withValues(
+                                  alpha: 0.6,
+                                ),
                               ),
                             ),
                           ],
@@ -538,7 +546,8 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         onPressed: () async {
                           Navigator.pop(sheetContext);
-                          final supported = await PlatformBridge.isPinWidgetSupported();
+                          final supported =
+                              await PlatformBridge.isPinWidgetSupported();
                           if (supported) {
                             await PlatformBridge.pinWidget(w.id);
                           } else {

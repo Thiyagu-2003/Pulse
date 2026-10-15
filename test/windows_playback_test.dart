@@ -29,6 +29,8 @@ void main() {
     // Stands in for just_audio_windows: answers each call, and after a load
     // reports "ready" the way the plugin's PlaybackStateChanged event does.
     messenger.allMessagesHandler = (channel, handler, message) async {
+      // Asset loads (ArtworkService's placeholder) aren't method calls.
+      if (channel == 'flutter/assets') return null;
       final call = codec.decodeMethodCall(message);
       if (channel == 'plugins.flutter.io/path_provider') {
         return codec.encodeSuccessEnvelope(temp.path);

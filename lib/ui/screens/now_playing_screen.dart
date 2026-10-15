@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:audio_service/audio_service.dart';
+
 import '../../models/media_item_model.dart';
 import '../../models/playback_mode.dart';
 import '../../providers/music_player_provider.dart';
@@ -23,7 +25,9 @@ import 'folder_songs_screen.dart';
 import 'full_screen_lyrics.dart';
 import 'local_collection_screen.dart';
 import 'ringtone_editor_screen.dart';
+
 import 'dart:async';
+
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class NowPlayingScreen extends StatefulWidget {
@@ -190,11 +194,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             )
           else if (track.sourceType == MediaSourceType.local)
             Positioned.fill(
-              child: LocalArtwork(
-                item: track,
-                fit: BoxFit.cover,
-                size: 800,
-              ),
+              child: LocalArtwork(item: track, fit: BoxFit.cover, size: 800),
             ),
           Positioned.fill(
             child: BackdropFilter(
@@ -331,64 +331,79 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      Hero(
-                        tag: 'artwork_${track.id}',
-                        child: Container(
-                          // Width-based, but never more than ~40% of the
-                          // height: in landscape 75% of the width is taller
-                          // than the screen.
-                          width: _artSide(context),
-                          height: _artSide(context),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.primary.withValues(alpha: 0.3),
-                                blurRadius: 30,
-                                spreadRadius: 5,
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
-                            child: _isVideoMode && _youtubeController != null
-                                // A 16:9 player dropped straight into this
-                                // square frame letterboxed itself. Scaling a
-                                // 16:9 box to cover crops the sides instead,
-                                // so the video fills the artwork.
-                                ? FittedBox(
-                                    fit: BoxFit.cover,
-                                    clipBehavior: Clip.hardEdge,
-                                    child: SizedBox(
-                                      width: 640,
-                                      height: 360,
-                                      child: YoutubePlayer(
-                                        controller: _youtubeController!,
-                                        showVideoProgressIndicator: false,
-                                        aspectRatio: 16 / 9,
+                      GestureDetector(
+                        // Swipe the artwork: right = next, left = previous.
+                        onHorizontalDragEnd: _isVideoMode
+                            ? null
+                            : (d) {
+                                final v = d.primaryVelocity ?? 0;
+                                if (v > 300) {
+                                  playerProvider.skipToNext();
+                                } else if (v < -300) {
+                                  playerProvider.skipToPrevious();
+                                }
+                              },
+                        child: Hero(
+                          tag: 'artwork_${track.id}',
+                          child: Container(
+                            // Width-based, but never more than ~40% of the
+                            // height: in landscape 75% of the width is taller
+                            // than the screen.
+                            width: _artSide(context),
+                            height: _artSide(context),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                  blurRadius: 30,
+                                  spreadRadius: 5,
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: _isVideoMode && _youtubeController != null
+                                  // A 16:9 player dropped straight into this
+                                  // square frame letterboxed itself. Scaling a
+                                  // 16:9 box to cover crops the sides instead,
+                                  // so the video fills the artwork.
+                                  ? FittedBox(
+                                      fit: BoxFit.cover,
+                                      clipBehavior: Clip.hardEdge,
+                                      child: SizedBox(
+                                        width: 640,
+                                        height: 360,
+                                        child: YoutubePlayer(
+                                          controller: _youtubeController!,
+                                          showVideoProgressIndicator: false,
+                                          aspectRatio: 16 / 9,
+                                        ),
+                                      ),
+                                    )
+                                  : track.artUri != null &&
+                                        track.artUri!.startsWith('http')
+                                  ? CachedNetworkImage(
+                                      imageUrl: track.artUri!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : track.sourceType == MediaSourceType.local
+                                  ? LocalArtwork(
+                                      item: track,
+                                      fit: BoxFit.cover,
+                                      size: 500,
+                                    )
+                                  : Container(
+                                      color: Colors.white10,
+                                      child: const Icon(
+                                        Icons.music_note,
+                                        size: 100,
+                                        color: AppTheme.primary,
                                       ),
                                     ),
-                                  )
-                                : track.artUri != null &&
-                                      track.artUri!.startsWith('http')
-                                ? CachedNetworkImage(
-                                    imageUrl: track.artUri!,
-                                    fit: BoxFit.cover,
-                                  )
-                                : track.sourceType == MediaSourceType.local
-                                ? LocalArtwork(
-                                    item: track,
-                                    fit: BoxFit.cover,
-                                    size: 500,
-                                  )
-                                : Container(
-                                    color: Colors.white10,
-                                    child: const Icon(
-                                      Icons.music_note,
-                                      size: 100,
-                                      color: AppTheme.primary,
-                                    ),
-                                  ),
+                            ),
                           ),
                         ),
                       ),
@@ -484,10 +499,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     final currentPos = snapshot.data ?? Duration.zero;
                     final displayPos = currentPos > Duration.zero
                         ? currentPos
-                        : (playerProvider.getSavedPosition(track.id) ?? Duration.zero);
+                        : (playerProvider.getSavedPosition(track.id) ??
+                              Duration.zero);
                     final rawPosition =
-                        _dragMs ??
-                        displayPos.inMilliseconds.toDouble();
+                        _dragMs ?? displayPos.inMilliseconds.toDouble();
                     final safePosition = rawPosition.clamp(0.0, safeDuration);
                     final position = Duration(
                       milliseconds: safePosition.toInt(),
@@ -847,24 +862,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           error: n == 0,
                         );
                       }),
-                      round(
-                        Icons.share_rounded,
-                        'Share',
-                        () async {
-                          close();
-                          final shareText = link != null
-                              ? '${track.title} – ${track.artist}\n$link'
-                              : '${track.title} – ${track.artist}';
-                          final shared = await PlatformBridge.share(shareText);
-                          if (!shared) {
-                            showCompactSnack(
-                              messenger,
-                              'Track info copied',
-                              icon: Icons.copy_rounded,
-                            );
-                          }
-                        },
-                      ),
+                      round(Icons.share_rounded, 'Share', () async {
+                        close();
+                        final shareText = link != null
+                            ? '${track.title} – ${track.artist}\n$link'
+                            : '${track.title} – ${track.artist}';
+                        final shared = await PlatformBridge.share(shareText);
+                        if (!shared) {
+                          showCompactSnack(
+                            messenger,
+                            'Track info copied',
+                            icon: Icons.copy_rounded,
+                          );
+                        }
+                      }),
                     ],
                   ),
                 ),
@@ -892,26 +903,22 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 else if (track.sourceType == MediaSourceType.local &&
                     track.album.trim().isNotEmpty &&
                     track.album != 'Local Storage')
-                  row(
-                    Icons.album_rounded,
-                    'View album',
-                    () {
-                      final all = LocalMusicService.instance.cachedSongs;
-                      final albumTracks = all
-                          .where((s) => s.album.trim() == track.album.trim())
-                          .toList();
-                      Navigator.push(
-                        rootContext,
-                        MaterialPageRoute(
-                          builder: (_) => LocalCollectionScreen(
-                            title: track.album,
-                            subtitle: '${albumTracks.length} tracks',
-                            songs: albumTracks.isNotEmpty ? albumTracks : [track],
-                          ),
+                  row(Icons.album_rounded, 'View album', () {
+                    final all = LocalMusicService.instance.cachedSongs;
+                    final albumTracks = all
+                        .where((s) => s.album.trim() == track.album.trim())
+                        .toList();
+                    Navigator.push(
+                      rootContext,
+                      MaterialPageRoute(
+                        builder: (_) => LocalCollectionScreen(
+                          title: track.album,
+                          subtitle: '${albumTracks.length} tracks',
+                          songs: albumTracks.isNotEmpty ? albumTracks : [track],
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  }),
                 if (artistId != null)
                   row(
                     Icons.person_rounded,
@@ -930,55 +937,53 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 else if (track.sourceType == MediaSourceType.local &&
                     track.artist.trim().isNotEmpty &&
                     track.artist != 'Unknown Artist')
-                  row(
-                    Icons.person_rounded,
-                    'Go to artist',
-                    () {
-                      final all = LocalMusicService.instance.cachedSongs;
-                      final artistTracks = all
-                          .where((s) => s.artist.trim() == track.artist.trim())
-                          .toList();
-                      Navigator.push(
-                        rootContext,
-                        MaterialPageRoute(
-                          builder: (_) => LocalCollectionScreen(
-                            title: track.artist,
-                            subtitle: '${artistTracks.length} tracks',
-                            songs: artistTracks.isNotEmpty ? artistTracks : [track],
-                          ),
+                  row(Icons.person_rounded, 'Go to artist', () {
+                    final all = LocalMusicService.instance.cachedSongs;
+                    final artistTracks = all
+                        .where((s) => s.artist.trim() == track.artist.trim())
+                        .toList();
+                    Navigator.push(
+                      rootContext,
+                      MaterialPageRoute(
+                        builder: (_) => LocalCollectionScreen(
+                          title: track.artist,
+                          subtitle: '${artistTracks.length} tracks',
+                          songs: artistTracks.isNotEmpty
+                              ? artistTracks
+                              : [track],
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  }),
                 if (track.sourceType == MediaSourceType.local) ...[
-                  row(
-                    Icons.folder_rounded,
-                    'Show in folder',
-                    () {
-                      final filePath = (track.extras?['filePath'] as String?) ??
-                          track.streamUrl ??
-                          (track.id.startsWith('/') ? track.id : '');
-                      final folderPath = File(filePath).parent.path;
-                      final all = LocalMusicService.instance.cachedSongs;
-                      final folderSongs = all.where((s) {
-                        final p = (s.extras?['filePath'] as String?) ??
-                            s.streamUrl ??
-                            (s.id.startsWith('/') ? s.id : '');
-                        return File(p).parent.path == folderPath;
-                      }).toList();
-                      Navigator.push(
-                        rootContext,
-                        MaterialPageRoute(
-                          builder: (_) => FolderSongsScreen(
-                            folder: MediaFolder(
-                              path: folderPath,
-                              items: folderSongs.isNotEmpty ? folderSongs : [track],
-                            ),
+                  row(Icons.folder_rounded, 'Show in folder', () {
+                    final filePath =
+                        (track.extras?['filePath'] as String?) ??
+                        track.streamUrl ??
+                        (track.id.startsWith('/') ? track.id : '');
+                    final folderPath = File(filePath).parent.path;
+                    final all = LocalMusicService.instance.cachedSongs;
+                    final folderSongs = all.where((s) {
+                      final p =
+                          (s.extras?['filePath'] as String?) ??
+                          s.streamUrl ??
+                          (s.id.startsWith('/') ? s.id : '');
+                      return File(p).parent.path == folderPath;
+                    }).toList();
+                    Navigator.push(
+                      rootContext,
+                      MaterialPageRoute(
+                        builder: (_) => FolderSongsScreen(
+                          folder: MediaFolder(
+                            path: folderPath,
+                            items: folderSongs.isNotEmpty
+                                ? folderSongs
+                                : [track],
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  }),
                   row(
                     Icons.info_outline_rounded,
                     'Track details',
@@ -996,19 +1001,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       ),
                     ),
                   ),
-                  row(
-                    Icons.ring_volume_rounded,
-                    'Set as ringtone',
-                    () {
-                      provider.pause();
-                      Navigator.push(
-                        rootContext,
-                        MaterialPageRoute(
-                          builder: (_) => RingtoneEditorScreen(item: track),
-                        ),
-                      );
-                    },
-                  ),
+                  row(Icons.ring_volume_rounded, 'Set as ringtone', () {
+                    provider.pause();
+                    Navigator.push(
+                      rootContext,
+                      MaterialPageRoute(
+                        builder: (_) => RingtoneEditorScreen(item: track),
+                      ),
+                    );
+                  }),
                 ],
                 row(
                   Icons.bedtime_rounded,
@@ -1025,7 +1026,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   }
 
   void _showTrackDetails(BuildContext context, AppMediaItem track) {
-    final filePath = (track.extras?['filePath'] as String?) ??
+    final filePath =
+        (track.extras?['filePath'] as String?) ??
         track.streamUrl ??
         (track.id.startsWith('/') ? track.id : '');
     final file = File(filePath);
@@ -1034,7 +1036,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       final bytes = file.lengthSync();
       fileSizeStr = '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
     }
-    final isSdCard = filePath.startsWith('/storage/') && !filePath.startsWith('/storage/emulated');
+    final isSdCard =
+        filePath.startsWith('/storage/') &&
+        !filePath.startsWith('/storage/emulated');
     final durationStr = track.duration != null
         ? '${track.duration!.inMinutes}:${(track.duration!.inSeconds % 60).toString().padLeft(2, '0')}'
         : 'Unknown';
@@ -1059,7 +1063,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               _detailRow('Album', track.album),
               _detailRow('Duration', durationStr),
               _detailRow('File size', fileSizeStr),
-              _detailRow('Storage location', isSdCard ? 'SD Card (Removable)' : 'Internal Storage'),
+              _detailRow(
+                'Storage location',
+                isSdCard ? 'SD Card (Removable)' : 'Internal Storage',
+              ),
               _detailRow('File path', filePath),
             ],
           ),
@@ -1082,7 +1089,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white54),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.white54,
+            ),
           ),
           const SizedBox(height: 2),
           SelectableText(
@@ -1125,8 +1136,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   isEndOfQueue
                       ? 'Stopping at end of playlist'
                       : remaining != null
-                          ? 'Pausing in ${remaining.inMinutes + 1} min'
-                          : 'Sleep timer',
+                      ? 'Pausing in ${remaining.inMinutes + 1} min'
+                      : 'Sleep timer',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1143,8 +1154,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 title: Text(
                   'End of playlist / queue',
                   style: TextStyle(
-                    fontWeight:
-                        isEndOfQueue ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: isEndOfQueue
+                        ? FontWeight.bold
+                        : FontWeight.normal,
                     color: isEndOfQueue ? AppTheme.accent : Colors.white,
                   ),
                 ),
@@ -1276,8 +1288,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               ),
               title: const Row(
                 children: [
-                  Icon(Icons.more_time_rounded,
-                      color: AppTheme.accent, size: 24),
+                  Icon(
+                    Icons.more_time_rounded,
+                    color: AppTheme.accent,
+                    size: 24,
+                  ),
                   SizedBox(width: 8),
                   Text(
                     'Custom sleep timer',
@@ -1394,9 +1409,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           final hours = parsed ~/ 60;
                           final mins = parsed % 60;
                           final formatted = hours > 0
-                              ? (mins > 0
-                                  ? '${hours}h ${mins}m'
-                                  : '${hours}h')
+                              ? (mins > 0 ? '${hours}h ${mins}m' : '${hours}h')
                               : '$mins min';
                           showCompactSnack(
                             messenger,
@@ -1478,10 +1491,7 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
     _sheetController.jumpTo(next);
   }
 
-  void _handleVerticalDragEnd(
-    DragEndDetails details,
-    BuildContext context,
-  ) {
+  void _handleVerticalDragEnd(DragEndDetails details, BuildContext context) {
     if (!_sheetController.isAttached) return;
     final velocity = details.primaryVelocity ?? 0.0;
     // Fast downward fling dismisses the sheet
@@ -1529,12 +1539,14 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
-            Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 24),
+            Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.redAccent,
+              size: 24,
+            ),
             SizedBox(width: 8),
             Text(
               'Clear queue?',
@@ -1558,9 +1570,7 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
             onPressed: () => Navigator.pop(dialogContext, false),
             child: Text(
               'Cancel',
-              style: TextStyle(
-                color: AppTheme.mist.withValues(alpha: 0.60),
-              ),
+              style: TextStyle(color: AppTheme.mist.withValues(alpha: 0.60)),
             ),
           ),
           FilledButton(
@@ -1597,11 +1607,12 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
       snapSizes: const [_initialSize, _maxSize],
       expand: false,
       builder: (sheetContext, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
+        // A Material, not a coloured Container: the queue's ListTiles draw
+        // their tap ripple on it (a Container hid it).
+        return Material(
+          color: AppTheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
           child: SafeArea(
             top: false,
             child: Consumer<MusicPlayerProvider>(
@@ -1622,7 +1633,10 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                             child: GestureDetector(
                               onTap: _toggleExpanded,
                               child: Container(
-                                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                                margin: const EdgeInsets.only(
+                                  top: 12,
+                                  bottom: 8,
+                                ),
                                 width: 38,
                                 height: 4.5,
                                 decoration: BoxDecoration(
@@ -1660,9 +1674,9 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                                               ScaffoldMessenger.of(context);
                                           final name =
                                               await promptForPlaylistName(
-                                            context,
-                                            title: 'Save queue as playlist',
-                                          );
+                                                context,
+                                                title: 'Save queue as playlist',
+                                              );
                                           if (name == null || name.isEmpty) {
                                             return;
                                           }
@@ -1678,15 +1692,17 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                                 ),
                                 IconButton(
                                   tooltip: 'Clear queue',
-                                  icon: const Icon(Icons.delete_outline_rounded),
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                  ),
                                   color: Colors.redAccent,
                                   disabledColor: Colors.white24,
                                   onPressed: queueProvider.queue.length < 2
                                       ? null
                                       : () => _confirmClearQueue(
-                                            context,
-                                            queueProvider,
-                                          ),
+                                          context,
+                                          queueProvider,
+                                        ),
                                 ),
                               ],
                             ),
@@ -1710,8 +1726,9 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                                     child: Text(
                                       'Queue is empty.',
                                       style: TextStyle(
-                                        color: AppTheme.mist
-                                            .withValues(alpha: 0.54),
+                                        color: AppTheme.mist.withValues(
+                                          alpha: 0.54,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1777,11 +1794,14 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                                             color: Colors.white70,
                                             tooltip: 'Play next',
                                             onPressed: () {
-                                              queueProvider.moveQueueItemToNext(index);
+                                              queueProvider.moveQueueItemToNext(
+                                                index,
+                                              );
                                               showCompactSnack(
                                                 ScaffoldMessenger.of(context),
                                                 'Playing next: ${item.title}',
-                                                icon: Icons.playlist_play_rounded,
+                                                icon:
+                                                    Icons.playlist_play_rounded,
                                               );
                                             },
                                           ),

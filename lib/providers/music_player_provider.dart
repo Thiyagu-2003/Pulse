@@ -59,17 +59,17 @@ class MusicPlayerProvider extends ChangeNotifier {
       _lastSavedPosition = at ?? Duration.zero;
       return at;
     };
+    ArtworkService.instance.dark = darkLauncherIcon;
     _initListeners();
     if (Platform.isAndroid) applyEqualizer(equalizerSettings);
-    final notificationEnabled = playbackNotificationEnabled;
-    _audioHandler.setNotificationEnabled(notificationEnabled);
-    if (Platform.isAndroid) {
-      PlatformBridge.setPlaybackNotificationEnabled(notificationEnabled);
-    }
-    PlatformBridge.ensureHandler();
-    PlatformBridge.onStopPlaybackRequested = () {
+    _audioHandler.setNotificationEnabled(playbackNotificationEnabled);
+    // Swiped away from recent apps. Without the notification Android won't
+    // keep playing in the background, so that stops too.
+    _audioHandler.onAppRemoved = () async {
       saveCurrentPosition();
-      _audioHandler.stop();
+      if (stopPlaybackOnClose || !playbackNotificationEnabled) {
+        await _audioHandler.stop();
+      }
     };
     _restoreLastPlayed();
   }
@@ -202,10 +202,9 @@ class MusicPlayerProvider extends ChangeNotifier {
     });
 
     // Save exact position whenever playback pauses
-    _audioHandler.playbackState
-        .map((s) => s.playing)
-        .distinct()
-        .listen((playing) {
+    _audioHandler.playbackState.map((s) => s.playing).distinct().listen((
+      playing,
+    ) {
       _syncWidget();
       if (!playing && _currentTrack != null) {
         final pos = _audioHandler.player.position;
@@ -241,11 +240,14 @@ class MusicPlayerProvider extends ChangeNotifier {
       _queueState.replaceWith([track], track);
       final resumeAt = _resumePositionFor(track) ?? Duration.zero;
       _lastSavedPosition = resumeAt;
-      if (playbackNotificationEnabled) {
-        final artPath = ArtworkService.instance.getCachedArtPath(track) ??
-            ArtworkService.instance.defaultArtPath;
-        _audioHandler.mediaItem.add(track.toAudioServiceMediaItem(cachedArtPath: artPath));
-      }
+      // Always: the handler's play() resumes this item, and has nothing to
+      // play without it (the notification setting only hides buttons).
+      final artPath =
+          ArtworkService.instance.getCachedArtPath(track) ??
+          ArtworkService.instance.defaultArtPath;
+      _audioHandler.mediaItem.add(
+        track.toAudioServiceMediaItem(cachedArtPath: artPath),
+      );
       _audioHandler.playbackState.add(
         _audioHandler.playbackState.value.copyWith(
           processingState: AudioProcessingState.ready,
@@ -272,7 +274,6 @@ class MusicPlayerProvider extends ChangeNotifier {
       playing: _audioHandler.playbackState.value.playing,
     );
   }
-
 
   /// Download YouTube/Online track locally for offline playback
   Future<String?> downloadTrack(AppMediaItem item, {String? folder}) async {
@@ -482,7 +483,8 @@ class MusicPlayerProvider extends ChangeNotifier {
     if (playlist != null && playlist.isNotEmpty) {
       final currentQueueIds = _queueState.items.map((t) => t.id).toList();
       final newPlaylistIds = playlist.map((t) => t.id).toList();
-      final isSamePlaylist = currentQueueIds.length == newPlaylistIds.length &&
+      final isSamePlaylist =
+          currentQueueIds.length == newPlaylistIds.length &&
           currentQueueIds.every((id) => newPlaylistIds.contains(id));
 
       if (!isSamePlaylist) {
@@ -648,13 +650,15 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// copies) seed from their JioSaavn match.
   Future<List<AppMediaItem>> _radioFor(AppMediaItem track) async {
     final saavn = SaavnService.instance;
-    final isSaavn = track.sourceType == MediaSourceType.saavn ||
+    final isSaavn =
+        track.sourceType == MediaSourceType.saavn ||
         track.extras?[originKey] == MediaSourceType.saavn.name;
     final seed = isSaavn
         ? track.id
-        : (await saavn.searchSongs('${track.title} ${track.artist}', count: 1))
-            .firstOrNull
-            ?.id;
+        : (await saavn.searchSongs(
+            '${track.title} ${track.artist}',
+            count: 1,
+          )).firstOrNull?.id;
     return seed == null ? const [] : saavn.radio(seed);
   }
 
@@ -677,7 +681,12 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> _extendWithRadio(AppMediaItem track) async {
     final online =
         track.sourceType.isOnline || track.extras?[originKey] != null;
-    if (!autoplay || !online || _repeat != QueueRepeat.off || _sleepTimerEndOfQueue) return;
+    if (!autoplay ||
+        !online ||
+        _repeat != QueueRepeat.off ||
+        _sleepTimerEndOfQueue) {
+      return;
+    }
     if (_queueState.orderPos != _queueState.length - 1) return;
     if (_radioSeed == track.id) return; // already fetching for this one
     _radioSeed = track.id;
@@ -805,10 +814,12 @@ class MusicPlayerProvider extends ChangeNotifier {
     final saved = _storageService.getPosition(track.id);
     if (saved == null) return null;
     return shouldResume(
-      saved: saved,
-      total: track.duration,
-      threshold: const Duration(seconds: 3),
-    ) ? saved : null;
+          saved: saved,
+          total: track.duration,
+          threshold: const Duration(seconds: 3),
+        )
+        ? saved
+        : null;
   }
 
   /// Move a queue item. [from] and [to] are positions in the final list —
@@ -1021,6 +1032,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// launcher entry while the app is open closes it on some phones.
   Future<void> setDarkLauncherIcon(bool dark) async {
     await _storageService.setDarkLauncherIcon(dark);
+    ArtworkService.instance.dark = dark; // notification placeholder art
     // Widget, notifications and recent-apps follow straight away.
     PlatformBridge.setIconStyle(dark: dark);
     notifyListeners();
@@ -1030,7 +1042,6 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   Future<void> setStopPlaybackOnClose(bool stop) async {
     await _storageService.setStopPlaybackOnClose(stop);
-    PlatformBridge.setStopOnClose(stop: stop);
     notifyListeners();
   }
 
@@ -1040,10 +1051,22 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> setPlaybackNotificationEnabled(bool enabled) async {
     await _storageService.setPlaybackNotificationEnabled(enabled);
     _audioHandler.setNotificationEnabled(enabled);
-    if (Platform.isAndroid) {
-      PlatformBridge.setPlaybackNotificationEnabled(enabled);
-    }
     notifyListeners();
+  }
+
+  /// The app went to the background. Android only plays in the background
+  /// while the media notification shows, so with it switched off music
+  /// pauses here and the leftover notification is removed.
+  Future<void> onAppBackgrounded() async {
+    saveCurrentPosition();
+    if (!Platform.isAndroid || playbackNotificationEnabled || !isPlaying) {
+      return;
+    }
+    await pause();
+    // After audio_service has left the foreground state, or the cancel is
+    // ignored.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await PlatformBridge.cancelPlaybackNotification();
   }
 
   String get localAlbumsView => _storageService.getLocalAlbumsView();
@@ -1072,14 +1095,19 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   bool get voiceControlEnabled => _storageService.isVoiceControlEnabled();
 
-  Future<bool> setVoiceControlEnabled(bool enabled, BuildContext context) async {
+  Future<bool> setVoiceControlEnabled(
+    bool enabled,
+    BuildContext context,
+  ) async {
     if (enabled) {
       final status = await Permission.microphone.request();
       if (!status.isGranted) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Microphone permission is required for hands-free voice control'),
+              content: Text(
+                'Microphone permission is required for hands-free voice control',
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -1111,10 +1139,7 @@ class MusicPlayerProvider extends ChangeNotifier {
     final count = await _storageService.importBackup(backup);
     if (Platform.isAndroid) applyEqualizer(equalizerSettings);
     PlatformBridge.setIconStyle(dark: darkLauncherIcon);
-    PlatformBridge.setStopOnClose(stop: stopPlaybackOnClose);
-    if (Platform.isAndroid) {
-      PlatformBridge.setPlaybackNotificationEnabled(playbackNotificationEnabled);
-    }
+    ArtworkService.instance.dark = darkLauncherIcon;
     _audioHandler.setNotificationEnabled(playbackNotificationEnabled);
     notifyListeners();
     return count;
@@ -1225,7 +1250,8 @@ class MusicPlayerProvider extends ChangeNotifier {
     try {
       final old = await ytService.playlistFolder(from);
       final target = Directory(
-          '${old.parent.path}/${YoutubeService.safeFolderName(to)}');
+        '${old.parent.path}/${YoutubeService.safeFolderName(to)}',
+      );
       if (target.path == old.path) return true;
       if (await target.exists()) return false;
       await old.rename(target.path);
@@ -1233,17 +1259,19 @@ class MusicPlayerProvider extends ChangeNotifier {
       for (final d in _storageService.getDownloads()) {
         final path = d.streamUrl;
         if (path == null || !path.startsWith(prefix)) continue;
-        await _storageService.saveDownload(AppMediaItem(
-          id: d.id,
-          title: d.title,
-          artist: d.artist,
-          album: d.album,
-          artUri: d.artUri,
-          streamUrl: '${target.path}/${path.substring(prefix.length)}',
-          duration: d.duration,
-          sourceType: d.sourceType,
-          extras: d.extras,
-        ));
+        await _storageService.saveDownload(
+          AppMediaItem(
+            id: d.id,
+            title: d.title,
+            artist: d.artist,
+            album: d.album,
+            artUri: d.artUri,
+            streamUrl: '${target.path}/${path.substring(prefix.length)}',
+            duration: d.duration,
+            sourceType: d.sourceType,
+            extras: d.extras,
+          ),
+        );
       }
       return true;
     } catch (e) {
@@ -1269,7 +1297,9 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Add many songs in one save; ones already there are skipped. Returns
   /// how many were added.
   Future<int> addAllToPlaylist(
-      String playlistId, List<AppMediaItem> items) async {
+    String playlistId,
+    List<AppMediaItem> items,
+  ) async {
     var playlist = _storageService.getPlaylist(playlistId);
     if (playlist == null) return 0;
     var added = 0;
@@ -1364,7 +1394,10 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   /// Dispatch a parsed [VoiceCommand] to the appropriate action.
   /// [context] is needed only for navigation (opening search screen).
-  Future<void> handleVoiceCommand(VoiceCommand cmd, BuildContext context) async {
+  Future<void> handleVoiceCommand(
+    VoiceCommand cmd,
+    BuildContext context,
+  ) async {
     switch (cmd.action) {
       case VoiceAction.play:
         if (cmd.query != null) {

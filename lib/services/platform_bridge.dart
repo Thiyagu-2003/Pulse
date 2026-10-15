@@ -16,13 +16,12 @@ class PlatformBridge {
     String? artist,
     String? artPath,
     required bool playing,
-  }) =>
-      _call('updateWidget', {
-        'title': title,
-        'artist': artist,
-        'artPath': artPath,
-        'playing': playing,
-      });
+  }) => _call('updateWidget', {
+    'title': title,
+    'artist': artist,
+    'artPath': artPath,
+    'playing': playing,
+  });
 
   /// Whether the Android launcher supports pinning widgets directly from the app (Android 8.0+).
   static Future<bool> isPinWidgetSupported() async {
@@ -40,7 +39,9 @@ class PlatformBridge {
   static Future<bool> pinWidget(String type) async {
     if (!Platform.isAndroid) return false;
     try {
-      final res = await _channel.invokeMethod<bool>('pinWidget', {'type': type});
+      final res = await _channel.invokeMethod<bool>('pinWidget', {
+        'type': type,
+      });
       return res ?? false;
     } catch (_) {
       return false;
@@ -56,27 +57,9 @@ class PlatformBridge {
   static Future<void> setIconStyle({required bool dark}) =>
       _call('setIconStyle', {'dark': dark});
 
-  /// Tells Android whether to stop audio playback when the app is swiped away
-  /// from the Recent Apps screen.
-  static Future<void> setStopOnClose({required bool stop}) =>
-      _call('setStopOnClose', {'stop': stop});
-
-  /// Tells Android whether to display playback controls in the notification panel.
-  static Future<void> setPlaybackNotificationEnabled(bool enabled) =>
-      _call('setPlaybackNotificationEnabled', {'enabled': enabled});
-
-  static VoidCallback? onStopPlaybackRequested;
-  static bool _handlerInstalled = false;
-
-  static void ensureHandler() {
-    if (_handlerInstalled) return;
-    _handlerInstalled = true;
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'stopPlayback') {
-        onStopPlaybackRequested?.call();
-      }
-    });
-  }
+  /// Removes the (paused, no longer foreground) playback notification.
+  static Future<void> cancelPlaybackNotification() =>
+      _call('cancelPlaybackNotification', {});
 
   /// The installed version ("1.0.0"), or null off Android.
   static Future<String?> appVersion() async {
@@ -112,7 +95,8 @@ class PlatformBridge {
   /// Tell Android's media index about a new file. Only matters for a custom
   /// download folder (e.g. Music/): the default folder is app-private, which
   /// Android 11+ never indexes, so other apps won't list those files.
-  static Future<void> scanFile(String path) => _call('scanFile', {'path': path});
+  static Future<void> scanFile(String path) =>
+      _call('scanFile', {'path': path});
 
   /// Keep the app process alive while downloads run, via a foreground
   /// service with its own notification — otherwise Android may kill the

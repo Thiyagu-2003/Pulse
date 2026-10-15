@@ -11,6 +11,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import android.view.KeyEvent
+import android.widget.RemoteViews
 
 /**
  * Shared utilities, art transformations, and dispatch helpers for all Pulse
@@ -27,6 +28,23 @@ object PulseWidgetHelper {
         PulseCompactWidgetProvider.refresh(context)
         PulseSquareWidgetProvider.refresh(context)
         PulseCardWidgetProvider.refresh(context)
+    }
+
+    /**
+     * Light or dark widget to match the app icon style (Settings > App icon).
+     * All four layouts share these ids; one a layout lacks is skipped.
+     */
+    fun applyStyle(context: Context, views: RemoteViews) {
+        val dark = IconStyle.isDark(context)
+        val ink = if (dark) 0xFFF2F1FA.toInt() else 0xFF1B1D28.toInt()
+        views.setInt(
+            R.id.widget_root, "setBackgroundResource",
+            if (dark) R.drawable.widget_background else R.drawable.widget_background_light,
+        )
+        views.setTextColor(R.id.widget_title, ink)
+        views.setTextColor(R.id.widget_artist, (ink and 0x00FFFFFF) or 0x99000000.toInt())
+        views.setInt(R.id.widget_prev, "setColorFilter", ink)
+        views.setInt(R.id.widget_next, "setColorFilter", ink)
     }
 
     /**

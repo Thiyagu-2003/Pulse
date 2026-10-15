@@ -17,13 +17,17 @@ class ArtworkService {
   static final ArtworkService instance = ArtworkService._();
 
   final OnAudioQuery _audioQuery = OnAudioQuery();
-  String? _defaultArtPath;
   Directory? _cacheDir;
   final Map<String, String> _memoryPathCache = {};
 
-  String? get defaultArtPath => _defaultArtPath;
+  /// The placeholder follows the app icon style (Settings > App icon); the
+  /// provider keeps this in step with the setting.
+  bool dark = false;
+  final Map<bool, String> _placeholders = {};
 
-  /// Initializes the artwork cache and extracts the bundled dark Pulse album art.
+  String? get defaultArtPath => _placeholders[dark];
+
+  /// Initializes the artwork cache and extracts both app-icon placeholders.
   Future<void> init() async {
     try {
       final supportDir = await getApplicationSupportDirectory();
@@ -32,24 +36,24 @@ class ArtworkService {
         await _cacheDir!.create(recursive: true);
       }
 
-      final defaultArtFile = File('${_cacheDir!.path}/default_album_art.jpg');
-      if (!await defaultArtFile.exists()) {
-        try {
-          final byteData = await rootBundle.load('icons/default_album_art.jpg');
-          await defaultArtFile.writeAsBytes(
-            byteData.buffer.asUint8List(
-              byteData.offsetInBytes,
-              byteData.lengthInBytes,
-            ),
-            flush: true,
-          );
-        } catch (e) {
-          debugPrint('Failed to extract default_album_art asset: $e');
+      for (final isDark in const [true, false]) {
+        final name = isDark ? 'app_icon_dark.png' : 'app_icon_light.png';
+        final file = File('${_cacheDir!.path}/$name');
+        if (!await file.exists()) {
+          try {
+            final byteData = await rootBundle.load('icons/$name');
+            await file.writeAsBytes(
+              byteData.buffer.asUint8List(
+                byteData.offsetInBytes,
+                byteData.lengthInBytes,
+              ),
+              flush: true,
+            );
+          } catch (e) {
+            debugPrint('Failed to extract $name asset: $e');
+          }
         }
-      }
-
-      if (await defaultArtFile.exists()) {
-        _defaultArtPath = defaultArtFile.path;
+        if (await file.exists()) _placeholders[isDark] = file.path;
       }
     } catch (e) {
       debugPrint('ArtworkService init failed: $e');
@@ -57,7 +61,7 @@ class ArtworkService {
   }
 
   /// Synchronously returns an already-cached file path if available,
-  /// otherwise returns [_defaultArtPath].
+  /// otherwise returns [defaultArtPath].
   String? getCachedArtPath(AppMediaItem item) {
     if (_memoryPathCache.containsKey(item.id)) {
       final path = _memoryPathCache[item.id]!;
@@ -93,18 +97,18 @@ class ArtworkService {
       }
     }
 
-    return _defaultArtPath;
+    return defaultArtPath;
   }
 
   /// Asynchronously resolves the highest quality artwork file for [item].
   /// Guaranteed to return either the track's extracted/downloaded art file,
-  /// or [_defaultArtPath].
+  /// or [defaultArtPath].
   Future<String?> resolveArtwork(AppMediaItem item) async {
     try {
       if (_cacheDir == null) {
         await init();
       }
-      if (_cacheDir == null) return _defaultArtPath;
+      if (_cacheDir == null) return defaultArtPath;
 
       // 1. Check local audio track
       if (item.sourceType == MediaSourceType.local) {
@@ -185,6 +189,6 @@ class ArtworkService {
       debugPrint('Error resolving artwork for "${item.title}": $e');
     }
 
-    return _defaultArtPath;
+    return defaultArtPath;
   }
 }

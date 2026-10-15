@@ -34,6 +34,7 @@ class PulseWidgetProvider : AppWidgetProvider() {
         private fun build(context: Context): RemoteViews {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val views = RemoteViews(context.packageName, R.layout.pulse_widget)
+            PulseWidgetHelper.applyStyle(context, views)
 
             views.setTextViewText(R.id.widget_title, prefs.getString("title", null) ?: "Pulse")
             views.setTextViewText(

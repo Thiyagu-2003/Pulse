@@ -27,6 +27,24 @@ class PodcastChannel {
       feedUrl: json['feedUrl'] ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'author': author,
+    'description': description,
+    'artworkUrl': artworkUrl,
+    'feedUrl': feedUrl,
+  };
+
+  factory PodcastChannel.fromJson(Map<String, dynamic> json) => PodcastChannel(
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? 'Unknown Podcast',
+    author: json['author'] as String? ?? '',
+    description: json['description'] as String? ?? '',
+    artworkUrl: json['artworkUrl'] as String? ?? '',
+    feedUrl: json['feedUrl'] as String? ?? '',
+  );
 }
 
 class PodcastEpisode {
