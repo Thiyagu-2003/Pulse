@@ -249,14 +249,15 @@ class CustomAudioHandler extends BaseAudioHandler
     _pauseRequested = false;
 
     _currentAppMediaItem = item;
-    // Immediately broadcast the mediaItem so the UI and notification update with track info.
-    // Using cached or default dark Pulse artwork guarantees MIUI/Android 13 will not render
-    // an unreadable cream card with low contrast.
-    final initialArt =
-        ArtworkService.instance.getCachedArtPath(item) ??
-        ArtworkService.instance.defaultArtPath;
+    // Immediately broadcast the mediaItem so the UI and notification update
+    // with track info.
+    final initialArt = ArtworkService.instance.notificationArt(item);
     mediaItem.add(item.toAudioServiceMediaItem(cachedArtPath: initialArt));
-    _resolveArtworkInBackground(item, load, initialArt);
+    // Device songs have no web image for audio_service to fetch: their
+    // embedded art is extracted to a file and swapped in.
+    if (item.sourceType == MediaSourceType.local) {
+      _resolveArtworkInBackground(item, load, initialArt);
+    }
 
     // Set state to loading immediately
     playbackState.add(
@@ -342,9 +343,7 @@ class CustomAudioHandler extends BaseAudioHandler
         extras: item.extras,
       );
       _currentAppMediaItem = updatedItem;
-      final artPath =
-          ArtworkService.instance.getCachedArtPath(updatedItem) ??
-          ArtworkService.instance.defaultArtPath;
+      final artPath = ArtworkService.instance.notificationArt(updatedItem);
       mediaItem.add(
         updatedItem.toAudioServiceMediaItem(cachedArtPath: artPath),
       );

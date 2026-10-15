@@ -5,10 +5,12 @@ import 'package:provider/provider.dart';
 
 import '../../services/podcast_service.dart';
 import '../../services/storage_service.dart';
+import '../../models/media_item_model.dart';
 import '../../models/podcast_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
+import '../widgets/track_tile.dart' show showTrackActions;
 
 class PodcastsScreen extends StatefulWidget {
   const PodcastsScreen({super.key});
@@ -176,8 +178,7 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
     ),
   );
 
-  bool _isPinned(PodcastChannel c) =>
-      _pinned.any((p) => p.id == c.id);
+  bool _isPinned(PodcastChannel c) => _pinned.any((p) => p.id == c.id);
 
   void _showPodcastMenu(PodcastChannel channel) {
     final pinned = _isPinned(channel);
@@ -207,9 +208,7 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                 Navigator.pop(sheet);
                 setState(() {
                   _pinned = pinned
-                      ? _pinned
-                            .where((p) => p.id != channel.id)
-                            .toList()
+                      ? _pinned.where((p) => p.id != channel.id).toList()
                       : [channel, ..._pinned];
                 });
                 _storage.setPodcastHome(_pinned);
@@ -365,6 +364,9 @@ class _PodcastEpisodesSheet extends StatefulWidget {
 
 class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
   List<PodcastEpisode> _episodes = [];
+  // The episodes as playable items, in list order: playing one queues the
+  // whole show, so Next/Previous move between its episodes.
+  List<AppMediaItem> _items = [];
   bool _isLoading = true;
 
   @override
@@ -380,18 +382,25 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
     if (mounted) {
       setState(() {
         _episodes = episodes;
+        _items = [
+          for (final e in episodes)
+            widget.podcastService.episodeToMediaItem(e, widget.channel),
+        ];
         _isLoading = false;
       });
     }
   }
 
+  void _playFrom(int index) {
+    context.read<MusicPlayerProvider>().playTrack(
+      _items[index],
+      playlist: _items,
+    );
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final playerProvider = Provider.of<MusicPlayerProvider>(
-      context,
-      listen: false,
-    );
-
     return Column(
       children: [
         // Header
@@ -442,6 +451,18 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                   ],
                 ),
               ),
+              if (_items.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: podcastOrange(context),
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () => _playFrom(0),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Play all'),
+                ),
+              ],
             ],
           ),
         ),
@@ -486,17 +507,26 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                           color: context.colors.mist.withValues(alpha: 0.54),
                         ),
                       ),
-                      trailing: Icon(
-                        Icons.play_circle_fill,
-                        color: podcastOrange(context),
-                        size: 36,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.play_circle_fill,
+                            color: podcastOrange(context),
+                            size: 36,
+                          ),
+                          // The song menu: play next, add to queue/playlist.
+                          IconButton(
+                            icon: const Icon(Icons.more_vert_rounded),
+                            tooltip: 'More actions',
+                            onPressed: () =>
+                                showTrackActions(context, _items[index]),
+                          ),
+                        ],
                       ),
-                      onTap: () {
-                        final mediaItem = widget.podcastService
-                            .episodeToMediaItem(episode, widget.channel);
-                        playerProvider.playTrack(mediaItem);
-                        Navigator.pop(context);
-                      },
+                      onTap: () => _playFrom(index),
+                      onLongPress: () =>
+                          showTrackActions(context, _items[index]),
                     );
                   },
                 ),

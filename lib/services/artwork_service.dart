@@ -60,8 +60,18 @@ class ArtworkService {
     }
   }
 
-  /// Synchronously returns an already-cached file path if available,
-  /// otherwise returns [defaultArtPath].
+  /// The art the notification gets at once: a cached file; else, for a web
+  /// image, nothing here — the broadcast keeps the URL and audio_service
+  /// fetches it itself (our own fetch-then-swap left the placeholder showing
+  /// on phones); else the placeholder.
+  String? notificationArt(AppMediaItem item) {
+    final cached = getCachedArtPath(item);
+    if (cached != null) return cached;
+    if (item.artUri?.startsWith('http') ?? false) return null;
+    return defaultArtPath;
+  }
+
+  /// Synchronously returns an already-cached file path, or null.
   String? getCachedArtPath(AppMediaItem item) {
     if (_memoryPathCache.containsKey(item.id)) {
       final path = _memoryPathCache[item.id]!;
@@ -97,7 +107,7 @@ class ArtworkService {
       }
     }
 
-    return defaultArtPath;
+    return null;
   }
 
   /// Asynchronously resolves the highest quality artwork file for [item].

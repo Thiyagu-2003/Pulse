@@ -566,6 +566,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    // Podcasts: jump within the episode, either side.
+                    if (isPodcast) ...[
+                      IconButton(
+                        icon: const Icon(Icons.replay_10_rounded, size: 24),
+                        color: Colors.white70,
+                        tooltip: 'Back 10 seconds',
+                        onPressed: () =>
+                            playerProvider.seekBy(const Duration(seconds: -10)),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
                     IconButton(
                       icon: const Icon(Icons.shuffle_rounded, size: 22),
                       color: playerProvider.isShuffled
@@ -618,6 +629,16 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       onPressed: () =>
                           _showSleepTimerSheet(context, playerProvider),
                     ),
+                    if (isPodcast) ...[
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(Icons.forward_30_rounded, size: 24),
+                        color: Colors.white70,
+                        tooltip: 'Forward 30 seconds',
+                        onPressed: () =>
+                            playerProvider.seekBy(const Duration(seconds: 30)),
+                      ),
+                    ],
                   ],
                 ),
 
@@ -656,21 +677,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             },
                           ),
 
-                          // Podcasts: jump within the episode instead.
-                          isPodcast
-                              ? IconButton(
-                                  iconSize: 36,
-                                  tooltip: 'Back 10 seconds',
-                                  icon: const Icon(Icons.replay_10_rounded),
-                                  onPressed: () => playerProvider.seekBy(
-                                    const Duration(seconds: -10),
-                                  ),
-                                )
-                              : IconButton(
-                                  iconSize: 36,
-                                  icon: const Icon(Icons.skip_previous_rounded),
-                                  onPressed: playerProvider.skipToPrevious,
-                                ),
+                          IconButton(
+                            iconSize: 36,
+                            tooltip: 'Previous',
+                            icon: const Icon(Icons.skip_previous_rounded),
+                            onPressed: playerProvider.skipToPrevious,
+                          ),
 
                           // Floating Play/Pause Action Button with Buffering state
                           GestureDetector(
@@ -714,20 +726,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             ),
                           ),
 
-                          isPodcast
-                              ? IconButton(
-                                  iconSize: 36,
-                                  tooltip: 'Forward 30 seconds',
-                                  icon: const Icon(Icons.forward_30_rounded),
-                                  onPressed: () => playerProvider.seekBy(
-                                    const Duration(seconds: 30),
-                                  ),
-                                )
-                              : IconButton(
-                                  iconSize: 36,
-                                  icon: const Icon(Icons.skip_next_rounded),
-                                  onPressed: playerProvider.skipToNext,
-                                ),
+                          IconButton(
+                            iconSize: 36,
+                            tooltip: 'Next',
+                            icon: const Icon(Icons.skip_next_rounded),
+                            onPressed: playerProvider.skipToNext,
+                          ),
 
                           IconButton(
                             icon: const Icon(

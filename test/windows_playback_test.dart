@@ -96,5 +96,21 @@ void main() {
     expect(loads.first, startsWith('file:'), reason: 'played from disk');
     expect(PlaybackLog.instance.attempts.first.steps,
         contains(startsWith('playing fetched file')));
+
+    // The notification gets the song's own art URL (audio_service fetches
+    // it), never the placeholder.
+    final artUrl = 'http://127.0.0.1:${server.port}/cover_500x500.jpg';
+    await handler.playAppMediaItem(AppMediaItem(
+      id: 'winTest2',
+      title: 'With art',
+      artist: 'A',
+      artUri: artUrl,
+      streamUrl: 'http://127.0.0.1:${server.port}/song2_160.mp4',
+      sourceType: MediaSourceType.saavn,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final sent = handler.mediaItem.value!;
+    expect(sent.artUri.toString(), artUrl);
+    expect(AppMediaItem.fromAudioServiceMediaItem(sent).artUri, artUrl);
   });
 }

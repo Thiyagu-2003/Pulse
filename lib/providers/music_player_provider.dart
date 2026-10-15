@@ -242,9 +242,7 @@ class MusicPlayerProvider extends ChangeNotifier {
       _lastSavedPosition = resumeAt;
       // Always: the handler's play() resumes this item, and has nothing to
       // play without it (the notification setting only hides buttons).
-      final artPath =
-          ArtworkService.instance.getCachedArtPath(track) ??
-          ArtworkService.instance.defaultArtPath;
+      final artPath = ArtworkService.instance.notificationArt(track);
       _audioHandler.mediaItem.add(
         track.toAudioServiceMediaItem(cachedArtPath: artPath),
       );
