@@ -32,11 +32,11 @@ class VoiceCommandOverlay extends StatefulWidget {
         opaque: false,
         barrierDismissible: true,
         barrierColor: Colors.black54,
-        pageBuilder: (_, __, ___) => VoiceCommandOverlay(
+        pageBuilder: (context, animation, secondaryAnimation) => VoiceCommandOverlay(
           service: service,
           onCommand: onCommand,
         ),
-        transitionsBuilder: (_, animation, __, child) =>
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 250),
         reverseTransitionDuration: const Duration(milliseconds: 200),
@@ -187,7 +187,7 @@ class _VoiceCommandOverlayState extends State<VoiceCommandOverlay>
                   children: [
                     // ── Pulsating Mic ──
                     AnimatedBuilder(
-                      listenable: _pulseAnimation,
+                      animation: _pulseAnimation,
                       builder: (context, child) {
                         return _buildMicButton(_pulseAnimation.value);
                       },
@@ -280,7 +280,7 @@ class _VoiceCommandOverlayState extends State<VoiceCommandOverlay>
           // Outer pulse rings
           if (_isListening) ...[
             AnimatedBuilder(
-              listenable: _waveController,
+              animation: _waveController,
               builder: (context, _) {
                 return CustomPaint(
                   size: const Size(120, 120),
@@ -356,21 +356,4 @@ class _WavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WavePainter old) => old.progress != progress;
-}
-
-/// [AnimatedBuilder] is missing in some Flutter versions under that name;
-/// this keeps us safe.
-class AnimatedBuilder extends AnimatedWidget {
-  final TransitionBuilder builder;
-
-  const AnimatedBuilder({
-    super.key,
-    required super.listenable,
-    required this.builder,
-  });
-
-  Animation<double> get animation => listenable as Animation<double>;
-
-  @override
-  Widget build(BuildContext context) => builder(context, null);
 }

@@ -1,9 +1,11 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/playing_indicator.dart';
 import '../widgets/track_tile.dart';
 
 class PlaylistDetailScreen extends StatelessWidget {
@@ -74,7 +76,7 @@ class PlaylistDetailScreen extends StatelessWidget {
       body: playlist.items.isEmpty
           ? Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: const EdgeInsets.all(32),
                 child: Text(
                   'Nothing here yet.\nLong-press any track to add it.',
                   textAlign: TextAlign.center,
@@ -94,11 +96,53 @@ class PlaylistDetailScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '${playlist.length} tracks',
-                        style: TextStyle(
-                          color: context.colors.mist.withValues(alpha: 0.60),
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            '${playlist.length} tracks',
+                            style: TextStyle(
+                              color: context.colors.mist.withValues(alpha: 0.60),
+                            ),
+                          ),
+                          if (provider.isCollectionPlaying(playlist.items)) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: AppTheme.primary.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  StreamBuilder<PlaybackState>(
+                                    stream: provider.playbackState,
+                                    builder: (_, snap) => PlayingIndicator(
+                                      isPlaying: snap.data?.playing ?? false,
+                                      size: 10,
+                                      color: AppTheme.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'Playing',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       Wrap(
                         spacing: 8,
@@ -141,6 +185,7 @@ class PlaylistDetailScreen extends StatelessWidget {
                             onPressed: () => provider.playTrack(
                               playlist.items.first,
                               playlist: playlist.items,
+                              sourceTitle: 'Playlist: ${playlist.name}',
                             ),
                           ),
                         ],

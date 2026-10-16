@@ -955,16 +955,21 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     Icons.folder_rounded,
                     'Show in folder',
                     () {
-                      final filePath = (track.extras?['filePath'] as String?) ??
-                          track.streamUrl ??
-                          (track.id.startsWith('/') ? track.id : '');
-                      final folderPath = File(filePath).parent.path;
+                      final folderPath = folderPathOf(track);
+                      if (folderPath == null || folderPath.isEmpty) {
+                        showCompactSnack(
+                          ScaffoldMessenger.of(rootContext),
+                          'Could not determine folder for this track',
+                          icon: Icons.info_outline_rounded,
+                        );
+                        return;
+                      }
                       final all = LocalMusicService.instance.cachedSongs;
                       final folderSongs = all.where((s) {
-                        final p = (s.extras?['filePath'] as String?) ??
-                            s.streamUrl ??
-                            (s.id.startsWith('/') ? s.id : '');
-                        return File(p).parent.path == folderPath;
+                        final p = folderPathOf(s);
+                        return p != null &&
+                            p.replaceAll('\\', '/').toLowerCase() ==
+                                folderPath.replaceAll('\\', '/').toLowerCase();
                       }).toList();
                       Navigator.push(
                         rootContext,

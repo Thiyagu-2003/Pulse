@@ -321,16 +321,25 @@ class SaavnService {
   /// with the same key three times is single DES.
   @visibleForTesting
   static String decryptMediaUrl(String encrypted) {
-    final key = Uint8List.fromList(utf8.encode('38346591' * 3));
-    final engine = DESedeEngine()..init(false, DESedeParameters(key));
-    final data = base64.decode(encrypted.trim());
-    final out = Uint8List(data.length);
-    for (var i = 0; i + 8 <= data.length; i += 8) {
-      engine.processBlock(data, i, out, i);
+    try {
+      final trimmed = encrypted.trim();
+      if (trimmed.isEmpty) return '';
+      final key = Uint8List.fromList(utf8.encode('38346591' * 3));
+      final engine = DESedeEngine()..init(false, DESedeParameters(key));
+      final data = base64.decode(trimmed);
+      if (data.isEmpty || data.length % 8 != 0) return '';
+      final out = Uint8List(data.length);
+      for (var i = 0; i + 8 <= data.length; i += 8) {
+        engine.processBlock(data, i, out, i);
+      }
+      final pad = out.isEmpty ? 0 : out.last;
+      final end = pad >= 1 && pad <= 8 ? out.length - pad : out.length;
+      if (end < 0 || end > out.length) return '';
+      return utf8.decode(out.sublist(0, end));
+    } catch (e) {
+      debugPrint('decryptMediaUrl failed: $e');
+      return '';
     }
-    final pad = out.isEmpty ? 0 : out.last;
-    final end = pad >= 1 && pad <= 8 ? out.length - pad : out.length;
-    return utf8.decode(out.sublist(0, end));
   }
 
   /// The same song at the bitrate for [quality] (96 / 160 / 320 kbps).

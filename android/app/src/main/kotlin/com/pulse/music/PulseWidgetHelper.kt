@@ -50,7 +50,9 @@ object PulseWidgetHelper {
      * Crops [source] to a centered square and rounds its corners.
      */
     fun roundedSquare(source: Bitmap, cornerRatio: Float = 0.16f): Bitmap {
+        if (source.width <= 0 || source.height <= 0) return source
         val size = minOf(source.width, source.height)
+        if (size <= 0) return source
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)

@@ -34,7 +34,7 @@ class QueueState {
     _items
       ..clear()
       ..addAll(tracks);
-    _currentIndex = _items.indexWhere((t) => t.id == track.id);
+    _currentIndex = _items.indexWhere((t) => t.isSameAs(track));
     if (_currentIndex == -1) {
       _items.insert(0, track);
       _currentIndex = 0;
@@ -45,7 +45,7 @@ class QueueState {
   /// Make [track] current. Appends it if it isn't queued yet — without
   /// reshuffling what's already lined up.
   void selectOrAppend(AppMediaItem track) {
-    final existing = _items.indexWhere((t) => t.id == track.id);
+    final existing = _items.indexWhere((t) => t.isSameAs(track));
     if (existing == -1) {
       _items.add(track);
       _currentIndex = _items.length - 1;

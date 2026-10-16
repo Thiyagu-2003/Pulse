@@ -1,3 +1,4 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -12,6 +13,7 @@ import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/local_artwork.dart';
+import '../widgets/playing_indicator.dart';
 import '../widgets/selectable_track_list.dart';
 import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
@@ -1374,6 +1376,9 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
   }
 
   Widget _buildFolderCard(BuildContext context, MediaFolder folder) {
+    final playerProvider = context.watch<MusicPlayerProvider>();
+    final isPlaying = playerProvider.isCollectionPlaying(folder.items);
+
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () {
@@ -1390,10 +1395,33 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
           children: [
             AspectRatio(
               aspectRatio: 1,
-              child: CollageArtwork(
-                items: folder.items,
-                borderRadius: BorderRadius.circular(10),
-                defaultIcon: Icons.folder_rounded,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CollageArtwork(
+                    items: folder.items,
+                    borderRadius: BorderRadius.circular(10),
+                    defaultIcon: Icons.folder_rounded,
+                  ),
+                  if (isPlaying)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.primary, width: 2),
+                      ),
+                      child: Center(
+                        child: StreamBuilder<PlaybackState>(
+                          stream: playerProvider.playbackState,
+                          builder: (_, snap) => PlayingIndicator(
+                            isPlaying: snap.data?.playing ?? false,
+                            size: 22,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 6),
@@ -1401,7 +1429,11 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
               folder.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: isPlaying ? AppTheme.primary : null,
+              ),
             ),
             Text(
               '${folder.length} tracks',
@@ -1518,14 +1550,40 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
         final folder = folders[index];
         final isSdCard = folder.path.startsWith('/storage/') &&
             !folder.path.startsWith('/storage/emulated');
+        final isPlaying = context.watch<MusicPlayerProvider>().isCollectionPlaying(folder.items);
 
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: CollageArtwork(
-            items: folder.items,
-            size: 48,
-            borderRadius: BorderRadius.circular(10),
-            defaultIcon: folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
+          leading: Stack(
+            alignment: Alignment.center,
+            children: [
+              CollageArtwork(
+                items: folder.items,
+                size: 48,
+                borderRadius: BorderRadius.circular(10),
+                defaultIcon: folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
+              ),
+              if (isPlaying)
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.primary, width: 1.5),
+                  ),
+                  child: Center(
+                    child: StreamBuilder<PlaybackState>(
+                      stream: context.read<MusicPlayerProvider>().playbackState,
+                      builder: (_, snap) => PlayingIndicator(
+                        isPlaying: snap.data?.playing ?? false,
+                        size: 18,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           title: Row(
             children: [
@@ -1607,6 +1665,7 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
         final folder = folders[index];
         final isSdCard = folder.path.startsWith('/storage/') &&
             !folder.path.startsWith('/storage/emulated');
+        final isPlaying = context.watch<MusicPlayerProvider>().isCollectionPlaying(folder.items);
 
         return InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -1623,10 +1682,33 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
               Expanded(
                 child: AspectRatio(
                   aspectRatio: 1,
-                  child: CollageArtwork(
-                    items: folder.items,
-                    borderRadius: BorderRadius.circular(12),
-                    defaultIcon: folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CollageArtwork(
+                        items: folder.items,
+                        borderRadius: BorderRadius.circular(12),
+                        defaultIcon: folder.isRecordings ? Icons.mic_rounded : Icons.folder_rounded,
+                      ),
+                      if (isPlaying)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.primary, width: 2),
+                          ),
+                          child: Center(
+                            child: StreamBuilder<PlaybackState>(
+                              stream: context.read<MusicPlayerProvider>().playbackState,
+                              builder: (_, snap) => PlayingIndicator(
+                                isPlaying: snap.data?.playing ?? false,
+                                size: 24,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),

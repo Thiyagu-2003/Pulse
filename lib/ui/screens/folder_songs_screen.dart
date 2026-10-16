@@ -1,3 +1,4 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/media_folder.dart';
@@ -5,6 +6,7 @@ import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/playing_indicator.dart';
 import '../widgets/selectable_track_list.dart';
 import '../widgets/track_tile.dart';
 
@@ -16,6 +18,9 @@ class FolderSongsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final playerProvider = context.watch<MusicPlayerProvider>();
+    final isFolderPlaying = playerProvider.isCollectionPlaying(folder.items);
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -27,12 +32,51 @@ class FolderSongsScreen extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
             ),
-            Text(
-              '${folder.length} ${folder.length == 1 ? 'track' : 'tracks'}',
-              style: TextStyle(
-                fontSize: 12,
-                color: context.colors.mist.withValues(alpha: 0.54),
-              ),
+            Row(
+              children: [
+                Text(
+                  '${folder.length} ${folder.length == 1 ? 'track' : 'tracks'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.colors.mist.withValues(alpha: 0.54),
+                  ),
+                ),
+                if (isFolderPlaying) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        StreamBuilder<PlaybackState>(
+                          stream: playerProvider.playbackState,
+                          builder: (_, snap) => PlayingIndicator(
+                            isPlaying: snap.data?.playing ?? false,
+                            size: 10,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Playing',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -42,7 +86,7 @@ class FolderSongsScreen extends StatelessWidget {
             tooltip: 'Shuffle',
             onPressed: folder.items.isEmpty
                 ? null
-                : () => context.read<MusicPlayerProvider>().shuffleAll(
+                : () => playerProvider.shuffleAll(
                     folder.items,
                   ),
           ),
@@ -51,9 +95,10 @@ class FolderSongsScreen extends StatelessWidget {
             tooltip: 'Play all',
             onPressed: folder.items.isEmpty
                 ? null
-                : () => context.read<MusicPlayerProvider>().playTrack(
+                : () => playerProvider.playTrack(
                     folder.items.first,
                     playlist: folder.items,
+                    sourceTitle: 'Folder: ${folder.name}',
                   ),
           ),
           PopupMenuButton<String>(

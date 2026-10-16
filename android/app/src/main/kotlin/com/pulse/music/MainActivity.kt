@@ -30,6 +30,8 @@ import java.nio.ByteBuffer
 
 class MainActivity : AudioServiceActivity() {
 
+    private val bgExecutor = java.util.concurrent.Executors.newCachedThreadPool()
+
     companion object {
         /**
          * Set once the app's engine is up. Static, so it resets when the
@@ -50,6 +52,11 @@ class MainActivity : AudioServiceActivity() {
     override fun onResume() {
         super.onResume()
         PulseTaskService.start(applicationContext)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        bgExecutor.shutdown()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -175,7 +182,13 @@ class MainActivity : AudioServiceActivity() {
                         }
                     }
                     "appVersion" -> {
-                        result.success(packageManager.getPackageInfo(packageName, 0).versionName)
+                        val versionName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0)).versionName
+                        } else {
+                            @Suppress("DEPRECATION")
+                            packageManager.getPackageInfo(packageName, 0).versionName
+                        }
+                        result.success(versionName)
                     }
                     "openUrl" -> {
                         val url = call.argument<String>("url")
@@ -223,7 +236,7 @@ class MainActivity : AudioServiceActivity() {
                             result.success(false)
                             return@setMethodCallHandler
                         }
-                        Thread {
+                        bgExecutor.execute {
                             var ok = false
                             try {
                                 val destFile = File(destPath)
@@ -247,10 +260,10 @@ class MainActivity : AudioServiceActivity() {
                                 ok = false
                             }
                             runOnUiThread { result.success(ok) }
-                        }.start()
+                        }
                     }
                     "setRingtone" -> {
-                        Thread {
+                        bgExecutor.execute {
                             var tempSourceFile: File? = null
                             var tempTrimmed: File? = null
                             try {
@@ -281,7 +294,7 @@ class MainActivity : AudioServiceActivity() {
 
                                 if (!sourceFile.exists()) {
                                     runOnUiThread { result.success(false) }
-                                    return@Thread
+                                    return@execute
                                 }
 
                                 val sourceExt = sourceFile.extension.lowercase().ifEmpty { "m4a" }
@@ -389,7 +402,7 @@ class MainActivity : AudioServiceActivity() {
                                     if (tempSourceFile != null && tempSourceFile.exists()) tempSourceFile.delete()
                                 } catch (_: Exception) {}
                             }
-                        }.start()
+                        }
                     }
                     "hasWriteSettings" -> {
                         result.success(Settings.System.canWrite(app))

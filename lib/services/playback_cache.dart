@@ -52,7 +52,13 @@ class PlaybackCache {
       final path = findIn(await dir(), videoId);
       // A replay counts as use: eviction goes by least recently played,
       // not by when the song was first saved.
-      if (path != null) File(path).setLastModifiedSync(DateTime.now());
+      if (path != null) {
+        try {
+          File(path).setLastModifiedSync(DateTime.now());
+        } catch (e) {
+          debugPrint('PlaybackCache: could not update timestamp for $path: $e');
+        }
+      }
       return path;
     } catch (_) {
       return null; // no app storage (tests)

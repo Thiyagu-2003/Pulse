@@ -269,15 +269,3 @@ class _VoiceFabState extends State<_VoiceFab>
   }
 }
 
-/// Lightweight AnimatedWidget wrapper used in this file.
-class AnimatedBuilder extends AnimatedWidget {
-  final TransitionBuilder builder;
-  const AnimatedBuilder({
-    super.key,
-    required Animation<double> animation,
-    required this.builder,
-  }) : super(listenable: animation);
-
-  @override
-  Widget build(BuildContext context) => builder(context, null);
-}

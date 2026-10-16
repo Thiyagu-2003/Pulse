@@ -31,6 +31,7 @@ class MusicPlayerProvider extends ChangeNotifier {
   QueueRepeat _repeat = QueueRepeat.off;
 
   AppMediaItem? _currentTrack;
+  String? _currentSourceTitle;
   Lyrics? _currentLyrics;
   String? _lyricsKey;
   bool _isLoadingLyrics = false;
@@ -78,6 +79,17 @@ class MusicPlayerProvider extends ChangeNotifier {
   List<AppMediaItem> get queue => _queueState.items;
   int get currentIndex => _queueState.currentIndex;
   AppMediaItem? get currentTrack => _currentTrack;
+  String? get currentSourceTitle => _currentSourceTitle;
+
+  bool isTrackPlaying(AppMediaItem? track) {
+    if (track == null || _currentTrack == null) return false;
+    return track.isSameAs(_currentTrack);
+  }
+
+  bool isCollectionPlaying(Iterable<AppMediaItem> tracks) {
+    if (_currentTrack == null) return false;
+    return tracks.any((t) => t.isSameAs(_currentTrack));
+  }
 
   /// Null once loaded means no lyrics were found.
   Lyrics? get currentLyrics => _currentLyrics;
@@ -475,15 +487,17 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> playTrack(
     AppMediaItem requested, {
     List<AppMediaItem>? playlist,
+    String? sourceTitle,
   }) async {
-    final isSameTrack = _currentTrack?.id == requested.id;
+    if (sourceTitle != null) {
+      _currentSourceTitle = sourceTitle;
+    }
+    final isSameTrack = requested.isSameAs(_currentTrack);
     final isPlaying = _audioHandler.playbackState.value.playing;
 
     if (playlist != null && playlist.isNotEmpty) {
-      final currentQueueIds = _queueState.items.map((t) => t.id).toList();
-      final newPlaylistIds = playlist.map((t) => t.id).toList();
-      final isSamePlaylist = currentQueueIds.length == newPlaylistIds.length &&
-          currentQueueIds.every((id) => newPlaylistIds.contains(id));
+      final isSamePlaylist = _queueState.length == playlist.length &&
+          _queueState.items.every((t) => playlist.any((p) => p.isSameAs(t)));
 
       if (!isSamePlaylist) {
         _queueState.replaceWith(playlist, requested);

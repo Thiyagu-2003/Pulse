@@ -1,3 +1,4 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/media_item_model.dart';
@@ -7,6 +8,7 @@ import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/download_folder.dart';
+import '../widgets/playing_indicator.dart';
 import '../widgets/selectable_track_list.dart';
 import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
@@ -340,15 +342,32 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
       itemCount: playlists.length,
       itemBuilder: (context, index) {
         final playlist = playlists[index];
+        final isPlaying = provider.isCollectionPlaying(playlist.items);
         return ListTile(
           leading: Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.2),
+              color: isPlaying
+                  ? AppTheme.primary.withValues(alpha: 0.30)
+                  : AppTheme.primary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10),
+              border: isPlaying
+                  ? Border.all(color: AppTheme.primary, width: 1.5)
+                  : null,
             ),
-            child: const Icon(Icons.queue_music, color: AppTheme.primary),
+            child: isPlaying
+                ? StreamBuilder<PlaybackState>(
+                    stream: provider.playbackState,
+                    builder: (_, snap) => Center(
+                      child: PlayingIndicator(
+                        isPlaying: snap.data?.playing ?? false,
+                        size: 20,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  )
+                : const Icon(Icons.queue_music, color: AppTheme.primary),
           ),
           title: Text(
             playlist.name,

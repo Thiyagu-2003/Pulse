@@ -228,6 +228,16 @@ class SettingsScreen extends StatelessWidget {
               value: provider.voiceControlEnabled,
               onChanged: (on) => provider.setVoiceControlEnabled(on, context),
             ),
+          if (Platform.isAndroid)
+            ListTile(
+              leading: const Icon(Icons.widgets_rounded),
+              title: const Text('Home screen widgets'),
+              subtitle: const Text(
+                'Add player controls and artwork to your phone home screen',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _showWidgetsSheet(context),
+            ),
           // Releases carry Android APKs; the check can't read a desktop
           // build's version, and would always say "latest".
           if (Platform.isAndroid)

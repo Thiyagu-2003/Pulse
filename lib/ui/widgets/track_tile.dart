@@ -38,7 +38,7 @@ class TrackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final playerProvider = Provider.of<MusicPlayerProvider>(context);
-    final isPlayingCurrent = playerProvider.currentTrack?.id == item.id;
+    final isPlayingCurrent = item.isSameAs(playerProvider.currentTrack);
     final isFav = playerProvider.isFavorite(item.id);
 
     // Animated so selection glides in when the track changes under you —

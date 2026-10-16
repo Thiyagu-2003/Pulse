@@ -155,4 +155,61 @@ class AppMediaItem {
     lyrics: json['lyrics'] as String?,
     extras: json['extras'] as Map<String, dynamic>?,
   );
+
+  /// Whether [this] and [other] refer to the exact same track.
+  ///
+  /// For online tracks, comparing IDs suffices.
+  /// For local tracks, an ID may be a numeric MediaStore ID (e.g. "124") or a
+  /// hash generated from the filesystem path (e.g. from folder scans). Comparing
+  /// normalized file paths and numeric song IDs guarantees equality regardless
+  /// of where or how the track was queried.
+  bool isSameAs(AppMediaItem? other) {
+    if (other == null) return false;
+    if (identical(this, other)) return true;
+    if (id == other.id) return true;
+
+    final thisPath = (extras?['filePath'] as String?) ??
+        (streamUrl != null &&
+                !streamUrl!.startsWith('http') &&
+                !streamUrl!.startsWith('content://')
+            ? streamUrl
+            : null);
+    final otherPath = (other.extras?['filePath'] as String?) ??
+        (other.streamUrl != null &&
+                !other.streamUrl!.startsWith('http') &&
+                !other.streamUrl!.startsWith('content://')
+            ? other.streamUrl
+            : null);
+
+    if (thisPath != null &&
+        otherPath != null &&
+        thisPath.isNotEmpty &&
+        otherPath.isNotEmpty) {
+      final p1 = thisPath.replaceAll('\\', '/').toLowerCase();
+      final p2 = otherPath.replaceAll('\\', '/').toLowerCase();
+      if (p1 == p2) return true;
+    }
+
+    final thisSongId = (extras?['songId'] as int?) ?? int.tryParse(id);
+    final otherSongId =
+        (other.extras?['songId'] as int?) ?? int.tryParse(other.id);
+    if (thisSongId != null &&
+        otherSongId != null &&
+        thisSongId > 0 &&
+        thisSongId == otherSongId) {
+      return true;
+    }
+
+    return false;
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is AppMediaItem && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }
+

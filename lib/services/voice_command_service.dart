@@ -104,11 +104,11 @@ class VoiceCommandService {
     try {
       await _speech.listen(
         onResult: _onResult,
-        listenFor: const Duration(seconds: 10),
-        pauseFor: const Duration(seconds: 3),
-        cancelOnError: true,
-        partialResults: true,
-        listenMode: ListenMode.dictation,
+        listenOptions: SpeechListenOptions(
+          listenMode: ListenMode.dictation,
+          cancelOnError: true,
+          partialResults: true,
+        ),
       );
       _isListening = true;
       _listeningController.add(true);
