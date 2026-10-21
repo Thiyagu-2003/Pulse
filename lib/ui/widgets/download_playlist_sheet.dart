@@ -24,7 +24,7 @@ Future<(String, List<AppMediaItem>)?> showDownloadPlaylistSheet(
     ),
     builder: (_) => _DownloadPlaylistSheet(
       name: name,
-      items: items.where((t) => t.sourceType.isOnline).toList(),
+      items: items.where((t) => t.sourceType.isDownloadable).toList(),
       nameEditable: nameEditable,
     ),
   );

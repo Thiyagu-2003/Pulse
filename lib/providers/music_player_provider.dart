@@ -375,11 +375,12 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   List<AppMediaItem> getDownloads() => _storageService.getDownloads();
 
-  /// Online tracks in [items] not yet downloaded (or downloading).
+  /// Online songs and podcast episodes in [items] not yet downloaded (or
+  /// downloading).
   List<AppMediaItem> notDownloaded(List<AppMediaItem> items) => items
       .where(
         (t) =>
-            t.sourceType.isOnline &&
+            t.sourceType.isDownloadable &&
             !isDownloaded(t.id) &&
             !isDownloading(t.id),
       )
@@ -604,7 +605,7 @@ class MusicPlayerProvider extends ChangeNotifier {
 
     // Each podcast show keeps its own speed; songs keep the song speed.
     _audioHandler.setSpeed(
-      track.sourceType == MediaSourceType.podcast
+      isPodcast(track)
           ? _storageService.getPodcastSpeed(track.album) ?? 1.0
           : _songSpeed,
     );
@@ -728,8 +729,12 @@ class MusicPlayerProvider extends ChangeNotifier {
   }
 
   Future<void> _extendWithRadio(AppMediaItem track) async {
+    // A downloaded song too, but not a downloaded podcast episode.
+    final origin = track.extras?[originKey];
     final online =
-        track.sourceType.isOnline || track.extras?[originKey] != null;
+        track.sourceType.isOnline ||
+        origin == MediaSourceType.saavn.name ||
+        origin == MediaSourceType.youtube.name;
     if (!autoplay ||
         !online ||
         _repeat != QueueRepeat.off ||
@@ -767,8 +772,8 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// once); for songs, until the app closes.
   Future<void> setSpeed(double speed) async {
     final track = _currentTrack;
-    if (track?.sourceType == MediaSourceType.podcast) {
-      await _storageService.setPodcastSpeed(track!.album, speed);
+    if (track != null && isPodcast(track)) {
+      await _storageService.setPodcastSpeed(track.album, speed);
     } else {
       _songSpeed = speed;
     }
@@ -819,23 +824,23 @@ class MusicPlayerProvider extends ChangeNotifier {
     // Downloads record their origin. Older ones don't: those were all
     // YouTube, recognisable by the 11-character video id.
     final origin = item.extras?[originKey] as String? ?? _originFromId(item.id);
-    final source = origin == MediaSourceType.saavn.name
-        ? MediaSourceType.saavn
-        : origin == MediaSourceType.youtube.name
-        ? MediaSourceType.youtube
-        : null;
+    final source = MediaSourceType.values
+        .where((s) => s.isDownloadable && s.name == origin)
+        .firstOrNull;
     if (source == null) return item;
     return AppMediaItem(
       id: item.id,
       title: item.title,
       artist: item.artist,
-      album: item.album == 'Unknown Album' ? onlineAlbumLabel : item.album,
+      album: item.album == 'Unknown Album' && source.isOnline
+          ? onlineAlbumLabel
+          : item.album,
       artUri: item.artUri,
-      // JioSaavn links don't expire, so the one recorded still plays; YouTube
-      // ones do, and are looked up again.
-      streamUrl: source == MediaSourceType.saavn
-          ? (item.extras?[originUrlKey] as String?)
-          : null,
+      // JioSaavn and podcast links don't expire, so the one recorded still
+      // plays; YouTube ones do, and are looked up again.
+      streamUrl: source == MediaSourceType.youtube
+          ? null
+          : (item.extras?[originUrlKey] as String?),
       duration: item.duration,
       sourceType: source,
     );
@@ -857,6 +862,12 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Keys in a download record's extras naming its online source.
   static const originKey = 'origin';
   static const originUrlKey = 'originUrl';
+
+  /// A podcast episode, streamed or its downloaded copy (which plays as a
+  /// device file but keeps the show's speed and the podcast controls).
+  static bool isPodcast(AppMediaItem track) =>
+      track.sourceType == MediaSourceType.podcast ||
+      track.extras?[originKey] == MediaSourceType.podcast.name;
 
   /// Drops back into tracks where you left off if there is a saved playback position.
   Duration? _resumePositionFor(AppMediaItem track) {

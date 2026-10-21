@@ -31,9 +31,12 @@ extension MediaSourceLabel on MediaSourceType {
 }
 
 extension MediaSourceOnline on MediaSourceType {
-  /// Streamed from the internet and downloadable (YouTube or JioSaavn).
+  /// Online songs (YouTube or JioSaavn).
   bool get isOnline =>
       this == MediaSourceType.youtube || this == MediaSourceType.saavn;
+
+  /// Can be saved to the device: online songs and podcast episodes.
+  bool get isDownloadable => isOnline || this == MediaSourceType.podcast;
 }
 
 /// The album shown for online tracks that have no real album of their own.

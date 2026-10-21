@@ -146,9 +146,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     // Read from the player: it outlives this screen, so a copy in widget
     // state showed "1.0x" on reopen while audio kept playing at 1.5x.
     final playbackSpeed = playerProvider.speed;
-    final isPodcast =
-        playerProvider.currentTrack?.sourceType == MediaSourceType.podcast;
     final track = playerProvider.currentTrack;
+    // A downloaded episode too (it plays as a device file).
+    final isPodcast = track != null && MusicPlayerProvider.isPodcast(track);
 
     if (track == null) {
       return Scaffold(
@@ -224,7 +224,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         child: Column(
                           children: [
                             Text(
-                              track.sourceType.label.toUpperCase(),
+                              (isPodcast
+                                      ? MediaSourceType.podcast.label
+                                      : track.sourceType.label)
+                                  .toUpperCase(),
                               style: const TextStyle(
                                 fontSize: 10,
                                 letterSpacing: 2,
@@ -469,7 +472,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       ),
                       // A track played from its download is a local copy of
                       // an online one; show its state so it can be removed.
-                      if (track.sourceType.isOnline ||
+                      if (track.sourceType.isDownloadable ||
                           playerProvider.isDownloaded(track.id))
                         DownloadButton(item: track, size: 26),
                       IconButton(
@@ -785,7 +788,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final albumId = track.extras?[SaavnService.albumIdKey] as String?;
     final link = shareLinkFor(track);
     final downloaded = provider.isDownloaded(track.id);
-    final canDownload = track.sourceType.isOnline && !downloaded;
+    final canDownload = track.sourceType.isDownloadable && !downloaded;
 
     showModalBottomSheet(
       context: context,

@@ -35,7 +35,7 @@ class YoutubeService {
   /// Stands in for the network extraction in tests.
   @visibleForTesting
   Future<String?> Function(String videoId, {required bool verify})?
-      debugExtractOverride;
+  debugExtractOverride;
 
   /// Search for music tracks.
   ///
@@ -118,8 +118,9 @@ class YoutubeService {
   Future<String?> _spellingFix(String query) async {
     List<String> suggestions = const [];
     try {
-      suggestions = await SearchExtractor.getSearchSuggestions(query)
-          .timeout(const Duration(seconds: 3));
+      suggestions = await SearchExtractor.getSearchSuggestions(
+        query,
+      ).timeout(const Duration(seconds: 3));
     } catch (_) {}
     if (suggestions.isEmpty) {
       try {
@@ -133,11 +134,14 @@ class YoutubeService {
     return top.toLowerCase() == query.toLowerCase() ? null : top;
   }
 
-  Future<List<AppMediaItem>> _youtubeSearch(String text,
-      {required bool prefetch}) async {
+  Future<List<AppMediaItem>> _youtubeSearch(
+    String text, {
+    required bool prefetch,
+  }) async {
     final viaNewPipe = await _searchWithNewPipe(text);
-    final results =
-        viaNewPipe.isNotEmpty ? viaNewPipe : await _searchWithExplode(text);
+    final results = viaNewPipe.isNotEmpty
+        ? viaNewPipe
+        : await _searchWithExplode(text);
     if (prefetch) prefetchStreams(results.take(8).map((e) => e.id).toList());
     return results;
   }
@@ -207,25 +211,27 @@ class YoutubeService {
       if (identical(_searchCache[query], search)) _searchCache.remove(query);
     }
 
-    search = _limited(() async {
-      final run = debugSearchOverride ??
-          (String q) => searchMusic(q, prefetch: false);
-      var results = await run(query);
-      if (results.isEmpty) {
-        // Usually YouTube briefly refusing a burst; one calm retry.
-        await Future<void>.delayed(searchRetryDelay);
-        results = await run(query);
-      }
-      if (results.isEmpty) {
-        forget();
-      } else {
-        _storeSearch(query, results);
-      }
-      return results;
-    }).catchError((Object e, StackTrace st) {
-      forget();
-      Error.throwWithStackTrace(e, st);
-    });
+    search =
+        _limited(() async {
+          final run =
+              debugSearchOverride ??
+              (String q) => searchMusic(q, prefetch: false);
+          var results = await run(query);
+          if (results.isEmpty) {
+            // Usually YouTube briefly refusing a burst; one calm retry.
+            await Future<void>.delayed(searchRetryDelay);
+            results = await run(query);
+          }
+          if (results.isEmpty) {
+            forget();
+          } else {
+            _storeSearch(query, results);
+          }
+          return results;
+        }).catchError((Object e, StackTrace st) {
+          forget();
+          Error.throwWithStackTrace(e, st);
+        });
     return _searchCache[query] = search;
   }
 
@@ -276,7 +282,9 @@ class YoutubeService {
   static const _searchRefreshAfter = Duration(hours: 2);
 
   (List<AppMediaItem>, DateTime)? _storedSearch(String query) {
-    final raw = StorageService.cacheBox(StorageService.searchCacheBox)?.get(query);
+    final raw = StorageService.cacheBox(
+      StorageService.searchCacheBox,
+    )?.get(query);
     if (raw == null) return null;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
@@ -307,8 +315,8 @@ class YoutubeService {
   void _refreshStoredSearch(String query) {
     if (!_refreshing.add(query)) return;
     _limited(() async {
-      final run = debugSearchOverride ??
-          (String q) => searchMusic(q, prefetch: false);
+      final run =
+          debugSearchOverride ?? (String q) => searchMusic(q, prefetch: false);
       final results = await run(query);
       if (results.isNotEmpty) {
         _storeSearch(query, results);
@@ -351,8 +359,10 @@ class YoutubeService {
     if (raw == null) return null;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      final entry = _CachedStream(json['url'] as String,
-          DateTime.fromMillisecondsSinceEpoch(json['exp'] as int));
+      final entry = _CachedStream(
+        json['url'] as String,
+        DateTime.fromMillisecondsSinceEpoch(json['exp'] as int),
+      );
       if (entry.isExpired) {
         box!.delete(key);
         return null;
@@ -372,16 +382,19 @@ class YoutubeService {
     pruneStreamCache();
     final searches = StorageService.cacheBox(StorageService.searchCacheBox);
     if (searches == null) return;
-    final cutoff =
-        DateTime.now().subtract(_searchKeepFor).millisecondsSinceEpoch;
-    searches.deleteAll(searches.keys.where((k) {
-      try {
-        final json = jsonDecode(searches.get(k)!) as Map<String, dynamic>;
-        return (json['at'] as int) < cutoff;
-      } catch (_) {
-        return true;
-      }
-    }).toList());
+    final cutoff = DateTime.now()
+        .subtract(_searchKeepFor)
+        .millisecondsSinceEpoch;
+    searches.deleteAll(
+      searches.keys.where((k) {
+        try {
+          final json = jsonDecode(searches.get(k)!) as Map<String, dynamic>;
+          return (json['at'] as int) < cutoff;
+        } catch (_) {
+          return true;
+        }
+      }).toList(),
+    );
   }
 
   /// Drop saved links that have expired.
@@ -419,8 +432,9 @@ class YoutubeService {
       debugPrint('JioSaavn suggestions failed: $e');
     }
     try {
-      final viaNewPipe = await SearchExtractor.getSearchSuggestions(q)
-          .timeout(const Duration(seconds: 4));
+      final viaNewPipe = await SearchExtractor.getSearchSuggestions(
+        q,
+      ).timeout(const Duration(seconds: 4));
       if (viaNewPipe.isNotEmpty) return viaNewPipe.take(8).toList();
     } catch (e) {
       debugPrint('NewPipe suggestions failed: $e');
@@ -439,8 +453,10 @@ class YoutubeService {
   /// Native Android search through the NewPipe extractor.
   Future<List<AppMediaItem>> _searchWithNewPipe(String query) async {
     try {
-      final search = await SearchExtractor.searchYoutube(query, const [])
-          .timeout(const Duration(seconds: 12));
+      final search = await SearchExtractor.searchYoutube(
+        query,
+        const [],
+      ).timeout(const Duration(seconds: 12));
 
       final items = <AppMediaItem>[];
       for (final video in search.result.videos) {
@@ -471,13 +487,14 @@ class YoutubeService {
 
   Future<List<AppMediaItem>> _searchWithExplode(String query) async {
     try {
-      final searchResults = await _yt.search.search(query).timeout(
-        const Duration(seconds: 10),
-      );
+      final searchResults = await _yt.search
+          .search(query)
+          .timeout(const Duration(seconds: 10));
       final List<AppMediaItem> items = [];
 
       for (final video in searchResults) {
-        if (video.duration == null || video.duration! < const Duration(seconds: 10)) {
+        if (video.duration == null ||
+            video.duration! < const Duration(seconds: 10)) {
           continue;
         }
         items.add(
@@ -518,7 +535,6 @@ class YoutubeService {
     }
   }
 
-
   /// Invalidate cached stream URL (e.g., if playback fails with 403)
   void invalidateStreamUrl(String videoId) {
     for (final q in AudioQuality.values) {
@@ -533,7 +549,10 @@ class YoutubeService {
   /// By default the URL is *not* test-fetched first: the player's own request
   /// is that test, and skipping a separate one saves a round trip on every
   /// tap. [verify] is for the retry after the player got a dead URL.
-  Future<String?> getAudioStreamUrl(String videoId, {bool verify = false}) async {
+  Future<String?> getAudioStreamUrl(
+    String videoId, {
+    bool verify = false,
+  }) async {
     final cached = _cachedUrl(videoId);
     if (cached != null) {
       debugPrint('✅ Cache hit for $videoId');
@@ -544,8 +563,7 @@ class YoutubeService {
     // very future, and whenComplete waits on a returned future — so it
     // waited on itself and never completed. Every uncached first tap hung.
     final extract = debugExtractOverride ?? _extract;
-    return _inFlight[key] ??=
-        extract(videoId, verify: verify).whenComplete(() {
+    return _inFlight[key] ??= extract(videoId, verify: verify).whenComplete(() {
       _inFlight.remove(key);
     });
   }
@@ -577,15 +595,22 @@ class YoutubeService {
     }
 
     final fast = await firstSuccess([
-      verified('explode/androidSdkless',
-          _tryYoutubeExplode(videoId, YoutubeApiClient.androidSdkless)),
-      verified('explode/android',
-          _tryYoutubeExplode(videoId, YoutubeApiClient.android)),
+      verified(
+        'explode/androidSdkless',
+        _tryYoutubeExplode(videoId, YoutubeApiClient.androidSdkless),
+      ),
+      verified(
+        'explode/android',
+        _tryYoutubeExplode(videoId, YoutubeApiClient.android),
+      ),
     ]);
     if (fast != null) return _remember(videoId, fast, epoch);
 
-    final slow = await verified('explode/watch page',
-            _tryYoutubeExplode(videoId, null)) ??
+    final slow =
+        await verified(
+          'explode/watch page',
+          _tryYoutubeExplode(videoId, null),
+        ) ??
         await verified('NewPipe', _tryNewPipeExtractor(videoId));
     if (slow != null) return _remember(videoId, slow, epoch);
 
@@ -602,10 +627,14 @@ class YoutubeService {
     Set<String> exclude = const {},
   }) async* {
     final sources = <(String, Future<String?> Function())>[
-      ('explode/androidSdkless',
-          () => _tryYoutubeExplode(videoId, YoutubeApiClient.androidSdkless)),
-      ('explode/android',
-          () => _tryYoutubeExplode(videoId, YoutubeApiClient.android)),
+      (
+        'explode/androidSdkless',
+        () => _tryYoutubeExplode(videoId, YoutubeApiClient.androidSdkless),
+      ),
+      (
+        'explode/android',
+        () => _tryYoutubeExplode(videoId, YoutubeApiClient.android),
+      ),
       ('explode/watch page', () => _tryYoutubeExplode(videoId, null)),
       ('NewPipe', () => _tryNewPipeExtractor(videoId)),
     ];
@@ -631,31 +660,31 @@ class YoutubeService {
   Future<String?> cacheForPlayback(AppMediaItem item) async {
     final existing = await PlaybackCache.instance.find(item.id);
     if (existing != null) return existing;
-    return _caching[item.id] ??= () async {
-      try {
-        final path = item.sourceType == MediaSourceType.saavn
-            // At the quality it would stream at, not the 320 of a download.
-            ? await _downloadSaavn(
-                item,
-                await PlaybackCache.instance.fetchFileFor(item.id, 'm4a'),
-                null,
-                qualities: [playbackQuality()],
-              )
-            : await _downloadViaExplode(
-                item,
-                (ext) => PlaybackCache.instance.fetchFileFor(item.id, ext),
-                null,
-              );
-        if (path != null) await PlaybackCache.instance.trim(keep: item.id);
-        return path;
-      } catch (e) {
-        debugPrint('Playback cache failed for ${item.id}: $e');
-        return null;
-      }
-    }()
-        .whenComplete(() {
-      _caching.remove(item.id);
-    });
+    return _caching[item.id] ??=
+        () async {
+          try {
+            final path = item.sourceType == MediaSourceType.saavn
+                // At the quality it would stream at, not the 320 of a download.
+                ? await _downloadSaavn(
+                    item,
+                    await PlaybackCache.instance.fetchFileFor(item.id, 'm4a'),
+                    null,
+                    qualities: [playbackQuality()],
+                  )
+                : await _downloadViaExplode(
+                    item,
+                    (ext) => PlaybackCache.instance.fetchFileFor(item.id, ext),
+                    null,
+                  );
+            if (path != null) await PlaybackCache.instance.trim(keep: item.id);
+            return path;
+          } catch (e) {
+            debugPrint('Playback cache failed for ${item.id}: $e');
+            return null;
+          }
+        }().whenComplete(() {
+          _caching.remove(item.id);
+        });
   }
 
   /// Fetch [item] in the background so pressing Next plays it from disk.
@@ -669,13 +698,13 @@ class YoutubeService {
   /// A real two-byte GET — not HEAD, which is exactly what passes on URLs
   /// that then refuse to stream.
   static Future<bool> _isPlayable(String url) async {
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 6);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
     try {
       final request = await client.getUrl(Uri.parse(url));
       request.headers.set(HttpHeaders.rangeHeader, 'bytes=0-1');
-      final response =
-          await request.close().timeout(const Duration(seconds: 6));
+      final response = await request.close().timeout(
+        const Duration(seconds: 6),
+      );
       await response.drain<void>();
       return response.statusCode >= 200 && response.statusCode < 300;
     } catch (_) {
@@ -692,8 +721,7 @@ class YoutubeService {
       _streamCache[key] = entry;
       StorageService.cacheBox(StorageService.streamUrlsBox)?.put(
         key,
-        jsonEncode(
-            {'url': url, 'exp': entry.expiresAt.millisecondsSinceEpoch}),
+        jsonEncode({'url': url, 'exp': entry.expiresAt.millisecondsSinceEpoch}),
       );
     }
     return url;
@@ -728,10 +756,11 @@ class YoutubeService {
   /// NewPipe native extraction (Fast on Android)
   Future<String?> _tryNewPipeExtractor(String videoId) async {
     try {
-      final video = await VideoExtractor.getStream('https://www.youtube.com/watch?v=$videoId').timeout(
-        const Duration(seconds: 10),
-      );
-      final bestAudio = video.audioWithBestAacQuality ?? video.audioWithHighestQuality;
+      final video = await VideoExtractor.getStream(
+        'https://www.youtube.com/watch?v=$videoId',
+      ).timeout(const Duration(seconds: 10));
+      final bestAudio =
+          video.audioWithBestAacQuality ?? video.audioWithHighestQuality;
       if (bestAudio != null && bestAudio.url != null) {
         return bestAudio.url;
       }
@@ -752,19 +781,24 @@ class YoutubeService {
     try {
       final streams = _yt.videos.streamsClient;
       final manifest = client == null
-          ? await streams.getManifest(videoId).timeout(const Duration(seconds: 15))
+          ? await streams
+                .getManifest(videoId)
+                .timeout(const Duration(seconds: 15))
           : await streams
-              .getManifest(videoId, ytClients: [client], requireWatchPage: false)
-              .timeout(const Duration(seconds: 8));
+                .getManifest(
+                  videoId,
+                  ytClients: [client],
+                  requireWatchPage: false,
+                )
+                .timeout(const Duration(seconds: 8));
       return _audioStreamFor(manifest, playbackQuality())?.url.toString();
     } catch (e) {
-      debugPrint('youtube_explode (${client == null ? 'watch page' : 'direct'}) failed for $videoId: $e');
+      debugPrint(
+        'youtube_explode (${client == null ? 'watch page' : 'direct'}) failed for $videoId: $e',
+      );
     }
     return null;
   }
-
-
-
 
   /// By default youtube_explode first downloads and parses the whole watch
   /// page (~1MB of HTML) before the player API call. With no JS challenge
@@ -777,7 +811,9 @@ class YoutubeService {
           .getManifest(videoId, requireWatchPage: false)
           .timeout(const Duration(seconds: 8));
     } catch (e) {
-      debugPrint('Fast manifest failed for $videoId, retrying with watch page: $e');
+      debugPrint(
+        'Fast manifest failed for $videoId, retrying with watch page: $e',
+      );
       return client.getManifest(videoId).timeout(const Duration(seconds: 15));
     }
   }
@@ -821,7 +857,8 @@ class YoutubeService {
     if (Platform.isWindows) {
       // Music\Pulse, where a music library looks — not loose in Documents.
       final dir = Directory(
-          '${LocalMusicService.musicFolder().path}${Platform.pathSeparator}Pulse');
+        '${LocalMusicService.musicFolder().path}${Platform.pathSeparator}Pulse',
+      );
       try {
         await dir.create(recursive: true);
         return dir;
@@ -841,8 +878,10 @@ class YoutubeService {
       // Unique per check: download-all runs two downloads at once, and on
       // Windows two probes sharing one name collided — one "failed", and
       // that song went to the default folder instead.
-      final probe = File('${dir.path}/.pulse_write_test_'
-          '${DateTime.now().microsecondsSinceEpoch}_${identityHashCode(Object())}');
+      final probe = File(
+        '${dir.path}/.pulse_write_test_'
+        '${DateTime.now().microsecondsSinceEpoch}_${identityHashCode(Object())}',
+      );
       await probe.writeAsString('');
       await probe.delete();
       return true;
@@ -865,13 +904,31 @@ class YoutubeService {
           File('${dir.path}/${downloadFileName(item)}.$ext');
 
       if (item.sourceType == MediaSourceType.saavn) {
-        final path = await _downloadSaavn(item, await nameFor('m4a'), onProgress);
+        final path = await _downloadSaavn(
+          item,
+          await nameFor('m4a'),
+          onProgress,
+        );
+        if (path != null) PlatformBridge.scanFile(path);
+        return path;
+      }
+
+      if (item.sourceType == MediaSourceType.podcast) {
+        final url = item.streamUrl;
+        if (url == null || !url.startsWith('http')) return null;
+        final target = await nameFor(podcastFileExtension(url));
+        // Some podcast hosts refuse the HEAD that _downloadHttp sizes the
+        // file with; then a plain GET (no resume) still works.
+        final path =
+            await _downloadHttp(url, target, onProgress) ??
+            await _downloadPlain(url, target, onProgress);
         if (path != null) PlatformBridge.scanFile(path);
         return path;
       }
 
       // 1. Try youtube_explode first — unthrottled InnerTube streaming (1-2s total)
-      final path = await _downloadViaExplode(item, nameFor, onProgress) ??
+      final path =
+          await _downloadViaExplode(item, nameFor, onProgress) ??
           // 2. Fall back to NewPipe with browser headers
           await _downloadViaNewPipe(item, nameFor, onProgress);
       // In a custom public folder, lets other music apps list it.
@@ -886,7 +943,8 @@ class YoutubeService {
   /// The folder a downloaded playlist named [name] lives in (created).
   Future<Directory> playlistFolder(String name) async {
     final dir = Directory(
-        '${(await _getDownloadDirectory()).path}/${safeFolderName(name)}');
+      '${(await _getDownloadDirectory()).path}/${safeFolderName(name)}',
+    );
     await dir.create(recursive: true);
     return dir;
   }
@@ -941,12 +999,12 @@ class YoutubeService {
   }) async {
     final part = partFileFor(target, total);
     // Appending continues an interrupted download instead of starting over.
-    final sink =
-        part.openWrite(mode: resumeFrom > 0 ? FileMode.append : FileMode.write);
+    final sink = part.openWrite(
+      mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
+    );
     var received = resumeFrom;
     try {
-      await for (final chunk
-          in bytes.timeout(const Duration(seconds: 20))) {
+      await for (final chunk in bytes.timeout(const Duration(seconds: 20))) {
         sink.add(chunk);
         received += chunk.length;
         if (total > 0) onProgress?.call(received / total);
@@ -971,12 +1029,14 @@ class YoutubeService {
   /// The rest of a stream from byte [from], or null if the server won't
   /// serve a range (then the caller starts over).
   Future<(Stream<List<int>>, HttpClient)?> _rangeFrom(Uri url, int from) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
     try {
       final request = await client.getUrl(url);
       request.headers.set(HttpHeaders.rangeHeader, 'bytes=$from-');
-      final response =
-          await request.close().timeout(const Duration(seconds: 15));
+      final response = await request.close().timeout(
+        const Duration(seconds: 15),
+      );
       if (response.statusCode == 206) return (response, client);
       await response.drain<void>().catchError((_) {});
     } catch (e) {
@@ -1005,7 +1065,10 @@ class YoutubeService {
     if (url == null) return null;
     for (final quality in qualities) {
       final path = await _downloadHttp(
-          SaavnService.withQuality(url, quality), target, onProgress);
+        SaavnService.withQuality(url, quality),
+        target,
+        onProgress,
+      );
       if (path != null) return path;
     }
     return null;
@@ -1018,11 +1081,12 @@ class YoutubeService {
     File target,
     void Function(double)? onProgress,
   ) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
     try {
-      final head = await (await client.headUrl(Uri.parse(url)))
-          .close()
-          .timeout(const Duration(seconds: 15));
+      final head = await (await client.headUrl(
+        Uri.parse(url),
+      )).close().timeout(const Duration(seconds: 15));
       await head.drain<void>().catchError((_) {});
       if (head.statusCode != 200) return null;
       final total = head.contentLength;
@@ -1033,21 +1097,76 @@ class YoutubeService {
       if (have > 0 && have < total) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$have-');
       }
-      final response =
-          await request.close().timeout(const Duration(seconds: 15));
+      final response = await request.close().timeout(
+        const Duration(seconds: 15),
+      );
       final resumed = response.statusCode == 206;
       if (response.statusCode != 200 && !resumed) {
         await response.drain<void>().catchError((_) {});
         return null;
       }
-      return await _writeAudioFile(response, target, total, onProgress,
-          resumeFrom: resumed ? have : 0);
+      return await _writeAudioFile(
+        response,
+        target,
+        total,
+        onProgress,
+        resumeFrom: resumed ? have : 0,
+      );
     } catch (e) {
       debugPrint('Download failed for $url: $e');
       return null;
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// Download [url] in one GET, without sizing it first.
+  Future<String?> _downloadPlain(
+    String url,
+    File target,
+    void Function(double)? onProgress,
+  ) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final response = await (await client.getUrl(
+        Uri.parse(url),
+      )).close().timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        await response.drain<void>().catchError((_) {});
+        return null;
+      }
+      return await _writeAudioFile(
+        response,
+        target,
+        response.contentLength,
+        onProgress,
+      );
+    } catch (e) {
+      debugPrint('Download failed for $url: $e');
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// A podcast episode's file type, from its link ("…/ep12.m4a?x=1" → m4a);
+  /// most are MP3.
+  @visibleForTesting
+  static String podcastFileExtension(String url) {
+    final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
+    final ext = path.contains('.') ? path.split('.').last : '';
+    return const {
+          'mp3',
+          'm4a',
+          'aac',
+          'ogg',
+          'opus',
+          'wav',
+          'mp4',
+        }.contains(ext)
+        ? ext
+        : 'mp3';
   }
 
   /// Download using NewPipe extractor with unthrottled headers.
@@ -1061,8 +1180,8 @@ class YoutubeService {
         'https://www.youtube.com/watch?v=${item.id}',
       ).timeout(const Duration(seconds: 5));
 
-      final bestAudio = video.audioWithBestAacQuality ??
-          video.audioWithHighestQuality;
+      final bestAudio =
+          video.audioWithBestAacQuality ?? video.audioWithHighestQuality;
       if (bestAudio?.url == null) return null;
 
       final url = bestAudio!.url!;
@@ -1081,8 +1200,9 @@ class YoutubeService {
         request.headers.set(HttpHeaders.acceptHeader, '*/*');
         request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
 
-        final response =
-            await request.close().timeout(const Duration(seconds: 15));
+        final response = await request.close().timeout(
+          const Duration(seconds: 15),
+        );
         // A 403 page written out as "song.m4a" was recorded as a finished
         // download that could then never play.
         if (response.statusCode != 200 && response.statusCode != 206) {
@@ -1091,7 +1211,11 @@ class YoutubeService {
           return null;
         }
         return await _writeAudioFile(
-            response, file, response.contentLength, onProgress);
+          response,
+          file,
+          response.contentLength,
+          onProgress,
+        );
       } finally {
         client.close(force: true);
       }
@@ -1130,8 +1254,13 @@ class YoutubeService {
           final (bytes, client) = rest;
           try {
             debugPrint('Resuming ${item.id} from $have of $total bytes');
-            return await _writeAudioFile(bytes, file, total, onProgress,
-                resumeFrom: have);
+            return await _writeAudioFile(
+              bytes,
+              file,
+              total,
+              onProgress,
+              resumeFrom: have,
+            );
           } finally {
             client.close(force: true);
           }
@@ -1189,7 +1318,6 @@ class YoutubeService {
   /// File extension matching the stream's real container.
   String _extensionFor(AudioOnlyStreamInfo stream) =>
       stream.container == StreamContainer.mp4 ? 'm4a' : stream.container.name;
-
 }
 
 /// A resolved stream URL and when it stops working.
@@ -1209,10 +1337,13 @@ class _CachedStream {
 @visibleForTesting
 DateTime streamUrlExpiry(String url, {DateTime? now}) {
   final at = now ?? DateTime.now();
-  final expire = int.tryParse(Uri.tryParse(url)?.queryParameters['expire'] ?? '');
+  final expire = int.tryParse(
+    Uri.tryParse(url)?.queryParameters['expire'] ?? '',
+  );
   if (expire == null) return at.add(const Duration(minutes: 30));
-  final expiry = DateTime.fromMillisecondsSinceEpoch(expire * 1000)
-      .subtract(const Duration(minutes: 10));
+  final expiry = DateTime.fromMillisecondsSinceEpoch(
+    expire * 1000,
+  ).subtract(const Duration(minutes: 10));
   // Never trust more than 6h, and never less than "already expired".
   final cap = at.add(const Duration(hours: 6));
   return expiry.isAfter(cap) ? cap : expiry;

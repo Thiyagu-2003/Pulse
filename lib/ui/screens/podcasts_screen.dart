@@ -10,7 +10,8 @@ import '../../models/podcast_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
-import '../widgets/track_tile.dart' show showTrackActions;
+import '../widgets/track_tile.dart'
+    show DownloadAllButton, DownloadButton, showTrackActions;
 
 class PodcastsScreen extends StatefulWidget {
   const PodcastsScreen({super.key});
@@ -452,7 +453,12 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                 ),
               ),
               if (_items.isNotEmpty) ...[
-                const SizedBox(width: 8),
+                // Pick episodes to save; they go in a folder (and a Library
+                // playlist) named after the show.
+                DownloadAllButton(
+                  items: _items,
+                  playlistName: widget.channel.title,
+                ),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
                     backgroundColor: podcastOrange(context),
@@ -515,6 +521,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                             color: podcastOrange(context),
                             size: 36,
                           ),
+                          DownloadButton(item: _items[index]),
                           // The song menu: play next, add to queue/playlist.
                           IconButton(
                             icon: const Icon(Icons.more_vert_rounded),

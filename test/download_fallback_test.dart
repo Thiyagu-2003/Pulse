@@ -3,14 +3,15 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:music_player/models/media_item_model.dart';
 import 'package:music_player/providers/music_player_provider.dart';
+import 'package:music_player/services/youtube_service.dart';
 
 AppMediaItem _local(String id, String path) => AppMediaItem(
-      id: id,
-      title: 't',
-      artist: 'a',
-      streamUrl: path,
-      sourceType: MediaSourceType.local,
-    );
+  id: id,
+  title: 't',
+  artist: 'a',
+  streamUrl: path,
+  sourceType: MediaSourceType.local,
+);
 
 void main() {
   test('a saved download whose file is gone streams again', () {
@@ -34,35 +35,73 @@ void main() {
     expect(MusicPlayerProvider.streamableFallback(item), same(item));
   });
 
-  test('a downloaded JioSaavn song whose file is gone streams from JioSaavn',
-      () {
+  test(
+    'a downloaded JioSaavn song whose file is gone streams from JioSaavn',
+    () {
+      final item = AppMediaItem(
+        id: 'bo7KIXAM',
+        title: 'Vaseegara',
+        artist: 'Harris Jayaraj',
+        streamUrl: '/gone/Vaseegara [bo7KIXAM].m4a',
+        sourceType: MediaSourceType.local,
+        extras: {
+          MusicPlayerProvider.originKey: 'saavn',
+          MusicPlayerProvider.originUrlKey:
+              'https://aac.saavncdn.com/x_160.mp4',
+        },
+      );
+      final fixed = MusicPlayerProvider.streamableFallback(item);
+      expect(fixed.sourceType, MediaSourceType.saavn);
+      expect(fixed.streamUrl, 'https://aac.saavncdn.com/x_160.mp4');
+    },
+  );
+
+  test(
+    'an older JioSaavn copy (no origin recorded) is recognised by its id',
+    () {
+      final fixed = MusicPlayerProvider.streamableFallback(
+        _local('icJam_5l', '/gone/x.m4a'),
+      );
+      expect(fixed.sourceType, MediaSourceType.saavn);
+      expect(fixed.streamUrl, isNull); // the player fetches a fresh link
+    },
+  );
+
+  test('a downloaded podcast episode whose file is gone streams again, still '
+      'a podcast', () {
     final item = AppMediaItem(
-      id: 'bo7KIXAM',
-      title: 'Vaseegara',
-      artist: 'Harris Jayaraj',
-      streamUrl: '/gone/Vaseegara [bo7KIXAM].m4a',
+      id: '-1234567',
+      title: 'Episode 12',
+      artist: 'Host',
+      album: 'The Show',
+      streamUrl: '/gone/Episode 12 - Host [-1234567].mp3',
       sourceType: MediaSourceType.local,
       extras: {
-        MusicPlayerProvider.originKey: 'saavn',
-        MusicPlayerProvider.originUrlKey: 'https://aac.saavncdn.com/x_160.mp4',
+        MusicPlayerProvider.originKey: 'podcast',
+        MusicPlayerProvider.originUrlKey: 'https://cdn.example/ep12.mp3',
       },
     );
+    expect(MusicPlayerProvider.isPodcast(item), isTrue, reason: 'its copy');
     final fixed = MusicPlayerProvider.streamableFallback(item);
-    expect(fixed.sourceType, MediaSourceType.saavn);
-    expect(fixed.streamUrl, 'https://aac.saavncdn.com/x_160.mp4');
+    expect(fixed.sourceType, MediaSourceType.podcast);
+    expect(fixed.streamUrl, 'https://cdn.example/ep12.mp3');
+    expect(fixed.album, 'The Show');
   });
 
-  test('an older JioSaavn copy (no origin recorded) is recognised by its id',
-      () {
-    final fixed =
-        MusicPlayerProvider.streamableFallback(_local('icJam_5l', '/gone/x.m4a'));
-    expect(fixed.sourceType, MediaSourceType.saavn);
-    expect(fixed.streamUrl, isNull); // the player fetches a fresh link
+  test('podcast downloads keep the file type of their link', () {
+    expect(
+      YoutubeService.podcastFileExtension('https://a.b/ep.m4a?x=1'),
+      'm4a',
+    );
+    expect(YoutubeService.podcastFileExtension('https://a.b/ep.MP3'), 'mp3');
+    expect(YoutubeService.podcastFileExtension('https://a.b/track/123'), 'mp3');
   });
 
-  test('a device song with a missing file is never turned into an online one',
-      () {
-    final item = _local('12345678', '/gone/x.mp3');
-    expect(MusicPlayerProvider.streamableFallback(item), same(item));
-  });
+  test(
+    'a device song with a missing file is never turned into an online one',
+    () {
+      final item = _local('12345678', '/gone/x.mp3');
+      expect(MusicPlayerProvider.streamableFallback(item), same(item));
+    },
+  );
 }
