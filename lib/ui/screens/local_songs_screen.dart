@@ -854,7 +854,8 @@ class _LocalSongsScreenState extends State<LocalSongsScreen>
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => provider.playTrack(item, playlist: playlist),
+        // Recently played: continues in the queue it was played in.
+        onTap: () => provider.resumeFromHistory(item, fallback: playlist),
         onLongPress: () => showTrackActions(context, item),
         child: SizedBox(
           height: 56,

@@ -38,6 +38,8 @@ class StorageService {
   static const String streamUrlsBox = 'stream_urls';
   static const String searchCacheBox = 'search_cache';
   static const String playbackLogBox = 'playback_log';
+  // The queues songs were played in (see saveSession).
+  static const String sessionsBox = 'sessions';
   static const String customDownloadPathKey = 'custom_download_path';
   static const String homeLanguageKey = 'home_language';
   static const String audioQualityKey = 'audio_quality';
@@ -58,8 +60,16 @@ class StorageService {
   static const int historyLimit = 200;
 
   static const _allBoxes = [
-    favoritesBox, historyBox, playlistsBox, positionsBox, downloadsBox,
-    settingsBox, streamUrlsBox, searchCacheBox, playbackLogBox,
+    favoritesBox,
+    historyBox,
+    playlistsBox,
+    positionsBox,
+    downloadsBox,
+    settingsBox,
+    streamUrlsBox,
+    searchCacheBox,
+    playbackLogBox,
+    sessionsBox,
   ];
 
   /// Earlier Windows builds kept their boxes in [from] (Documents): move
@@ -69,7 +79,8 @@ class StorageService {
     final sep = Platform.pathSeparator;
     // "settings" or "favorites" in Documents could be another app's. Only a
     // folder that also holds Pulse's own caches is taken to be Pulse's.
-    final isPulses = await File('${from.path}$sep$streamUrlsBox.hive').exists() &&
+    final isPulses =
+        await File('${from.path}$sep$streamUrlsBox.hive').exists() &&
         await File('${from.path}$sep$playbackLogBox.hive').exists();
     if (!isPulses) return;
     for (final name in _allBoxes) {
@@ -94,7 +105,8 @@ class StorageService {
       // Desktop: initFlutter's folder is the user's Documents, which filled
       // with Pulse's .hive files. Use the app's own data folder instead.
       final dir = Directory(
-          '${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}data');
+        '${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}data',
+      );
       await dir.create(recursive: true);
       await moveBoxes(await getApplicationDocumentsDirectory(), dir);
       Hive.init(dir.path);
@@ -108,6 +120,7 @@ class StorageService {
     await Hive.openBox<String>(streamUrlsBox);
     await Hive.openBox<String>(searchCacheBox);
     await Hive.openBox<String>(playbackLogBox);
+    await Hive.openBox<String>(sessionsBox);
   }
 
   /// A cache box, or null where it isn't open (tests that only set up the
@@ -140,18 +153,18 @@ class StorageService {
       _settingsBox.put(homeLanguageKey, language ?? '');
 
   AudioQuality getAudioQuality() => AudioQuality.values.firstWhere(
-        (q) => q.name == _settingsBox.get(audioQualityKey),
-        orElse: () => AudioQuality.balanced,
-      );
+    (q) => q.name == _settingsBox.get(audioQualityKey),
+    orElse: () => AudioQuality.balanced,
+  );
 
   Future<void> setAudioQuality(AudioQuality quality) =>
       _settingsBox.put(audioQualityKey, quality.name);
 
   /// Dark unless chosen otherwise — the app was designed dark first.
   ThemeMode getThemeMode() => ThemeMode.values.firstWhere(
-        (m) => m.name == _settingsBox.get(themeModeKey),
-        orElse: () => ThemeMode.dark,
-      );
+    (m) => m.name == _settingsBox.get(themeModeKey),
+    orElse: () => ThemeMode.dark,
+  );
 
   Future<void> setThemeMode(ThemeMode mode) =>
       _settingsBox.put(themeModeKey, mode.name);
@@ -196,14 +209,19 @@ class StorageService {
   /// positions as one JSON-able map. Downloads are left out — their files
   /// are on this phone only — and so are the caches.
   Map<String, dynamic> exportBackup() => {
-        'app': 'pulse',
-        'version': 1,
-        'exportedAt': DateTime.now().toIso8601String(),
-        for (final name in _backedUp) name: Map.of(Hive.box<String>(name).toMap()),
-        positionsBox: Map.of(_posBox.toMap()),
-      };
+    'app': 'pulse',
+    'version': 1,
+    'exportedAt': DateTime.now().toIso8601String(),
+    for (final name in _backedUp) name: Map.of(Hive.box<String>(name).toMap()),
+    positionsBox: Map.of(_posBox.toMap()),
+  };
 
-  static const _backedUp = [favoritesBox, playlistsBox, historyBox, settingsBox];
+  static const _backedUp = [
+    favoritesBox,
+    playlistsBox,
+    historyBox,
+    settingsBox,
+  ];
 
   /// Merge a backup into what's here (nothing is deleted). Returns how many
   /// entries were restored; throws [FormatException] if it isn't a Pulse
@@ -293,16 +311,23 @@ class StorageService {
       setFlag(playbackNotificationKey, on);
 
   String getLocalAlbumsView() => _settingsBox.get(localAlbumsViewKey) ?? 'grid';
-  Future<void> setLocalAlbumsView(String view) => _settingsBox.put(localAlbumsViewKey, view);
+  Future<void> setLocalAlbumsView(String view) =>
+      _settingsBox.put(localAlbumsViewKey, view);
 
-  String getLocalFoldersView() => _settingsBox.get(localFoldersViewKey) ?? 'list';
-  Future<void> setLocalFoldersView(String view) => _settingsBox.put(localFoldersViewKey, view);
+  String getLocalFoldersView() =>
+      _settingsBox.get(localFoldersViewKey) ?? 'list';
+  Future<void> setLocalFoldersView(String view) =>
+      _settingsBox.put(localFoldersViewKey, view);
 
-  String getLocalArtistsView() => _settingsBox.get(localArtistsViewKey) ?? 'list';
-  Future<void> setLocalArtistsView(String view) => _settingsBox.put(localArtistsViewKey, view);
+  String getLocalArtistsView() =>
+      _settingsBox.get(localArtistsViewKey) ?? 'list';
+  Future<void> setLocalArtistsView(String view) =>
+      _settingsBox.put(localArtistsViewKey, view);
 
-  String getOnlineViewMode() => _settingsBox.get(onlineViewModeKey) ?? 'standard';
-  Future<void> setOnlineViewMode(String mode) => _settingsBox.put(onlineViewModeKey, mode);
+  String getOnlineViewMode() =>
+      _settingsBox.get(onlineViewModeKey) ?? 'standard';
+  Future<void> setOnlineViewMode(String mode) =>
+      _settingsBox.put(onlineViewModeKey, mode);
 
   List<String> getRecentSearches() {
     final stored = _settingsBox.get(recentSearchesKey);
@@ -378,7 +403,9 @@ class StorageService {
     final playlists = <Playlist>[];
     for (final str in _playlistBox.values) {
       try {
-        playlists.add(Playlist.fromJson(jsonDecode(str) as Map<String, dynamic>));
+        playlists.add(
+          Playlist.fromJson(jsonDecode(str) as Map<String, dynamic>),
+        );
       } catch (e) {
         debugPrint('Skipping corrupt playlist: $e');
       }
@@ -447,7 +474,10 @@ class StorageService {
     for (final str in _histBox.values) {
       try {
         final json = jsonDecode(str) as Map<String, dynamic>;
-        entries.add(((json['playedAt'] as int?) ?? 0, AppMediaItem.fromJson(json)));
+        entries.add((
+          (json['playedAt'] as int?) ?? 0,
+          AppMediaItem.fromJson(json),
+        ));
       } catch (e) {
         debugPrint('Skipping corrupt history entry: $e');
       }
@@ -477,7 +507,8 @@ class StorageService {
     return entries;
   }
 
-  Future<void> addToHistory(AppMediaItem item) async {
+  /// [session]: the queue it is playing in (see [saveSession]).
+  Future<void> addToHistory(AppMediaItem item, {String? session}) async {
     // Counted per song, for Stats and the "Made for you" rows.
     var plays = 0;
     try {
@@ -490,6 +521,7 @@ class StorageService {
         ...item.toJson(),
         'playedAt': DateTime.now().millisecondsSinceEpoch,
         'plays': plays + 1,
+        'session': ?session,
       }),
     );
 
@@ -502,13 +534,60 @@ class StorageService {
     }
   }
 
+  /// The session a history song last played in, if recorded.
+  String? sessionOf(String id) {
+    try {
+      final raw = _histBox.get(id);
+      return raw == null ? null : jsonDecode(raw)['session'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Sessions: the queues songs were played in — a playlist, an album, a
+  /// show's episodes, a folder — so a recently played song continues in its
+  /// own queue. Keyed by creation time; the newest [sessionLimit] are kept.
+  static const sessionLimit = 30;
+  static const sessionQueueLimit = 300;
+
+  List<AppMediaItem>? getSession(String key) {
+    final raw = cacheBox(sessionsBox)?.get(key);
+    if (raw == null) return null;
+    try {
+      return [
+        for (final j in jsonDecode(raw) as List)
+          AppMediaItem.fromJson(j as Map<String, dynamic>),
+      ];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveSession(String key, List<AppMediaItem> queue) async {
+    final box = cacheBox(sessionsBox);
+    if (box == null || queue.isEmpty) return;
+    await box.put(
+      key,
+      jsonEncode([for (final t in queue.take(sessionQueueLimit)) t.toJson()]),
+    );
+    if (box.length > sessionLimit) {
+      // Keys are timestamps of equal length, so sorted = oldest first. The
+      // one in use (just saved) stays, however old.
+      final keys = box.keys.cast<String>().where((k) => k != key).toList()
+        ..sort();
+      await box.deleteAll(keys.take(box.length - sessionLimit));
+    }
+  }
+
   /// Skips entries that fail to decode (e.g. written by an older schema)
   /// rather than taking down the whole Library screen.
   List<AppMediaItem> _decodeAll(Box<String> box) {
     final items = <AppMediaItem>[];
     for (final str in box.values) {
       try {
-        items.add(AppMediaItem.fromJson(jsonDecode(str) as Map<String, dynamic>));
+        items.add(
+          AppMediaItem.fromJson(jsonDecode(str) as Map<String, dynamic>),
+        );
       } catch (e) {
         debugPrint('Skipping corrupt stored item: $e');
       }
@@ -537,17 +616,20 @@ class EqSettings {
         loudness: loudness ?? this.loudness,
       );
 
-  Map<String, dynamic> toJson() =>
-      {'enabled': enabled, 'gains': gains, 'loudness': loudness};
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'gains': gains,
+    'loudness': loudness,
+  };
 
   factory EqSettings.fromJson(Map<String, dynamic> json) => EqSettings(
-        enabled: json['enabled'] == true,
-        gains: [
-          for (final g in (json['gains'] as List? ?? const []))
-            (g as num).toDouble(),
-        ],
-        loudness: (json['loudness'] as num? ?? 0).toDouble(),
-      );
+    enabled: json['enabled'] == true,
+    gains: [
+      for (final g in (json['gains'] as List? ?? const []))
+        (g as num).toDouble(),
+    ],
+    loudness: (json['loudness'] as num? ?? 0).toDouble(),
+  );
 }
 
 typedef HistoryEntry = ({AppMediaItem item, int plays, int playedAt});

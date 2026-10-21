@@ -13,12 +13,12 @@ import 'package:music_player/services/saavn_service.dart';
 import 'package:music_player/services/storage_service.dart';
 
 AppMediaItem _song(String id) => AppMediaItem(
-      id: id,
-      title: 'Song $id',
-      artist: 'Artist',
-      streamUrl: 'https://example.invalid/$id.mp4',
-      sourceType: MediaSourceType.saavn,
-    );
+  id: id,
+  title: 'Song $id',
+  artist: 'Artist',
+  streamUrl: 'https://example.invalid/$id.mp4',
+  sourceType: MediaSourceType.saavn,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -29,9 +29,10 @@ void main() {
     // No phone: answer every plugin call (the audio player opens a channel
     // per player) so playing doesn't throw.
     TestDefaultBinaryMessengerBinding
-        .instance.defaultBinaryMessenger.allMessagesHandler =
-        (channel, handler, message) async => const StandardMethodCodec()
-            .encodeSuccessEnvelope(<String, dynamic>{});
+        .instance
+        .defaultBinaryMessenger
+        .allMessagesHandler = (channel, handler, message) async =>
+        const StandardMethodCodec().encodeSuccessEnvelope(<String, dynamic>{});
     Hive.init((await Directory.systemTemp.createTemp('pulse_auto_')).path);
     for (final box in [
       StorageService.favoritesBox,
@@ -39,6 +40,7 @@ void main() {
       StorageService.playlistsBox,
       StorageService.downloadsBox,
       StorageService.settingsBox,
+      StorageService.sessionsBox,
     ]) {
       await Hive.openBox<String>(box);
     }
@@ -73,7 +75,11 @@ void main() {
     await settle();
     await provider.setAutoplay(true);
     final local = AppMediaItem(
-        id: '42', title: 't', artist: 'a', sourceType: MediaSourceType.local);
+      id: '42',
+      title: 't',
+      artist: 'a',
+      sourceType: MediaSourceType.local,
+    );
     await provider.playTrack(local, playlist: [local]);
     await settle();
     expect(seeds, isEmpty);
@@ -81,12 +87,13 @@ void main() {
 
   test('each podcast show keeps its own speed; songs their own', () async {
     AppMediaItem episode(String show) => AppMediaItem(
-        id: 'ep-$show',
-        title: 'Episode',
-        artist: 'Host',
-        album: show,
-        streamUrl: 'https://example.invalid/$show.mp3',
-        sourceType: MediaSourceType.podcast);
+      id: 'ep-$show',
+      title: 'Episode',
+      artist: 'Host',
+      album: show,
+      streamUrl: 'https://example.invalid/$show.mp3',
+      sourceType: MediaSourceType.podcast,
+    );
     await provider.playTrack(episode('Show A'));
     await provider.setSpeed(1.5);
     await provider.playTrack(_song('song'));
@@ -97,46 +104,56 @@ void main() {
     expect(provider.speed, 1.5);
   });
 
-  test('clear up next keeps the song playing; save queue as playlist',
-      () async {
-    await provider.setAutoplay(false);
-    final list = [_song('q1'), _song('q2'), _song('q3')];
-    await provider.playTrack(list[1], playlist: list);
+  test(
+    'clear up next keeps the song playing; save queue as playlist',
+    () async {
+      await provider.setAutoplay(false);
+      final list = [_song('q1'), _song('q2'), _song('q3')];
+      await provider.playTrack(list[1], playlist: list);
 
-    final saved = await provider.saveQueueAsPlaylist('My queue');
-    expect(provider.getPlaylist(saved.id)!.items.map((t) => t.id),
-        ['q1', 'q2', 'q3']);
+      final saved = await provider.saveQueueAsPlaylist('My queue');
+      expect(provider.getPlaylist(saved.id)!.items.map((t) => t.id), [
+        'q1',
+        'q2',
+        'q3',
+      ]);
 
-    provider.clearUpNext();
-    expect(provider.queue.map((t) => t.id), ['q2']);
-    expect(provider.currentIndex, 0);
-    await provider.setAutoplay(true);
-  });
+      provider.clearUpNext();
+      expect(provider.queue.map((t) => t.id), ['q2']);
+      expect(provider.currentIndex, 0);
+      await provider.setAutoplay(true);
+    },
+  );
 
-  test('Android Auto browses folders and plays a song with its folder',
-      () async {
-    await provider.setAutoplay(false);
-    final fav1 = _song('f1'), fav2 = _song('f2');
-    await provider.toggleFavorite(fav1);
-    await provider.toggleFavorite(fav2);
+  test(
+    'Android Auto browses folders and plays a song with its folder',
+    () async {
+      await provider.setAutoplay(false);
+      final fav1 = _song('f1'), fav2 = _song('f2');
+      await provider.toggleFavorite(fav1);
+      await provider.toggleFavorite(fav2);
 
-    final root = await provider.browseForAuto(AudioService.browsableRootId);
-    expect(root.map((m) => m.title),
-        containsAll(['Recently played', 'Favorites', 'Downloads', 'My queue']));
-    expect(root.every((m) => m.playable == false), isTrue);
+      final root = await provider.browseForAuto(AudioService.browsableRootId);
+      expect(
+        root.map((m) => m.title),
+        containsAll(['Recently played', 'Favorites', 'Downloads', 'My queue']),
+      );
+      expect(root.every((m) => m.playable == false), isTrue);
 
-    final favorites = await provider.browseForAuto('auto_favorites');
-    expect(favorites.map((m) => m.id),
-        containsAll(['auto_favorites|f1', 'auto_favorites|f2']));
+      final favorites = await provider.browseForAuto('auto_favorites');
+      expect(
+        favorites.map((m) => m.id),
+        containsAll(['auto_favorites|f1', 'auto_favorites|f2']),
+      );
 
-    await provider.playFromAuto('auto_favorites|f2');
-    expect(provider.currentTrack?.id, 'f2');
-    expect(provider.queue.map((t) => t.id).toSet(), {'f1', 'f2'});
-    await provider.setAutoplay(true);
-  });
+      await provider.playFromAuto('auto_favorites|f2');
+      expect(provider.currentTrack?.id, 'f2');
+      expect(provider.queue.map((t) => t.id).toSet(), {'f1', 'f2'});
+      await provider.setAutoplay(true);
+    },
+  );
 
-  test('Start radio replaces what is queued after the current song',
-      () async {
+  test('Start radio replaces what is queued after the current song', () async {
     await provider.setAutoplay(false);
     final list = [_song('p1'), _song('p2'), _song('p3')];
     await provider.playTrack(list[0], playlist: list);
@@ -179,50 +196,83 @@ void main() {
     expect(provider.sleepTimerEndOfQueue, isFalse);
   });
 
-  test('playing a song from a new playlist replaces the queue with new playlist', () async {
-    await provider.setAutoplay(false);
-    final playlist1 = [_song('p1_a'), _song('p1_b'), _song('p1_c')];
-    final playlist2 = [_song('p2_x'), _song('p2_y')];
+  test(
+    'playing a song from a new playlist replaces the queue with new playlist',
+    () async {
+      await provider.setAutoplay(false);
+      final playlist1 = [_song('p1_a'), _song('p1_b'), _song('p1_c')];
+      final playlist2 = [_song('p2_x'), _song('p2_y')];
 
-    // Start with playlist 1
-    await provider.playTrack(playlist1[0], playlist: playlist1);
-    expect(provider.queue.map((t) => t.id), ['p1_a', 'p1_b', 'p1_c']);
-    expect(provider.currentTrack?.id, 'p1_a');
+      // Start with playlist 1
+      await provider.playTrack(playlist1[0], playlist: playlist1);
+      expect(provider.queue.map((t) => t.id), ['p1_a', 'p1_b', 'p1_c']);
+      expect(provider.currentTrack?.id, 'p1_a');
 
-    // Switch to playlist 2
-    await provider.playTrack(playlist2[1], playlist: playlist2);
-    expect(provider.queue.map((t) => t.id), ['p2_x', 'p2_y']);
-    expect(provider.currentTrack?.id, 'p2_y');
-  });
+      // Switch to playlist 2
+      await provider.playTrack(playlist2[1], playlist: playlist2);
+      expect(provider.queue.map((t) => t.id), ['p2_x', 'p2_y']);
+      expect(provider.currentTrack?.id, 'p2_y');
+    },
+  );
 
-  test('playing a single song starts a clean queue without leftover tracks', () async {
-    await provider.setAutoplay(false);
-    final playlist = [_song('p_1'), _song('p_2'), _song('p_3')];
-    await provider.playTrack(playlist[0], playlist: playlist);
-    expect(provider.queue.length, 3);
+  test(
+    'playing a single song starts a clean queue without leftover tracks',
+    () async {
+      await provider.setAutoplay(false);
+      final playlist = [_song('p_1'), _song('p_2'), _song('p_3')];
+      await provider.playTrack(playlist[0], playlist: playlist);
+      expect(provider.queue.length, 3);
 
-    // Play a single song directly
-    final singleSong = _song('single_1');
-    await provider.playTrack(singleSong);
-    expect(provider.queue.map((t) => t.id), ['single_1']);
-    expect(provider.currentTrack?.id, 'single_1');
-  });
+      // Play a single song directly
+      final singleSong = _song('single_1');
+      await provider.playTrack(singleSong);
+      expect(provider.queue.map((t) => t.id), ['single_1']);
+      expect(provider.currentTrack?.id, 'single_1');
+    },
+  );
 
-  test('moveQueueItemToNext moves track to right after current playing index', () async {
-    await provider.setAutoplay(false);
-    final list = [_song('m0'), _song('m1'), _song('m2'), _song('m3')];
-    await provider.playTrack(list[0], playlist: list);
-    expect(provider.currentIndex, 0);
+  test(
+    'moveQueueItemToNext moves track to right after current playing index',
+    () async {
+      await provider.setAutoplay(false);
+      final list = [_song('m0'), _song('m1'), _song('m2'), _song('m3')];
+      await provider.playTrack(list[0], playlist: list);
+      expect(provider.currentIndex, 0);
 
-    // Move m3 (index 3) to play next
-    provider.moveQueueItemToNext(3);
-    expect(provider.queue.map((t) => t.id), ['m0', 'm3', 'm1', 'm2']);
-    expect(provider.currentIndex, 0);
-    expect(provider.currentTrack?.id, 'm0');
+      // Move m3 (index 3) to play next
+      provider.moveQueueItemToNext(3);
+      expect(provider.queue.map((t) => t.id), ['m0', 'm3', 'm1', 'm2']);
+      expect(provider.currentIndex, 0);
+      expect(provider.currentTrack?.id, 'm0');
 
-    // Skip to next to verify it plays m3
-    await provider.skipToNext();
-    expect(provider.currentTrack?.id, 'm3');
-  });
+      // Skip to next to verify it plays m3
+      await provider.skipToNext();
+      expect(provider.currentTrack?.id, 'm3');
+    },
+  );
+
+  test(
+    'recently played continues in its own queue, and after a restart',
+    () async {
+      await provider.setAutoplay(false);
+      final album = [_song('s1'), _song('s2'), _song('s3')];
+      await provider.playTrack(album[1], playlist: album);
+      await provider.playTrack(_song('lone')); // another queue since
+      expect(provider.queue.map((t) => t.id), ['lone']);
+
+      // Tapped in Recently played: back in the album, not alone.
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await provider.resumeFromHistory(_song('s2'));
+      expect(provider.queue.map((t) => t.id), ['s1', 's2', 's3']);
+      expect(provider.currentTrack?.id, 's2');
+
+      // A new launch picks up the same queue at the same song.
+      final restarted = MusicPlayerProvider(
+        CustomAudioHandler(),
+        StorageService(),
+      );
+      expect(restarted.queue.map((t) => t.id), ['s1', 's2', 's3']);
+      expect(restarted.currentTrack?.id, 's2');
+    },
+  );
 }
-

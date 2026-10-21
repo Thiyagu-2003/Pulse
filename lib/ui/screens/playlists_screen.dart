@@ -131,6 +131,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   filterTracks(playerProvider.getHistory(), _query),
                   emptyMessage: 'Listening history is empty.',
                   emptyIcon: Icons.history,
+                  history: true,
                 ),
                 _buildPlaylistList(playerProvider),
                 _buildDownloadsList(playerProvider),
@@ -523,6 +524,7 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     required String emptyMessage,
     required IconData emptyIcon,
     bool withDownloadAll = false,
+    bool history = false,
   }) {
     if (tracks.isEmpty) {
       return _buildEmpty(
@@ -547,7 +549,18 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
           }
           index--;
         }
-        return TrackTile(item: tracks[index], playlist: tracks);
+        final item = tracks[index];
+        return TrackTile(
+          item: item,
+          playlist: tracks,
+          // History: continue in the queue the song was played in.
+          onTap: history
+              ? () => context.read<MusicPlayerProvider>().resumeFromHistory(
+                  item,
+                  fallback: tracks,
+                )
+              : null,
+        );
       },
     );
   }
