@@ -1,15 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
 
-class PlaylistDetailScreen extends StatelessWidget {
+class PlaylistDetailScreen extends StatefulWidget {
   final String playlistId;
 
   const PlaylistDetailScreen({super.key, required this.playlistId});
+
+  @override
+  State<PlaylistDetailScreen> createState() => _PlaylistDetailScreenState();
+}
+
+class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
+  String _query = '';
+
+  String get playlistId => widget.playlistId;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +43,8 @@ class PlaylistDetailScreen extends StatelessWidget {
         ),
       );
     }
+
+    final shown = filterTracks(playlist.items, _query);
 
     return Scaffold(
       appBar: AppBar(
@@ -107,14 +121,21 @@ class PlaylistDetailScreen extends StatelessWidget {
                             style: OutlinedButton.styleFrom(
                               foregroundColor: context.colors.mist,
                               side: BorderSide(
-                                color: context.colors.mist.withValues(alpha: 0.25),
+                                color: context.colors.mist.withValues(
+                                  alpha: 0.25,
+                                ),
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                             ),
-                            icon: const Icon(Icons.playlist_play_rounded, size: 20),
+                            icon: const Icon(
+                              Icons.playlist_play_rounded,
+                              size: 20,
+                            ),
                             label: const Text('Play Next'),
                             onPressed: () {
                               provider.playNextAll(playlist.items);
@@ -131,9 +152,14 @@ class PlaylistDetailScreen extends StatelessWidget {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
                             ),
-                            icon: const Icon(Icons.play_arrow, color: Colors.white),
+                            icon: const Icon(
+                              Icons.play_arrow,
+                              color: Colors.white,
+                            ),
                             label: const Text(
                               'Play All',
                               style: TextStyle(color: Colors.white),
@@ -148,12 +174,27 @@ class PlaylistDetailScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                // A match still plays with the whole playlist queued.
+                TrackFilterBar(
+                  query: _query,
+                  onQueryChanged: (q) => setState(() => _query = q),
+                ),
+                if (shown.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Nothing matches your search.',
+                      style: TextStyle(
+                        color: context.colors.mist.withValues(alpha: 0.54),
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: playlist.items.length,
+                    itemCount: shown.length,
                     itemBuilder: (_, index) {
-                      final item = playlist.items[index];
+                      final item = shown[index];
                       return Dismissible(
                         key: ValueKey('${playlist.id}_${item.id}'),
                         direction: DismissDirection.endToStart,

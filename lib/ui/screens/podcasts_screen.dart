@@ -10,6 +10,7 @@ import '../../models/podcast_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
+import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart'
     show DownloadAllButton, DownloadButton, showTrackActions;
 
@@ -369,6 +370,7 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
   // whole show, so Next/Previous move between its episodes.
   List<AppMediaItem> _items = [];
   bool _isLoading = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -402,6 +404,13 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Episodes matching the search, by title (every episode's album is the
+    // show itself, so matching that would match them all).
+    final needle = _query.trim().toLowerCase();
+    final shown = [
+      for (var i = 0; i < _episodes.length; i++)
+        if (_episodes[i].title.toLowerCase().contains(needle)) i,
+    ];
     return Column(
       children: [
         // Header
@@ -475,6 +484,13 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
 
         Divider(color: context.colors.mist.withValues(alpha: 0.10)),
 
+        if (_episodes.isNotEmpty)
+          TrackFilterBar(
+            query: _query,
+            hintText: 'Search episodes...',
+            onQueryChanged: (q) => setState(() => _query = q),
+          ),
+
         Expanded(
           child: _isLoading
               ? Center(
@@ -492,10 +508,22 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                     ),
                   ),
                 )
+              : shown.isEmpty
+              ? Center(
+                  child: Text(
+                    'No episode matches your search.',
+                    style: TextStyle(
+                      color: context.colors.mist.withValues(alpha: 0.54),
+                    ),
+                  ),
+                )
               : ListView.builder(
                   controller: widget.scrollController,
-                  itemCount: _episodes.length,
-                  itemBuilder: (context, index) {
+                  itemCount: shown.length,
+                  itemBuilder: (context, pos) {
+                    // Index into the full list: playing a match still queues
+                    // the whole show from there.
+                    final index = shown[pos];
                     final episode = _episodes[index];
                     return ListTile(
                       title: Text(

@@ -13,6 +13,7 @@ import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/lyrics_view.dart';
+import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/saavn_service.dart';
@@ -41,6 +42,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _showLyrics = false;
   double? _dragMs;
   bool _isVideoMode = false;
+  bool _fullTitle = false;
   YoutubePlayerController? _youtubeController;
   StreamSubscription? _playbackSubscription;
   String? _currentVideoId;
@@ -448,13 +450,25 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              track.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
+                            // Two lines; tap for the whole name (podcast
+                            // titles run long).
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _fullTitle = !_fullTitle),
+                              child: AnimatedSize(
+                                duration: const Duration(milliseconds: 200),
+                                alignment: Alignment.topLeft,
+                                child: Text(
+                                  track.title,
+                                  // 4 at most: more pushes the controls off
+                                  // a small screen.
+                                  maxLines: _fullTitle ? 4 : 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -1475,6 +1489,7 @@ class _QueueBottomSheet extends StatefulWidget {
 class _QueueBottomSheetState extends State<_QueueBottomSheet> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
+  String _query = '';
 
   static const double _initialSize = 0.55;
   static const double _minSize = 0.35;
@@ -1624,6 +1639,14 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
             top: false,
             child: Consumer<MusicPlayerProvider>(
               builder: (_, queueProvider, _) {
+                final needle = _query.trim().toLowerCase();
+                final queue = queueProvider.queue;
+                final matches = [
+                  for (var i = 0; i < queue.length; i++)
+                    if (queue[i].title.toLowerCase().contains(needle) ||
+                        queue[i].artist.toLowerCase().contains(needle))
+                      i,
+                ];
                 return Column(
                   children: [
                     // Draggable header area (handle + title bar)
@@ -1722,8 +1745,27 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                         ],
                       ),
                     ),
+                    if (queueProvider.queue.length > 1)
+                      TrackFilterBar(
+                        query: _query,
+                        hintText: 'Search the queue...',
+                        onQueryChanged: (q) => setState(() => _query = q),
+                      ),
                     Expanded(
-                      child: queueProvider.queue.isEmpty
+                      child: _query.trim().isNotEmpty
+                          // Matches by title or artist, each still at its
+                          // own place in the queue (play, play next, remove).
+                          ? ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.only(bottom: 24),
+                              itemCount: matches.length,
+                              itemBuilder: (_, i) => _queueRow(
+                                queueProvider,
+                                matches[i],
+                                reorderable: false,
+                              ),
+                            )
+                          : queueProvider.queue.isEmpty
                           ? ListView(
                               controller: scrollController,
                               children: [
@@ -1751,96 +1793,8 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
                                 if (from < to) to -= 1;
                                 queueProvider.moveInQueue(from, to);
                               },
-                              itemBuilder: (itemContext, index) {
-                                final item = queueProvider.queue[index];
-                                final isCurrent =
-                                    index == queueProvider.currentIndex;
-                                return Dismissible(
-                                  key: ValueKey(item.id),
-                                  onDismissed: (_) =>
-                                      queueProvider.removeFromQueue(index),
-                                  background: Container(
-                                    color: Colors.red.withValues(alpha: 0.3),
-                                  ),
-                                  child: ListTile(
-                                    leading: Icon(
-                                      isCurrent
-                                          ? Icons.volume_up
-                                          : Icons.music_note,
-                                      color: isCurrent
-                                          ? AppTheme.accent
-                                          : Colors.white38,
-                                    ),
-                                    title: Text(
-                                      item.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: isCurrent
-                                            ? AppTheme.accent
-                                            : Colors.white,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      item.artist,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white60,
-                                      ),
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (!isCurrent)
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.playlist_play_rounded,
-                                              size: 22,
-                                            ),
-                                            color: Colors.white70,
-                                            tooltip: 'Play next',
-                                            onPressed: () {
-                                              queueProvider.moveQueueItemToNext(
-                                                index,
-                                              );
-                                              showCompactSnack(
-                                                ScaffoldMessenger.of(context),
-                                                'Playing next: ${item.title}',
-                                                icon:
-                                                    Icons.playlist_play_rounded,
-                                              );
-                                            },
-                                          ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.close_rounded,
-                                            size: 18,
-                                          ),
-                                          color: Colors.white38,
-                                          tooltip: 'Remove from queue',
-                                          onPressed: () => queueProvider
-                                              .removeFromQueue(index),
-                                        ),
-                                        ReorderableDragStartListener(
-                                          index: index,
-                                          child: const Padding(
-                                            padding: EdgeInsets.only(right: 4),
-                                            child: Icon(
-                                              Icons.drag_handle_rounded,
-                                              color: Colors.white38,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    onTap: () {
-                                      queueProvider.playQueueItem(index);
-                                      Navigator.pop(context);
-                                    },
-                                  ),
-                                );
-                              },
+                              itemBuilder: (itemContext, index) =>
+                                  _queueRow(queueProvider, index),
                             ),
                     ),
                   ],
@@ -1850,6 +1804,78 @@ class _QueueBottomSheetState extends State<_QueueBottomSheet> {
           ),
         );
       },
+    );
+  }
+
+  /// One queue entry. [reorderable]: with its drag handle (not in search
+  /// results, where the order shown isn't the queue's).
+  Widget _queueRow(
+    MusicPlayerProvider queueProvider,
+    int index, {
+    bool reorderable = true,
+  }) {
+    final item = queueProvider.queue[index];
+    final isCurrent = index == queueProvider.currentIndex;
+    return Dismissible(
+      key: ValueKey(item.id),
+      onDismissed: (_) => queueProvider.removeFromQueue(index),
+      background: Container(color: Colors.red.withValues(alpha: 0.3)),
+      child: ListTile(
+        leading: Icon(
+          isCurrent ? Icons.volume_up : Icons.music_note,
+          color: isCurrent ? AppTheme.accent : Colors.white38,
+        ),
+        // Two lines: podcast titles are long.
+        title: Text(
+          item.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: isCurrent ? AppTheme.accent : Colors.white),
+        ),
+        subtitle: Text(
+          item.artist,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white60),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isCurrent)
+              IconButton(
+                icon: const Icon(Icons.playlist_play_rounded, size: 22),
+                color: Colors.white70,
+                tooltip: 'Play next',
+                onPressed: () {
+                  queueProvider.moveQueueItemToNext(index);
+                  showCompactSnack(
+                    ScaffoldMessenger.of(context),
+                    'Playing next: ${item.title}',
+                    icon: Icons.playlist_play_rounded,
+                  );
+                },
+              ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18),
+              color: Colors.white38,
+              tooltip: 'Remove from queue',
+              onPressed: () => queueProvider.removeFromQueue(index),
+            ),
+            if (reorderable)
+              ReorderableDragStartListener(
+                index: index,
+                child: const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(Icons.drag_handle_rounded, color: Colors.white38),
+                ),
+              ),
+          ],
+        ),
+        onTap: () {
+          queueProvider.playQueueItem(index);
+          Navigator.pop(context);
+        },
+      ),
     );
   }
 }

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/media_item_model.dart';
+import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import 'add_to_playlist_sheet.dart';
+import 'track_filter_bar.dart';
 import 'track_tile.dart';
 
 /// A song list with multi-select: long-press a song to start selecting, tap
@@ -24,12 +26,17 @@ class SelectableTrackList extends StatefulWidget {
   /// cleanly above main navigation's floating mini player).
   final double? bottomPadding;
 
+  /// A search field above the list (a collection or folder screen). Tapping
+  /// a match still queues the whole list, from that song.
+  final bool searchable;
+
   const SelectableTrackList({
     super.key,
     required this.songs,
     this.header,
     this.onDelete,
     this.bottomPadding,
+    this.searchable = false,
   });
 
   @override
@@ -38,12 +45,17 @@ class SelectableTrackList extends StatefulWidget {
 
 class _SelectableTrackListState extends State<SelectableTrackList> {
   final Set<String> _selected = {};
+  String _query = '';
 
   bool get _selecting => _selected.isNotEmpty;
 
+  /// The songs shown: all of them, or the matches to [_query].
+  List<AppMediaItem> get _shown =>
+      widget.searchable ? filterTracks(widget.songs, _query) : widget.songs;
+
   /// In list order, and only songs still shown (a search may hide some).
   List<AppMediaItem> get _chosen =>
-      widget.songs.where((s) => _selected.contains(s.id)).toList();
+      _shown.where((s) => _selected.contains(s.id)).toList();
 
   void _toggle(AppMediaItem song) => setState(() {
     if (!_selected.remove(song.id)) _selected.add(song.id);
@@ -97,7 +109,7 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
 
   @override
   Widget build(BuildContext context) {
-    final songs = widget.songs;
+    final songs = _shown;
     final chosen = _chosen;
     return PopScope(
       canPop: !_selecting,
@@ -142,6 +154,21 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
             )
           else
             ?widget.header,
+          if (widget.searchable && !_selecting)
+            TrackFilterBar(
+              query: _query,
+              onQueryChanged: (q) => setState(() => _query = q),
+            ),
+          if (widget.searchable && songs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Nothing matches your search.',
+                style: TextStyle(
+                  color: context.colors.mist.withValues(alpha: 0.54),
+                ),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               padding: EdgeInsets.only(bottom: widget.bottomPadding ?? 110),
@@ -150,7 +177,7 @@ class _SelectableTrackListState extends State<SelectableTrackList> {
                 final song = songs[i];
                 final tile = TrackTile(
                   item: song,
-                  playlist: songs,
+                  playlist: widget.songs,
                   selected: _selecting ? _selected.contains(song.id) : null,
                   onTap: _selecting ? () => _toggle(song) : null,
                   onLongPress: () => _toggle(song),
@@ -229,7 +256,12 @@ class _SelectionBar extends StatelessWidget {
         children: [
           // Header Row: Close button, Count, and Select All / Deselect All button
           Padding(
-            padding: const EdgeInsets.only(left: 6, right: 10, top: 4, bottom: 4),
+            padding: const EdgeInsets.only(
+              left: 6,
+              right: 10,
+              top: 4,
+              bottom: 4,
+            ),
             child: Row(
               children: [
                 IconButton(
@@ -250,7 +282,10 @@ class _SelectionBar extends StatelessWidget {
                 TextButton.icon(
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.primarySoft,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: onSelectAll,
@@ -271,10 +306,7 @@ class _SelectionBar extends StatelessWidget {
               ],
             ),
           ),
-          Divider(
-            height: 1,
-            color: colors.mist.withValues(alpha: 0.08),
-          ),
+          Divider(height: 1, color: colors.mist.withValues(alpha: 0.08)),
           // Actions Row: Each button has explicit text, relevant icon, and distinct styling
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -366,10 +398,7 @@ class _SelectionActionButton extends StatelessWidget {
     } else {
       bgColor = colors.surface;
       fgColor = colors.mist;
-      border = Border.all(
-        color: colors.mist.withValues(alpha: 0.10),
-        width: 1,
-      );
+      border = Border.all(color: colors.mist.withValues(alpha: 0.10), width: 1);
     }
 
     return Tooltip(
@@ -395,8 +424,8 @@ class _SelectionActionButton extends StatelessWidget {
                   color: isPrimary
                       ? Colors.white
                       : isDestructive
-                          ? Colors.redAccent
-                          : AppTheme.primarySoft,
+                      ? Colors.redAccent
+                      : AppTheme.primarySoft,
                 ),
                 const SizedBox(width: 6),
                 Text(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
@@ -58,14 +59,18 @@ class LocalCollectionScreen extends StatelessWidget {
                 : () => context.read<MusicPlayerProvider>().shuffleAll(songs),
           ),
           IconButton(
-            icon: Icon(Icons.play_arrow_rounded, color: context.colors.accent, size: 28),
+            icon: Icon(
+              Icons.play_arrow_rounded,
+              color: context.colors.accent,
+              size: 28,
+            ),
             tooltip: 'Play all',
             onPressed: songs.isEmpty
                 ? null
                 : () => context.read<MusicPlayerProvider>().playTrack(
-                      songs.first,
-                      playlist: songs,
-                    ),
+                    songs.first,
+                    playlist: songs,
+                  ),
           ),
           PopupMenuButton<String>(
             icon: Icon(
@@ -108,8 +113,14 @@ class LocalCollectionScreen extends StatelessWidget {
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'play_next', child: Text('Play next')),
-              PopupMenuItem(value: 'add_to_queue', child: Text('Add to play queue')),
-              PopupMenuItem(value: 'add_to_playlist', child: Text('Add to playlist')),
+              PopupMenuItem(
+                value: 'add_to_queue',
+                child: Text('Add to play queue'),
+              ),
+              PopupMenuItem(
+                value: 'add_to_playlist',
+                child: Text('Add to playlist'),
+              ),
             ],
           ),
         ],
@@ -156,7 +167,11 @@ class LocalCollectionScreen extends StatelessWidget {
           ),
           const Divider(height: 1),
           Expanded(
-            child: SelectableTrackList(songs: songs, bottomPadding: 16),
+            child: SelectableTrackList(
+              songs: songs,
+              bottomPadding: 16,
+              searchable: true,
+            ),
           ),
         ],
       ),
