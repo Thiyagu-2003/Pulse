@@ -106,18 +106,21 @@ class CustomAudioHandler extends BaseAudioHandler
   bool _notificationEnabled = true;
   AppMediaItem? _currentAppMediaItem;
 
+  /// Off: the notification gets no buttons. The current song is still
+  /// published — the UI reads it from [mediaItem] — and Android shows the
+  /// notification anyway while playing; the provider pauses on leaving.
   void setNotificationEnabled(bool enabled) {
     if (_notificationEnabled == enabled) return;
     _notificationEnabled = enabled;
-    if (!enabled) {
-      mediaItem.add(null);
-    } else if (_currentAppMediaItem != null) {
-      final artPath = ArtworkService.instance.getCachedArtPath(_currentAppMediaItem!) ??
-          ArtworkService.instance.defaultArtPath;
-      mediaItem.add(_currentAppMediaItem!.toAudioServiceMediaItem(cachedArtPath: artPath));
-    }
     _broadcastState();
   }
+
+  /// Pulse was swiped away from recent apps (the provider decides whether
+  /// that stops playback).
+  Future<void> Function()? onAppRemoved;
+
+  @override
+  Future<void> onTaskRemoved() async => onAppRemoved?.call();
 
   /// True from a tap until the new track starts (or fails). Meanwhile the
   /// player still holds the *previous* source, paused — so its events must
@@ -187,8 +190,9 @@ class CustomAudioHandler extends BaseAudioHandler
                 MediaAction.seekBackward,
               }
             : const {},
-        androidCompactActionIndices:
-            _notificationEnabled ? const [0, 1, 2] : const [],
+        androidCompactActionIndices: _notificationEnabled
+            ? const [0, 1, 2]
+            : const [],
         processingState: const {
           ProcessingState.idle: AudioProcessingState.idle,
           ProcessingState.loading: AudioProcessingState.loading,
@@ -245,16 +249,14 @@ class CustomAudioHandler extends BaseAudioHandler
     _pauseRequested = false;
 
     _currentAppMediaItem = item;
-    // Immediately broadcast the mediaItem so the UI and notification update with track info.
-    // Using cached or default dark Pulse artwork guarantees MIUI/Android 13 will not render
-    // an unreadable cream card with low contrast.
-    if (_notificationEnabled) {
-      final initialArt = ArtworkService.instance.getCachedArtPath(item) ??
-          ArtworkService.instance.defaultArtPath;
-      mediaItem.add(item.toAudioServiceMediaItem(cachedArtPath: initialArt));
+    // Immediately broadcast the mediaItem so the UI and notification update
+    // with track info.
+    final initialArt = ArtworkService.instance.notificationArt(item);
+    mediaItem.add(item.toAudioServiceMediaItem(cachedArtPath: initialArt));
+    // Device songs have no web image for audio_service to fetch: their
+    // embedded art is extracted to a file and swapped in.
+    if (item.sourceType == MediaSourceType.local) {
       _resolveArtworkInBackground(item, load, initialArt);
-    } else {
-      mediaItem.add(null);
     }
 
     // Set state to loading immediately
@@ -341,13 +343,10 @@ class CustomAudioHandler extends BaseAudioHandler
         extras: item.extras,
       );
       _currentAppMediaItem = updatedItem;
-      if (_notificationEnabled) {
-        final artPath = ArtworkService.instance.getCachedArtPath(updatedItem) ??
-            ArtworkService.instance.defaultArtPath;
-        mediaItem.add(updatedItem.toAudioServiceMediaItem(cachedArtPath: artPath));
-      } else {
-        mediaItem.add(null);
-      }
+      final artPath = ArtworkService.instance.notificationArt(updatedItem);
+      mediaItem.add(
+        updatedItem.toAudioServiceMediaItem(cachedArtPath: artPath),
+      );
 
       // Set audio source based on URI type
       if (uri.startsWith('content://')) {
@@ -394,7 +393,8 @@ class CustomAudioHandler extends BaseAudioHandler
           // so skipping ten songs would download all ten in full.
           // On Windows, LockCachingAudioSource is unsupported by just_audio_windows
           // and headers proxy triggers AppContainer loopback restrictions.
-          final save = !Platform.isWindows &&
+          final save =
+              !Platform.isWindows &&
               item.sourceType.isOnline &&
               !NetworkStatus.instance.onMobileData;
           final AudioSource source = save
@@ -409,8 +409,8 @@ class CustomAudioHandler extends BaseAudioHandler
                   ),
                 )
               : (Platform.isWindows
-                  ? AudioSource.uri(Uri.parse(url))
-                  : AudioSource.uri(Uri.parse(url), headers: headers));
+                    ? AudioSource.uri(Uri.parse(url))
+                    : AudioSource.uri(Uri.parse(url), headers: headers));
           await _player
               .setAudioSource(source, preload: true, initialPosition: startAt)
               .timeout(const Duration(seconds: 10));
@@ -636,7 +636,8 @@ class CustomAudioHandler extends BaseAudioHandler
     if (currentItem == null && current == null) return;
     if (_player.audioSource == null ||
         _player.processingState == ProcessingState.idle) {
-      final track = currentItem ?? AppMediaItem.fromAudioServiceMediaItem(current!);
+      final track =
+          currentItem ?? AppMediaItem.fromAudioServiceMediaItem(current!);
       await playAppMediaItem(track, startAt: resumePositionFor?.call(track));
       return;
     }
@@ -684,18 +685,28 @@ class CustomAudioHandler extends BaseAudioHandler
   @override
   Future<void> setSpeed(double speed) => _player.setSpeed(speed);
 
-  void _resolveArtworkInBackground(AppMediaItem item, int generation, String? initialPath) {
-    ArtworkService.instance.resolveArtwork(item).then((resolvedPath) {
-      if (generation == _loadGeneration &&
-          _notificationEnabled &&
-          _currentAppMediaItem?.id == item.id &&
-          resolvedPath != null &&
-          resolvedPath != initialPath) {
-        mediaItem.add(item.toAudioServiceMediaItem(cachedArtPath: resolvedPath));
-      }
-    }).catchError((e) {
-      debugPrint('Background artwork resolution error: $e');
-    });
+  void _resolveArtworkInBackground(
+    AppMediaItem item,
+    int generation,
+    String? initialPath,
+  ) {
+    ArtworkService.instance
+        .resolveArtwork(item)
+        .then((resolvedPath) {
+          if (generation == _loadGeneration &&
+              _currentAppMediaItem?.id == item.id &&
+              resolvedPath != null &&
+              resolvedPath != initialPath) {
+            mediaItem.add(
+              _currentAppMediaItem!.toAudioServiceMediaItem(
+                cachedArtPath: resolvedPath,
+              ),
+            );
+          }
+        })
+        .catchError((e) {
+          debugPrint('Background artwork resolution error: $e');
+        });
   }
 
   AudioPlayer get player => _player;

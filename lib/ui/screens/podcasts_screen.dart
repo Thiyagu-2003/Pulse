@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+
 import '../../services/podcast_service.dart';
+import '../../services/storage_service.dart';
+import '../../models/media_item_model.dart';
 import '../../models/podcast_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
+import '../widgets/track_tile.dart' show showTrackActions;
 
 class PodcastsScreen extends StatefulWidget {
   const PodcastsScreen({super.key});
@@ -19,7 +23,12 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
   final PodcastService _podcastService = PodcastService();
   final TextEditingController _searchController = TextEditingController();
 
+  final StorageService _storage = StorageService();
+
   List<PodcastChannel> _channels = [];
+  late List<PodcastChannel> _pinned = _storage.getPodcastHome();
+  // Search results replace the home (pinned + top shows) until cleared.
+  bool _searching = false;
   bool _isLoading = true;
   // Bumped per request; a slower earlier response must not overwrite a newer one.
   int _request = 0;
@@ -31,7 +40,10 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
   }
 
   Future<void> _loadTopPodcasts() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _searching = false;
+    });
     final request = ++_request;
     final results = await _podcastService.getTopPodcasts();
     if (mounted && request == _request) {
@@ -43,8 +55,11 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
   }
 
   Future<void> _searchPodcasts(String query) async {
-    if (query.trim().isEmpty) return;
-    setState(() => _isLoading = true);
+    if (query.trim().isEmpty) return _loadTopPodcasts();
+    setState(() {
+      _isLoading = true;
+      _searching = true;
+    });
     final request = ++_request;
     final results = await _podcastService.searchPodcasts(query);
     if (mounted && request == _request) {
@@ -89,6 +104,16 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                     Icons.podcasts,
                     color: podcastOrange(context),
                   ),
+                  suffixIcon: _searching
+                      ? IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Clear search',
+                          onPressed: () {
+                            _searchController.clear();
+                            _loadTopPodcasts();
+                          },
+                        )
+                      : null,
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 14),
                 ),
@@ -105,7 +130,7 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                       size: 50.0,
                     ),
                   )
-                : _channels.isEmpty
+                : _channels.isEmpty && (_searching || _pinned.isEmpty)
                 ? Center(
                     child: Text(
                       'No podcasts found.',
@@ -114,23 +139,15 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
                       ),
                     ),
                   )
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate:
-                        // Cards up to ~220px: two across on a phone, as
-                        // many as fit on a wide (desktop) window rather
-                        // than two giant ones.
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 220,
-                          childAspectRatio: 0.75,
-                          crossAxisSpacing: 14,
-                          mainAxisSpacing: 14,
-                        ),
-                    itemCount: _channels.length,
-                    itemBuilder: (context, index) {
-                      final channel = _channels[index];
-                      return _buildPodcastCard(channel);
-                    },
+                : CustomScrollView(
+                    slivers: [
+                      if (!_searching && _pinned.isNotEmpty) ...[
+                        _sectionTitle('Your shows'),
+                        _grid(_pinned),
+                        _sectionTitle('Top shows'),
+                      ],
+                      _grid(_channels),
+                    ],
                   ),
           ),
         ],
@@ -138,7 +155,97 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
     );
   }
 
+  Widget _sectionTitle(String text) => SliverPadding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+    sliver: SliverToBoxAdapter(
+      child: Text(text, style: Theme.of(context).textTheme.titleLarge),
+    ),
+  );
+
+  Widget _grid(List<PodcastChannel> channels) => SliverPadding(
+    padding: const EdgeInsets.all(16),
+    sliver: SliverGrid.builder(
+      // Cards up to ~220px: two across on a phone, as many as fit on a
+      // wide (desktop) window rather than two giant ones.
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
+        childAspectRatio: 0.75,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+      ),
+      itemCount: channels.length,
+      itemBuilder: (context, index) => _buildPodcastCard(channels[index]),
+    ),
+  );
+
+  bool _isPinned(PodcastChannel c) => _pinned.any((p) => p.id == c.id);
+
+  void _showPodcastMenu(PodcastChannel channel) {
+    final pinned = _isPinned(channel);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.colors.surface,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                channel.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(channel.author, maxLines: 1),
+            ),
+            ListTile(
+              leading: Icon(
+                pinned ? Icons.remove_circle_outline : Icons.add_home_outlined,
+              ),
+              title: Text(
+                pinned ? 'Remove from Podcasts home' : 'Add to Podcasts home',
+              ),
+              onTap: () {
+                Navigator.pop(sheet);
+                setState(() {
+                  _pinned = pinned
+                      ? _pinned.where((p) => p.id != channel.id).toList()
+                      : [channel, ..._pinned];
+                });
+                _storage.setPodcastHome(_pinned);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      pinned
+                          ? 'Removed from Podcasts home'
+                          : 'Added "${channel.title}" to Podcasts home',
+                    ),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Show episodes'),
+              onTap: () {
+                Navigator.pop(sheet);
+                _openPodcastDetails(channel);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPodcastCard(PodcastChannel channel) {
+    return GestureDetector(
+      onLongPress: () => _showPodcastMenu(channel),
+      onSecondaryTap: () => _showPodcastMenu(channel),
+      child: _podcastCard(channel),
+    );
+  }
+
+  Widget _podcastCard(PodcastChannel channel) {
     return GlassContainer(
       padding: EdgeInsets.zero,
       onTap: () => _openPodcastDetails(channel),
@@ -257,6 +364,9 @@ class _PodcastEpisodesSheet extends StatefulWidget {
 
 class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
   List<PodcastEpisode> _episodes = [];
+  // The episodes as playable items, in list order: playing one queues the
+  // whole show, so Next/Previous move between its episodes.
+  List<AppMediaItem> _items = [];
   bool _isLoading = true;
 
   @override
@@ -272,18 +382,25 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
     if (mounted) {
       setState(() {
         _episodes = episodes;
+        _items = [
+          for (final e in episodes)
+            widget.podcastService.episodeToMediaItem(e, widget.channel),
+        ];
         _isLoading = false;
       });
     }
   }
 
+  void _playFrom(int index) {
+    context.read<MusicPlayerProvider>().playTrack(
+      _items[index],
+      playlist: _items,
+    );
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final playerProvider = Provider.of<MusicPlayerProvider>(
-      context,
-      listen: false,
-    );
-
     return Column(
       children: [
         // Header
@@ -334,6 +451,18 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                   ],
                 ),
               ),
+              if (_items.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: podcastOrange(context),
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () => _playFrom(0),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Play all'),
+                ),
+              ],
             ],
           ),
         ),
@@ -378,17 +507,26 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                           color: context.colors.mist.withValues(alpha: 0.54),
                         ),
                       ),
-                      trailing: Icon(
-                        Icons.play_circle_fill,
-                        color: podcastOrange(context),
-                        size: 36,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.play_circle_fill,
+                            color: podcastOrange(context),
+                            size: 36,
+                          ),
+                          // The song menu: play next, add to queue/playlist.
+                          IconButton(
+                            icon: const Icon(Icons.more_vert_rounded),
+                            tooltip: 'More actions',
+                            onPressed: () =>
+                                showTrackActions(context, _items[index]),
+                          ),
+                        ],
                       ),
-                      onTap: () {
-                        final mediaItem = widget.podcastService
-                            .episodeToMediaItem(episode, widget.channel);
-                        playerProvider.playTrack(mediaItem);
-                        Navigator.pop(context);
-                      },
+                      onTap: () => _playFrom(index),
+                      onLongPress: () =>
+                          showTrackActions(context, _items[index]),
                     );
                   },
                 ),

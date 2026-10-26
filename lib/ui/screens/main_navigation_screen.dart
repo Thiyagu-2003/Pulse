@@ -42,7 +42,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      context.read<MusicPlayerProvider>().saveCurrentPosition();
+      context.read<MusicPlayerProvider>().onAppBackgrounded();
       PlatformBridge.setLauncherIcon(
         dark: context.read<MusicPlayerProvider>().darkLauncherIcon,
       );
@@ -63,7 +63,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     // Native parts (widget, notifications) read the icon style from their
     // own store; keep it in step with the setting on every start.
     PlatformBridge.setIconStyle(dark: provider.darkLauncherIcon);
-    PlatformBridge.setStopOnClose(stop: provider.stopPlaybackOnClose);
     // This shell outlives every tab and the Now Playing route, so it is the
     // one place guaranteed to be mounted whenever playback fails.
     _errorSubscription = context
@@ -139,7 +138,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   @override
   Widget build(BuildContext context) {
-    final voiceEnabled = context.watch<MusicPlayerProvider>().voiceControlEnabled;
+    final voiceEnabled = context
+        .watch<MusicPlayerProvider>()
+        .voiceControlEnabled;
 
     return Scaffold(
       body: Stack(
@@ -257,11 +258,7 @@ class _VoiceFabState extends State<_VoiceFab>
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.mic_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
+            child: const Icon(Icons.mic_rounded, color: Colors.white, size: 24),
           ),
         );
       },

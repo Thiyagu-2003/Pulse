@@ -8,6 +8,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../models/home_sections.dart';
 import '../models/media_item_model.dart';
 import '../models/playlist.dart';
+import '../models/podcast_model.dart';
 
 /// Which YouTube audio stream to play. Downloads always keep AAC in MP4,
 /// which is the safest thing to leave on disk.
@@ -325,6 +326,24 @@ class StorageService {
   }
 
   Future<void> clearRecentSearches() => _settingsBox.delete(recentSearchesKey);
+
+  /// Shows pinned to the Podcasts home (long-press a show), newest first.
+  List<PodcastChannel> getPodcastHome() {
+    final stored = _settingsBox.get('podcast_home');
+    if (stored == null) return [];
+    try {
+      return (jsonDecode(stored) as List)
+          .map((j) => PodcastChannel.fromJson(j as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> setPodcastHome(List<PodcastChannel> shows) => _settingsBox.put(
+    'podcast_home',
+    jsonEncode(shows.map((s) => s.toJson()).toList()),
+  );
 
   /// Downloads — kept separate from favorites. They answer different
   /// questions ("do I like this" vs "is this on disk") and downloads own a

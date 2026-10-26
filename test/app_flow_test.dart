@@ -46,6 +46,8 @@ void main() {
       await Hive.openBox<String>(box);
     }
     await Hive.openBox<int>(StorageService.positionsBox);
+    // Autoplay would fetch JioSaavn radio over the network.
+    await storage.setFlag(StorageService.autoplayKey, false);
     for (var i = 0; i < 6; i++) {
       await storage.addToHistory(_song('h$i', i));
     }

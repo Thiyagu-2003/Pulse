@@ -35,6 +35,21 @@ void main() {
     expect(restored.sourceType, MediaSourceType.youtube);
   });
 
+  test('keeps its web art when the notification gets a cached file', () {
+    final broadcast = track.toAudioServiceMediaItem(
+      cachedArtPath: '/data/files/pulse_artwork/default_album_art.jpg',
+    );
+    expect(broadcast.artUri!.scheme, 'file');
+    expect(
+      AppMediaItem.fromAudioServiceMediaItem(broadcast).artUri,
+      track.artUri,
+    );
+    // Saved by an older build: the placeholder file is not the track's art.
+    final poisoned = track.toJson()
+      ..['artUri'] = 'file:///data/files/pulse_artwork/default_album_art.jpg';
+    expect(AppMediaItem.fromJson(poisoned).artUri, isNull);
+  });
+
   test('survives the JSON round-trip used by favorites and history', () {
     final restored =
         AppMediaItem.fromJson(jsonDecode(jsonEncode(track.toJson())));

@@ -74,7 +74,7 @@ void main() {
     expect(find.text('2 selected'), findsOneWidget);
     expect(provider.currentTrack, isNull);
 
-    await tester.tap(find.byTooltip('Add to queue'));
+    await tester.tap(find.byTooltip('Add selected songs to queue'));
     await tester.pump();
     // In list order, not tap order.
     expect(provider.queue.map((s) => s.id), ['1', '3']);
@@ -82,7 +82,7 @@ void main() {
 
     await tester.longPress(find.text('Song 0'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Select all'));
+    await tester.tap(find.text('Select all'));
     await tester.pump();
     expect(find.text('5 selected'), findsOneWidget);
     await tester.tap(find.byTooltip('Cancel selection'));
@@ -108,10 +108,12 @@ void main() {
     expect(find.text('1 selected'), findsOneWidget);
     await tester.tap(find.text('Song 4'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Delete'));
+    // Last in the action row, which scrolls sideways.
+    await tester.ensureVisible(find.byTooltip('Delete selected songs'));
+    await tester.tap(find.byTooltip('Delete selected songs'));
     await tester.pumpAndSettle();
     expect(find.text('Delete 2 downloads?'), findsOneWidget);
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete').last); // the dialog's, not the bar's
     await tester.pumpAndSettle();
     expect(deleted!.map((s) => s.id), ['0', '4']);
     await tester.pump(const Duration(seconds: 3));

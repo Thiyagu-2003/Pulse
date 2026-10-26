@@ -66,7 +66,6 @@ class AppMediaItem {
 
   MediaItem toAudioServiceMediaItem({String? cachedArtPath}) {
     final artPath = cachedArtPath ??
-        (extras?['artCacheFile'] as String?) ??
         (artUri != null && artUri!.startsWith('file://') ? Uri.parse(artUri!).toFilePath() : null);
 
     Uri? resolvedArtUri;
@@ -94,7 +93,9 @@ class AppMediaItem {
         ...?extras,
         'sourceType': sourceType.name,
         'streamUrl': streamUrl,
-        if (artPath != null && artPath.isNotEmpty) 'artCacheFile': artPath,
+        // The broadcast artUri is a local file for the notification; this
+        // keeps the item's own (web) art for the UI and anything that saves it.
+        'artUrl': artUri,
       },
     );
   }
@@ -105,7 +106,9 @@ class AppMediaItem {
       title: item.title,
       artist: item.artist ?? 'Unknown Artist',
       album: item.album ?? 'Unknown Album',
-      artUri: item.artUri?.toString(),
+      artUri: item.extras != null && item.extras!.containsKey('artUrl')
+          ? item.extras!['artUrl'] as String?
+          : _savedArt(item.artUri?.toString()),
       duration: item.duration,
       streamUrl: item.extras?['streamUrl'] as String?,
       sourceType: MediaSourceType.values.firstWhere(
@@ -138,12 +141,18 @@ class AppMediaItem {
     return stored == 'YouTube Music' ? onlineAlbumLabel : stored;
   }
 
+  /// Items saved from Now Playing before 'artUrl' existed stored the
+  /// notification's cached/placeholder file as their art; that file is not
+  /// the track's art, so it's dropped and the art is resolved afresh.
+  static String? _savedArt(String? stored) =>
+      stored != null && stored.contains('/pulse_artwork/') ? null : stored;
+
   factory AppMediaItem.fromJson(Map<String, dynamic> json) => AppMediaItem(
     id: json['id'] as String,
     title: json['title'] as String,
     artist: json['artist'] as String,
     album: _displayAlbum(json['album'] as String?),
-    artUri: json['artUri'] as String?,
+    artUri: _savedArt(json['artUri'] as String?),
     streamUrl: json['streamUrl'] as String?,
     duration: json['durationMs'] != null
         ? Duration(milliseconds: json['durationMs'] as int)

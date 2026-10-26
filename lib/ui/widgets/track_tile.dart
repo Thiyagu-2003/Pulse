@@ -94,14 +94,15 @@ class TrackTile extends StatelessWidget {
                               _buildPlaceholder(context),
                         )
                       : item.sourceType == MediaSourceType.local
-                          ? LocalArtwork(
-                              id: (item.extras?['songId'] as int?) ??
-                                  int.tryParse(item.id),
-                              width: 50,
-                              height: 50,
-                              fallback: _buildPlaceholder(context),
-                            )
-                          : _buildPlaceholder(context),
+                      ? LocalArtwork(
+                          id:
+                              (item.extras?['songId'] as int?) ??
+                              int.tryParse(item.id),
+                          width: 50,
+                          height: 50,
+                          fallback: _buildPlaceholder(context),
+                        )
+                      : _buildPlaceholder(context),
                 ),
                 // The pulse sits on the artwork of the track you can hear.
                 if (isPlayingCurrent)
@@ -191,13 +192,14 @@ class TrackTile extends StatelessWidget {
                         // without moving your eyes to a toast.
                         icon: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 260),
-                          transitionBuilder: (child, animation) => ScaleTransition(
-                            scale: CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeOutBack,
-                            ),
-                            child: child,
-                          ),
+                          transitionBuilder: (child, animation) =>
+                              ScaleTransition(
+                                scale: CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutBack,
+                                ),
+                                child: child,
+                              ),
                           child: Icon(
                             isFav
                                 ? Icons.favorite_rounded
@@ -209,8 +211,9 @@ class TrackTile extends StatelessWidget {
                             size: 20,
                           ),
                         ),
-                        tooltip:
-                            isFav ? 'Remove from favorites' : 'Add to favorites',
+                        tooltip: isFav
+                            ? 'Remove from favorites'
+                            : 'Add to favorites',
                         onPressed: () => playerProvider.toggleFavorite(item),
                       ),
                       IconButton(
@@ -446,8 +449,10 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                   }
                 },
               ),
-            // Android-only: set song as ringtone / notification / alarm.
-            if (Platform.isAndroid)
+            // Android-only: set song as ringtone / notification / alarm. Not
+            // a podcast episode: an hour-long web stream, no file to cut.
+            if (Platform.isAndroid &&
+                item.sourceType != MediaSourceType.podcast)
               ListTile(
                 leading: Icon(
                   Icons.ring_volume_rounded,
