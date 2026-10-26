@@ -184,9 +184,8 @@ class TrackTile extends StatelessWidget {
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Downloads go through YouTube extraction; a podcast id is a
-                      // hash of its URL, so that could only ever fail.
-                      if (item.sourceType.isOnline) DownloadButton(item: item),
+                      if (item.sourceType.isDownloadable)
+                        DownloadButton(item: item),
                       IconButton(
                         // Scales up as it fills in, so the tap has a result you can see
                         // without moving your eyes to a toast.
@@ -375,7 +374,8 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
             ),
             // A downloaded song — including the saved copy itself, as listed
             // in the Downloads tab — can always be removed.
-            if (item.sourceType.isOnline || provider.isDownloaded(item.id))
+            if (item.sourceType.isDownloadable ||
+                provider.isDownloaded(item.id))
               provider.isDownloaded(item.id)
                   ? ListTile(
                       leading: Icon(

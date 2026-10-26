@@ -28,6 +28,20 @@ class MusicPlayerProvider extends ChangeNotifier {
   final YoutubeService ytService = YoutubeService();
 
   final QueueState _queueState = QueueState();
+
+  /// The saved session (StorageService.saveSession) the queue belongs to: a
+  /// new one each time the queue is replaced by another list.
+  String _sessionKey = _newSessionKey();
+  static String _newSessionKey() =>
+      DateTime.now().microsecondsSinceEpoch.toString().padLeft(20, '0');
+
+  void _replaceQueue(List<AppMediaItem> tracks, AppMediaItem current) {
+    _queueState.replaceWith(tracks, current);
+    _sessionKey = _newSessionKey();
+  }
+
+  void _saveSession() =>
+      _storageService.saveSession(_sessionKey, _queueState.items);
   QueueRepeat _repeat = QueueRepeat.off;
 
   AppMediaItem? _currentTrack;
@@ -228,9 +242,12 @@ class MusicPlayerProvider extends ChangeNotifier {
     });
   }
 
+  /// Also saves the queue: edits since the song started (queued songs,
+  /// reorders) survive the app being closed.
   void saveCurrentPosition() {
     final track = _currentTrack;
     if (track == null) return;
+    _saveSession();
     final pos = _audioHandler.player.position;
     if (pos > Duration.zero) {
       _lastSavedPosition = pos;
@@ -249,7 +266,17 @@ class MusicPlayerProvider extends ChangeNotifier {
           ? download
           : lastTrack;
       _currentTrack = track;
-      _queueState.replaceWith([track], track);
+      // Back in the queue it was playing in, at the same song.
+      final session = _storageService.sessionOf(lastTrack.id);
+      final queue = session == null
+          ? null
+          : _storageService.getSession(session);
+      if (queue != null && queue.any((t) => t.id == track.id)) {
+        _queueState.replaceWith(queue, track);
+        _sessionKey = session!;
+      } else {
+        _replaceQueue([track], track);
+      }
       final resumeAt = _resumePositionFor(track) ?? Duration.zero;
       _lastSavedPosition = resumeAt;
       // Always: the handler's play() resumes this item, and has nothing to
@@ -360,11 +387,12 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   List<AppMediaItem> getDownloads() => _storageService.getDownloads();
 
-  /// Online tracks in [items] not yet downloaded (or downloading).
+  /// Online songs and podcast episodes in [items] not yet downloaded (or
+  /// downloading).
   List<AppMediaItem> notDownloaded(List<AppMediaItem> items) => items
       .where(
         (t) =>
-            t.sourceType.isOnline &&
+            t.sourceType.isDownloadable &&
             !isDownloaded(t.id) &&
             !isDownloading(t.id),
       )
@@ -500,7 +528,7 @@ class MusicPlayerProvider extends ChangeNotifier {
           _queueState.items.every((t) => playlist.any((p) => p.isSameAs(t)));
 
       if (!isSamePlaylist) {
-        _queueState.replaceWith(playlist, requested);
+        _replaceQueue(playlist, requested);
         if (!isPlaying || !isSameTrack) {
           await _play(requested);
         } else {
@@ -514,7 +542,7 @@ class MusicPlayerProvider extends ChangeNotifier {
       // Playing a single song directly: start a clean queue with this song,
       // so it does NOT retain leftover tracks from any previous playlist!
       if (!isSameTrack || _queueState.length > 1) {
-        _queueState.replaceWith([requested], requested);
+        _replaceQueue([requested], requested);
         await _play(requested);
         return;
       }
@@ -530,6 +558,28 @@ class MusicPlayerProvider extends ChangeNotifier {
     }
 
     await _play(requested);
+  }
+
+  /// A song tapped in Recently played / History: it continues in the queue
+  /// it was played in (playlist, album, show, folder…) and, through [_play],
+  /// where it was left. Songs with no saved session play as [playTrack]
+  /// would, with [fallback] as the queue.
+  Future<void> resumeFromHistory(
+    AppMediaItem item, {
+    List<AppMediaItem>? fallback,
+  }) async {
+    if (_currentTrack?.id == item.id) {
+      if (!isPlaying) await _audioHandler.play();
+      return;
+    }
+    final session = _storageService.sessionOf(item.id);
+    final queue = session == null ? null : _storageService.getSession(session);
+    if (queue == null || !queue.any((t) => t.id == item.id)) {
+      return playTrack(item, playlist: fallback);
+    }
+    _queueState.replaceWith(queue, item);
+    _sessionKey = session!;
+    await _play(item);
   }
 
   /// Move a queued item to play immediately after the current track
@@ -569,7 +619,7 @@ class MusicPlayerProvider extends ChangeNotifier {
 
     // Each podcast show keeps its own speed; songs keep the song speed.
     _audioHandler.setSpeed(
-      track.sourceType == MediaSourceType.podcast
+      isPodcast(track)
           ? _storageService.getPodcastSpeed(track.album) ?? 1.0
           : _songSpeed,
     );
@@ -578,8 +628,10 @@ class MusicPlayerProvider extends ChangeNotifier {
     _audioHandler.playAppMediaItem(track, startAt: resumeAt);
 
     // History keeps the online track, not the on-disk copy: the copy stops
-    // working once the download is removed.
-    _storageService.addToHistory(online);
+    // working once the download is removed. It also notes the queue (session)
+    // it played in, so Recently played can continue there.
+    _storageService.addToHistory(online, session: _sessionKey);
+    _saveSession();
 
     _extendWithRadio(online);
     _prefetchUpcoming();
@@ -691,8 +743,12 @@ class MusicPlayerProvider extends ChangeNotifier {
   }
 
   Future<void> _extendWithRadio(AppMediaItem track) async {
+    // A downloaded song too, but not a downloaded podcast episode.
+    final origin = track.extras?[originKey];
     final online =
-        track.sourceType.isOnline || track.extras?[originKey] != null;
+        track.sourceType.isOnline ||
+        origin == MediaSourceType.saavn.name ||
+        origin == MediaSourceType.youtube.name;
     if (!autoplay ||
         !online ||
         _repeat != QueueRepeat.off ||
@@ -730,8 +786,8 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// once); for songs, until the app closes.
   Future<void> setSpeed(double speed) async {
     final track = _currentTrack;
-    if (track?.sourceType == MediaSourceType.podcast) {
-      await _storageService.setPodcastSpeed(track!.album, speed);
+    if (track != null && isPodcast(track)) {
+      await _storageService.setPodcastSpeed(track.album, speed);
     } else {
       _songSpeed = speed;
     }
@@ -782,23 +838,23 @@ class MusicPlayerProvider extends ChangeNotifier {
     // Downloads record their origin. Older ones don't: those were all
     // YouTube, recognisable by the 11-character video id.
     final origin = item.extras?[originKey] as String? ?? _originFromId(item.id);
-    final source = origin == MediaSourceType.saavn.name
-        ? MediaSourceType.saavn
-        : origin == MediaSourceType.youtube.name
-        ? MediaSourceType.youtube
-        : null;
+    final source = MediaSourceType.values
+        .where((s) => s.isDownloadable && s.name == origin)
+        .firstOrNull;
     if (source == null) return item;
     return AppMediaItem(
       id: item.id,
       title: item.title,
       artist: item.artist,
-      album: item.album == 'Unknown Album' ? onlineAlbumLabel : item.album,
+      album: item.album == 'Unknown Album' && source.isOnline
+          ? onlineAlbumLabel
+          : item.album,
       artUri: item.artUri,
-      // JioSaavn links don't expire, so the one recorded still plays; YouTube
-      // ones do, and are looked up again.
-      streamUrl: source == MediaSourceType.saavn
-          ? (item.extras?[originUrlKey] as String?)
-          : null,
+      // JioSaavn and podcast links don't expire, so the one recorded still
+      // plays; YouTube ones do, and are looked up again.
+      streamUrl: source == MediaSourceType.youtube
+          ? null
+          : (item.extras?[originUrlKey] as String?),
       duration: item.duration,
       sourceType: source,
     );
@@ -820,6 +876,12 @@ class MusicPlayerProvider extends ChangeNotifier {
   /// Keys in a download record's extras naming its online source.
   static const originKey = 'origin';
   static const originUrlKey = 'originUrl';
+
+  /// A podcast episode, streamed or its downloaded copy (which plays as a
+  /// device file but keeps the show's speed and the podcast controls).
+  static bool isPodcast(AppMediaItem track) =>
+      track.sourceType == MediaSourceType.podcast ||
+      track.extras?[originKey] == MediaSourceType.podcast.name;
 
   /// Drops back into tracks where you left off if there is a saved playback position.
   Duration? _resumePositionFor(AppMediaItem track) {

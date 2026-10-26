@@ -1,6 +1,7 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../models/media_folder.dart';
 import '../../providers/music_player_provider.dart';
 import '../theme/app_theme.dart';
@@ -142,8 +143,14 @@ class FolderSongsScreen extends StatelessWidget {
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'play_next', child: Text('Play next')),
-              PopupMenuItem(value: 'add_to_queue', child: Text('Add to play queue')),
-              PopupMenuItem(value: 'add_to_playlist', child: Text('Add to playlist')),
+              PopupMenuItem(
+                value: 'add_to_queue',
+                child: Text('Add to play queue'),
+              ),
+              PopupMenuItem(
+                value: 'add_to_playlist',
+                child: Text('Add to playlist'),
+              ),
             ],
           ),
         ],
@@ -152,7 +159,11 @@ class FolderSongsScreen extends StatelessWidget {
       bottomNavigationBar: const MiniPlayer(useSafeArea: true),
       // Queue only this folder, so a call recording can't run on into the
       // next one just because it happened to be next on disk.
-      body: SelectableTrackList(songs: folder.items, bottomPadding: 16),
+      body: SelectableTrackList(
+        songs: folder.items,
+        bottomPadding: 16,
+        searchable: true,
+      ),
     );
   }
 }

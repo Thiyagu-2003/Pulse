@@ -152,4 +152,21 @@ void main() {
     expect(result!.$1, 'My mix');
     expect(result!.$2.map((s) => s.id), ['o0', 'o2']);
   });
+
+  testWidgets('search within a list; a match plays with the whole list queued',
+      (tester) async {
+    await tester.pumpWidget(
+      host(SelectableTrackList(songs: songs, searchable: true)),
+    );
+    await tester.enterText(find.byType(TextField), 'song 3');
+    await tester.pump();
+    expect(find.text('Song 3'), findsOneWidget);
+    expect(find.text('Song 1'), findsNothing);
+
+    await tester.tap(find.text('Song 3'));
+    await tester.pump();
+    expect(provider.currentTrack?.id, '3');
+    expect(provider.queue.length, 5, reason: 'the whole list, not the match');
+    await tester.pump(const Duration(seconds: 3)); // snackbar timers
+  });
 }

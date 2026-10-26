@@ -315,13 +315,16 @@ class _QuickPicks extends StatelessWidget {
             .where((t) => isSongLength(t.duration))
             .take(8)
             .toList();
-        return items.isEmpty ? const SizedBox(height: 8) : _grid(context, items);
+        return items.isEmpty
+            ? const SizedBox(height: 8)
+            : _grid(context, items);
       },
     );
   }
 
   Widget _grid(BuildContext context, List<AppMediaItem> items) {
-    final isList = context.watch<MusicPlayerProvider>().onlineViewMode == 'list';
+    final isList =
+        context.watch<MusicPlayerProvider>().onlineViewMode == 'list';
     if (isList) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -385,9 +388,10 @@ class _QuickPickTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.read<MusicPlayerProvider>().playTrack(
+        // Recently played: continues in the queue it was played in.
+        onTap: () => context.read<MusicPlayerProvider>().resumeFromHistory(
           item,
-          playlist: playlist,
+          fallback: playlist,
         ),
         onLongPress: () => showTrackActions(context, item),
         child: SizedBox(
@@ -707,8 +711,7 @@ class _CardsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SectionTitle(section.title),
-          for (final card in section.cards)
-            _PlaylistListTile(card: card),
+          for (final card in section.cards) _PlaylistListTile(card: card),
         ],
       );
     }
@@ -903,14 +906,19 @@ void _showOnlineCardBottomSheet(BuildContext context, HomeCard card) {
                           card.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Online collection',
                           style: TextStyle(
                             fontSize: 12,
-                            color: sheetContext.colors.mist.withValues(alpha: 0.6),
+                            color: sheetContext.colors.mist.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -921,16 +929,24 @@ void _showOnlineCardBottomSheet(BuildContext context, HomeCard card) {
             ),
             const Divider(height: 1),
             ListTile(
-              leading: Icon(Icons.playlist_add_rounded, color: sheetContext.colors.accent),
+              leading: Icon(
+                Icons.playlist_add_rounded,
+                color: sheetContext.colors.accent,
+              ),
               title: const Text('Add to playlist'),
-              subtitle: const Text('Add all songs in this collection to a playlist'),
+              subtitle: const Text(
+                'Add all songs in this collection to a playlist',
+              ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _handleOnlineCardAction(context, 'add_to_playlist', card);
               },
             ),
             ListTile(
-              leading: Icon(Icons.play_arrow_rounded, color: sheetContext.colors.accent),
+              leading: Icon(
+                Icons.play_arrow_rounded,
+                color: sheetContext.colors.accent,
+              ),
               title: const Text('Play collection'),
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -938,7 +954,10 @@ void _showOnlineCardBottomSheet(BuildContext context, HomeCard card) {
               },
             ),
             ListTile(
-              leading: Icon(Icons.shuffle_rounded, color: sheetContext.colors.accent),
+              leading: Icon(
+                Icons.shuffle_rounded,
+                color: sheetContext.colors.accent,
+              ),
               title: const Text('Shuffle collection'),
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -946,7 +965,10 @@ void _showOnlineCardBottomSheet(BuildContext context, HomeCard card) {
               },
             ),
             ListTile(
-              leading: Icon(Icons.playlist_play_rounded, color: sheetContext.colors.accent),
+              leading: Icon(
+                Icons.playlist_play_rounded,
+                color: sheetContext.colors.accent,
+              ),
               title: const Text('Play next'),
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -954,7 +976,10 @@ void _showOnlineCardBottomSheet(BuildContext context, HomeCard card) {
               },
             ),
             ListTile(
-              leading: Icon(Icons.queue_music_rounded, color: sheetContext.colors.accent),
+              leading: Icon(
+                Icons.queue_music_rounded,
+                color: sheetContext.colors.accent,
+              ),
               title: const Text('Add to play queue'),
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -981,7 +1006,9 @@ class _PlaylistListTile extends StatelessWidget {
         builder: (context, snapshot) {
           final tracks = snapshot.data;
           return _Artwork(
-            url: tracks != null && tracks.isNotEmpty ? tracks.first.artUri : null,
+            url: tracks != null && tracks.isNotEmpty
+                ? tracks.first.artUri
+                : null,
             size: 52,
             radius: 10,
           );
@@ -1096,7 +1123,12 @@ class _Artwork extends StatelessWidget {
   final AppMediaItem? item;
   final double size;
   final double radius;
-  const _Artwork({this.url, this.item, required this.size, required this.radius});
+  const _Artwork({
+    this.url,
+    this.item,
+    required this.size,
+    required this.radius,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1123,14 +1155,14 @@ class _Artwork extends StatelessWidget {
               errorWidget: (_, _, _) => placeholder,
             )
           : item?.sourceType == MediaSourceType.local
-              ? LocalArtwork(
-                  id: (item!.extras?['songId'] as int?) ?? int.tryParse(item!.id),
-                  width: size,
-                  height: size,
-                  borderRadius: BorderRadius.circular(radius),
-                  fallback: placeholder,
-                )
-              : placeholder,
+          ? LocalArtwork(
+              id: (item!.extras?['songId'] as int?) ?? int.tryParse(item!.id),
+              width: size,
+              height: size,
+              borderRadius: BorderRadius.circular(radius),
+              fallback: placeholder,
+            )
+          : placeholder,
     );
   }
 }
