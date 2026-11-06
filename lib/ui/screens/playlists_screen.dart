@@ -1,24 +1,23 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../models/media_item_model.dart';
 import '../../models/playlist.dart';
 import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
-import '../../services/platform_bridge.dart';
-import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/download_folder.dart';
+import '../widgets/import_playlist_sheet.dart';
 import '../widgets/playing_indicator.dart';
 import '../widgets/selectable_track_list.dart';
+import '../widgets/share_playlist_sheet.dart';
 import '../widgets/track_filter_bar.dart';
 import '../widgets/track_tile.dart';
+import '../../util/playlist_codec.dart';
 import 'playlist_detail_screen.dart';
 
 class PlaylistsScreen extends StatefulWidget {
@@ -527,79 +526,132 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     );
   }
 
-  /// Sends the playlist as a `.json` file another Pulse imports. On Android
-  /// through the share sheet; elsewhere it's saved where the user picks.
   Future<void> _sharePlaylist(Playlist playlist) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final (:json, :skipped) = MusicPlayerProvider.exportPlaylist(playlist);
-    if (skipped == playlist.length) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text("Only songs on this phone — there's nothing to share"),
-        ),
-      );
-      return;
-    }
-    final fileName = '${YoutubeService.safeFolderName(playlist.name)}.json';
-    final bytes = utf8.encode(jsonEncode(json));
-    try {
-      if (Platform.isAndroid) {
-        // Under cache/shared/, the only folder the FileProvider exposes.
-        final dir = Directory('${(await getTemporaryDirectory()).path}/shared');
-        await dir.create(recursive: true);
-        final file = File('${dir.path}/$fileName');
-        await file.writeAsBytes(bytes);
-        await PlatformBridge.shareFile(file.path, 'application/json');
-      } else {
-        final saved = await FilePicker.saveFile(
-          dialogTitle: 'Save playlist',
-          fileName: fileName,
-          mimeType: 'application/json',
-          bytes: bytes,
-        );
-        if (saved == null) return;
-      }
-      if (skipped > 0) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              '$skipped song${skipped == 1 ? '' : 's'} only on this phone '
-              'left out',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not share: $e')));
-    }
+    await showSharePlaylistSheet(context, playlist);
   }
 
   Future<void> _importPlaylist() async {
+    final mode = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Import Playlist',
+                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: Icon(Icons.file_open_rounded, color: sheetContext.colors.accent),
+                title: const Text('Choose File'),
+                subtitle: const Text('Import from .pulse or .json file'),
+                onTap: () => Navigator.pop(sheetContext, 'file'),
+              ),
+              ListTile(
+                leading: Icon(Icons.link_rounded, color: sheetContext.colors.accent),
+                title: const Text('Paste Link or Code'),
+                subtitle: const Text('Import from a pulse:// link or playlist code'),
+                onTap: () => Navigator.pop(sheetContext, 'link'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (mode == null || !mounted) return;
+
+    if (mode == 'file') {
+      await _importFromFile();
+    } else {
+      await _importFromLink();
+    }
+  }
+
+  Future<void> _importFromFile() async {
     final messenger = ScaffoldMessenger.of(context);
-    final provider = context.read<MusicPlayerProvider>();
     try {
       final picked = await FilePicker.pickFiles(
         dialogTitle: 'Choose a shared playlist',
         type: FileType.custom,
-        allowedExtensions: const ['json'],
+        allowedExtensions: const ['pulse', 'json', 'txt'],
       );
-      if (picked.isEmpty) return;
-      final json = jsonDecode(await picked.first.xFile.readAsString());
-      final playlist = await provider.importPlaylist(
-        json as Map<String, dynamic>,
-      );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Added "${playlist.name}" (${playlist.length} songs)',
-          ),
-        ),
+      if (picked.isEmpty || !mounted) return;
+      final file = File(picked.first.xFile.path);
+      final content = await file.readAsString();
+      final parsed = PlaylistCodec.parseAny(content);
+      if (parsed == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text("That file isn't a valid Pulse playlist")),
+        );
+        return;
+      }
+      if (!mounted) return;
+      await showImportPlaylistSheet(
+        context,
+        initialName: parsed.name,
+        items: parsed.items,
       );
     } catch (e) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text("That file isn't a Pulse playlist")),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Failed to read file: $e')));
     }
+  }
+
+  Future<void> _importFromLink() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: dialogContext.colors.surface,
+        title: const Text('Paste Link or Code'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Paste pulse:// link or playlist code...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (text == null || text.trim().isEmpty || !mounted) return;
+
+    final parsed = PlaylistCodec.parseAny(text.trim());
+    if (parsed == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Invalid playlist link or code')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await showImportPlaylistSheet(
+      context,
+      initialName: parsed.name,
+      items: parsed.items,
+    );
   }
 
   /// Deleting a playlist throws away work and can't be undone, so it asks.

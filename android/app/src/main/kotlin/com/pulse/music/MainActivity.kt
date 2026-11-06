@@ -17,11 +17,13 @@ import android.media.RingtoneManager
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
@@ -30,6 +32,9 @@ import java.nio.ByteBuffer
 class MainActivity : AudioServiceActivity() {
 
     private val bgExecutor = java.util.concurrent.Executors.newCachedThreadPool()
+    private var platformChannel: MethodChannel? = null
+    private var sharedDataEventSink: EventChannel.EventSink? = null
+    private var cachedSharedData: String? = null
 
     companion object {
         /**
@@ -41,8 +46,28 @@ class MainActivity : AudioServiceActivity() {
         var engineReady = false
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val sharedData = handleIncomingIntent(intent)
+        if (sharedData != null) {
+            cachedSharedData = sharedData
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val sharedData = handleIncomingIntent(intent)
+        if (sharedData != null) {
+            cachedSharedData = sharedData
+            notifyFlutterSharedData(sharedData)
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        sharedDataEventSink = null
+        platformChannel = null
         bgExecutor.shutdown()
     }
 
@@ -50,12 +75,29 @@ class MainActivity : AudioServiceActivity() {
         super.configureFlutterEngine(flutterEngine)
         engineReady = true
         applyTaskIcon()
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "pulse/shared_data")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    sharedDataEventSink = events
+                }
+                override fun onCancel(arguments: Any?) {
+                    sharedDataEventSink = null
+                }
+            })
+
         // Application context: the engine can outlive this activity while
         // audio keeps playing in the background.
         val app = applicationContext
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "pulse/platform")
-            .setMethodCallHandler { call, result ->
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "pulse/platform")
+        platformChannel = channel
+        channel.setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "getInitialSharedData" -> {
+                        val data = cachedSharedData
+                        cachedSharedData = null
+                        result.success(data)
+                    }
                     "cancelPlaybackNotification" -> {
                         // audio_service's notification id. Only removable once
                         // playback is paused (no longer a foreground service).
@@ -554,6 +596,85 @@ class MainActivity : AudioServiceActivity() {
             return false
         } finally {
             try { muxer?.release() } catch (_: Exception) {}
+        }
+    }
+
+    private fun notifyFlutterSharedData(data: String) {
+        runOnUiThread {
+            sharedDataEventSink?.success(data)
+        }
+    }
+
+    private fun handleIncomingIntent(intent: Intent?): String? {
+        if (intent == null) return null
+
+        val dataUri = intent.data
+        if (dataUri != null && dataUri.scheme?.equals("pulse", ignoreCase = true) == true) {
+            return intent.dataString ?: dataUri.toString()
+        }
+
+        val action = intent.action
+        if (Intent.ACTION_SEND == action) {
+            val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            }
+            if (streamUri != null) {
+                return copyStreamToCache(streamUri)
+            }
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+            if (!text.isNullOrBlank()) {
+                return text
+            }
+        } else if (Intent.ACTION_VIEW == action && dataUri != null) {
+            val scheme = dataUri.scheme?.lowercase()
+            if (scheme == "content" || scheme == "file" || scheme == null) {
+                return copyStreamToCache(dataUri)
+            }
+        }
+        return null
+    }
+
+    private fun copyStreamToCache(uri: Uri): String? {
+        return try {
+            val sharedDir = File(cacheDir, "shared")
+            if (!sharedDir.exists()) {
+                sharedDir.mkdirs()
+            }
+            val destFile = File(sharedDir, "incoming_shared.pulse")
+            val inputStream = try {
+                if (uri.scheme?.equals("file", ignoreCase = true) == true && uri.path != null) {
+                    val f = File(uri.path!!)
+                    if (f.exists()) f.inputStream() else contentResolver.openInputStream(uri)
+                } else {
+                    contentResolver.openInputStream(uri)
+                }
+            } catch (e: Exception) {
+                uri.path?.let { path ->
+                    val f = File(path)
+                    if (f.exists()) f.inputStream() else null
+                }
+            }
+
+            if (inputStream != null) {
+                inputStream.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                if (destFile.exists() && destFile.length() > 0) {
+                    destFile.absolutePath
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to copy shared stream from $uri: ${e.message}")
+            null
         }
     }
 }

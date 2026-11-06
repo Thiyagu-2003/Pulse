@@ -10,6 +10,33 @@ import 'package:flutter/services.dart';
 /// by a media button with no activity) nothing should break.
 class PlatformBridge {
   static const _channel = MethodChannel('pulse/platform');
+  static const _sharedDataChannel = EventChannel('pulse/shared_data');
+  static Stream<String>? _sharedDataStream;
+
+  /// Returns the initial shared file path, text, or deep link that launched the app,
+  /// or null if none or on non-Android platforms. Once fetched, native clears it.
+  static Future<String?> getInitialSharedData() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await _channel.invokeMethod<String>('getInitialSharedData');
+    } on MissingPluginException {
+      return null;
+    } catch (e) {
+      debugPrint('pulse/platform getInitialSharedData failed: $e');
+      return null;
+    }
+  }
+
+  /// A broadcast stream of incoming shared files, deep links, or shared text
+  /// received while the app is already open. On non-Android platforms, returns
+  /// an empty stream.
+  static Stream<String> get sharedDataStream {
+    if (!Platform.isAndroid) return const Stream<String>.empty();
+    return _sharedDataStream ??= _sharedDataChannel
+        .receiveBroadcastStream()
+        .where((event) => event != null)
+        .map((event) => event.toString());
+  }
 
   static Future<void> updateWidget({
     String? title,

@@ -43,6 +43,51 @@
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+
+            <!-- File associations: .pulse and .json files -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.pulse" />
+                <data android:pathPattern=".*\\.json" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.pulse" />
+                <data android:pathPattern=".*\\.json" />
+            </intent-filter>
+
+            <!-- Custom deep link scheme: pulse://playlist -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pulse" android:host="playlist" />
+            </intent-filter>
+
+            <!-- ACTION_SEND for plain text and files -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"

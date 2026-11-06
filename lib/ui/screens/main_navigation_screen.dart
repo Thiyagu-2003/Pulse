@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -8,11 +9,13 @@ import '../../services/platform_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/update_service.dart';
 import '../../services/voice_command_service.dart';
+import '../../util/playlist_codec.dart';
 import 'settings_screen.dart';
 import 'online_music_screen.dart';
 import 'local_songs_screen.dart';
 import 'podcasts_screen.dart';
 import 'playlists_screen.dart';
+import '../widgets/import_playlist_sheet.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/voice_command_overlay.dart';
 import '../theme/app_theme.dart';
@@ -28,6 +31,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     with WidgetsBindingObserver {
   int _currentIndex = 0;
   StreamSubscription<String>? _errorSubscription;
+  StreamSubscription<String>? _sharedDataSubscription;
   VoiceCommandService? _voiceService;
 
   final List<Widget> _screens = const [
@@ -69,9 +73,60 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         .read<MusicPlayerProvider>()
         .playbackErrors
         .listen(_showPlaybackError);
+    _initSharedDataListener();
     _checkForUpdate();
     // Windows: the notification-area icon and hide-to-tray on close.
     DesktopTray.start(context.read<MusicPlayerProvider>());
+  }
+
+  void _initSharedDataListener() {
+    _sharedDataSubscription =
+        PlatformBridge.sharedDataStream.listen(_handleIncomingSharedData);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final initialData = await PlatformBridge.getInitialSharedData();
+      if (initialData != null && initialData.isNotEmpty) {
+        _handleIncomingSharedData(initialData);
+      }
+    });
+  }
+
+  Future<void> _handleIncomingSharedData(String data) async {
+    if (!mounted || data.trim().isEmpty) return;
+    try {
+      String content = data.trim();
+      if (File(content).existsSync()) {
+        content = await File(content).readAsString();
+      }
+
+      final parsed = PlaylistCodec.parseAny(content);
+      if (parsed == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Couldn't open shared playlist"),
+            behavior: SnackBarBehavior.floating,
+            margin: _snackMargin(context),
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      await showImportPlaylistSheet(
+        context,
+        initialName: parsed.name,
+        items: parsed.items,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to read playlist: $e'),
+          behavior: SnackBarBehavior.floating,
+          margin: _snackMargin(context),
+        ),
+      );
+    }
   }
 
   /// Once a day, quietly: a newer release only shows as a SnackBar.
@@ -132,6 +187,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _errorSubscription?.cancel();
+    _sharedDataSubscription?.cancel();
     _voiceService?.dispose();
     super.dispose();
   }

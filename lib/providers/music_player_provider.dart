@@ -21,6 +21,8 @@ import '../services/download_notifications.dart';
 import '../services/platform_bridge.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+enum PlaylistConflictResolution { keepBoth, replace, merge }
+
 class MusicPlayerProvider extends ChangeNotifier {
   final CustomAudioHandler _audioHandler;
   final StorageService _storageService;
@@ -1298,6 +1300,7 @@ class MusicPlayerProvider extends ChangeNotifier {
 
   /// Playlists
   List<Playlist> getPlaylists() => _storageService.getPlaylists();
+  List<Playlist> get playlists => getPlaylists();
   Playlist? getPlaylist(String id) => _storageService.getPlaylist(id);
 
   Future<Playlist> createPlaylist(String name) async {
@@ -1404,6 +1407,59 @@ class MusicPlayerProvider extends ChangeNotifier {
     final playlist = await createPlaylist(name);
     await addAllToPlaylist(playlist.id, tracks);
     return getPlaylist(playlist.id) ?? playlist;
+  }
+
+  /// Whether a playlist with [name] already exists (ignoring whitespace and case).
+  bool hasPlaylistNamed(String name) {
+    final clean = name.trim().toLowerCase();
+    return playlists.any((p) => p.name.trim().toLowerCase() == clean);
+  }
+
+  /// Imports [items] into a playlist with [name], applying [resolution] if
+  /// a playlist with that name already exists.
+  Future<Playlist> importPlaylistWithResolution({
+    required String name,
+    required List<AppMediaItem> items,
+    PlaylistConflictResolution resolution = PlaylistConflictResolution.keepBoth,
+  }) async {
+    final cleanName = name.trim();
+    final existing = playlists
+        .where((p) => p.name.trim().toLowerCase() == cleanName.toLowerCase())
+        .firstOrNull;
+
+    if (existing == null) {
+      final playlist = await createPlaylist(cleanName);
+      await addAllToPlaylist(playlist.id, items);
+      return getPlaylist(playlist.id) ?? playlist;
+    }
+
+    switch (resolution) {
+      case PlaylistConflictResolution.keepBoth:
+        var suffix = 1;
+        var uniqueName = '$cleanName ($suffix)';
+        while (hasPlaylistNamed(uniqueName)) {
+          suffix++;
+          uniqueName = '$cleanName ($suffix)';
+        }
+        final playlist = await createPlaylist(uniqueName);
+        await addAllToPlaylist(playlist.id, items);
+        return getPlaylist(playlist.id) ?? playlist;
+
+      case PlaylistConflictResolution.replace:
+        final updated = Playlist(
+          id: existing.id,
+          name: existing.name,
+          items: items,
+          folder: null,
+        );
+        await _storageService.savePlaylist(updated);
+        notifyListeners();
+        return updated;
+
+      case PlaylistConflictResolution.merge:
+        await addAllToPlaylist(existing.id, items);
+        return getPlaylist(existing.id) ?? existing;
+    }
   }
 
   /// Returns false if the track was already there, so the UI can say so.

@@ -9,6 +9,7 @@ import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/track_filter_bar.dart';
 import '../widgets/playing_indicator.dart';
+import '../widgets/share_playlist_sheet.dart';
 import '../widgets/track_tile.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
@@ -68,6 +69,14 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             items: playlist.items,
             playlistName: playlist.name,
             playlistId: playlist.id,
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.share_rounded,
+              color: context.colors.mist.withValues(alpha: 0.70),
+            ),
+            tooltip: 'Share',
+            onPressed: () => showSharePlaylistSheet(context, playlist),
           ),
           IconButton(
             icon: Icon(
