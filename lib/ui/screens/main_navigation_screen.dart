@@ -95,13 +95,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     );
   }
 
-  // Floating messages sit above the mini player: full width on a phone, a
-  // centred ~480px box on a wide (desktop) window rather than a bar across
-  // the whole screen.
+  // Floating messages (already above the mini player and nav bar, which are
+  // the scaffold's bottom bar): full width on a phone, a centred ~480px box
+  // on a wide (desktop) window rather than a bar across the whole screen.
   static EdgeInsets _snackMargin(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final side = width > 700 ? (width - 480) / 2 : 12.0;
-    return EdgeInsets.only(left: side, right: side, bottom: 140);
+    return EdgeInsets.only(left: side, right: side, bottom: 8);
   }
 
   void _showPlaybackError(String message) {
@@ -147,54 +147,60 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         children: [
           IndexedStack(index: _currentIndex, children: _screens),
 
-          // Floating MiniPlayer resting above bottom navigation bar
-          const Positioned(left: 0, right: 0, bottom: 0, child: MiniPlayer()),
-
           // Voice command mic FAB (mobile only, and only when enabled in settings)
           if (VoiceCommandService.isSupported && voiceEnabled)
             Positioned(
               right: 16,
-              bottom: 80,
+              bottom: 16,
               child: _VoiceFab(onTap: _openVoice),
             ),
         ],
       ),
+      // The mini player is part of the bottom bar, not floated over the
+      // tabs: floated, it covered each list's last row and every snackbar
+      // (which the scaffold puts just above its bottom bar).
       // Material 3 NavigationBar: the selection pill slides between
       // destinations, so switching tabs shows what changed instead of just
       // recolouring an icon.
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: context.colors.mist.withValues(alpha: 0.06)),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [const MiniPlayer(), _navBar(context)],
+      ),
+    );
+  }
+
+  Widget _navBar(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: context.colors.mist.withValues(alpha: 0.06)),
+        ),
+      ),
+      child: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.explore_outlined),
+            selectedIcon: Icon(Icons.explore_rounded),
+            label: 'Online',
           ),
-        ),
-        child: NavigationBar(
-          selectedIndex: _currentIndex,
-          onDestinationSelected: (index) =>
-              setState(() => _currentIndex = index),
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.explore_outlined),
-              selectedIcon: Icon(Icons.explore_rounded),
-              label: 'Online',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.folder_outlined),
-              selectedIcon: Icon(Icons.folder_rounded),
-              label: 'Local',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.podcasts_outlined),
-              selectedIcon: Icon(Icons.podcasts_rounded),
-              label: 'Podcasts',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.library_music_outlined),
-              selectedIcon: Icon(Icons.library_music_rounded),
-              label: 'Library',
-            ),
-          ],
-        ),
+          NavigationDestination(
+            icon: Icon(Icons.folder_outlined),
+            selectedIcon: Icon(Icons.folder_rounded),
+            label: 'Local',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.podcasts_outlined),
+            selectedIcon: Icon(Icons.podcasts_rounded),
+            label: 'Podcasts',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.library_music_outlined),
+            selectedIcon: Icon(Icons.library_music_rounded),
+            label: 'Library',
+          ),
+        ],
       ),
     );
   }
@@ -265,4 +271,3 @@ class _VoiceFabState extends State<_VoiceFab>
     );
   }
 }
-
