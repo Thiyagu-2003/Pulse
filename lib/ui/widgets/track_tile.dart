@@ -8,6 +8,7 @@ import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/saavn_service.dart';
+import '../../services/storage_service.dart';
 import '../screens/artist_screen.dart';
 import '../theme/app_theme.dart';
 import 'add_to_playlist_sheet.dart';
@@ -294,6 +295,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
   final artistId = item.extras?[SaavnService.artistIdKey] as String?;
   final albumId = item.extras?[SaavnService.albumIdKey] as String?;
   final link = shareLinkFor(item);
+  final localPath = localFilePathFor(item);
   void open(BuildContext sheetContext, SaavnKind kind, String id, String name) {
     Navigator.pop(sheetContext);
     openCollection(
@@ -434,7 +436,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                   Icons.share_rounded,
                   color: sheetContext.colors.accent,
                 ),
-                title: const Text('Share'),
+                title: Text(localPath != null ? 'Share link' : 'Share'),
                 onTap: () async {
                   Navigator.pop(sheetContext);
                   final shared = await PlatformBridge.share(
@@ -446,6 +448,31 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
                       'Link copied',
                       icon: Icons.link_rounded,
                     );
+                  }
+                },
+              ),
+            if (localPath != null && Platform.isAndroid)
+              ListTile(
+                leading: Icon(
+                  Icons.send_rounded,
+                  color: sheetContext.colors.accent,
+                ),
+                title: const Text('Share audio file'),
+                subtitle: const Text('Send file via WhatsApp, Bluetooth, etc.'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  try {
+                    await PlatformBridge.shareFile(
+                      localPath,
+                      audioMimeTypeFor(localPath),
+                    );
+                  } catch (e) {
+                    if (rootContext.mounted) {
+                      showCompactSnack(
+                        ScaffoldMessenger.of(rootContext),
+                        'Could not share file: $e',
+                      );
+                    }
                   }
                 },
               ),
@@ -477,7 +504,7 @@ void showTrackActions(BuildContext context, AppMediaItem item) {
   );
 }
 
-/// A link anyone can open for [item], or null for device songs and podcasts.
+/// A link anyone can open for [item], or null for device songs without stream url.
 String? shareLinkFor(AppMediaItem item) {
   final perma = item.extras?[SaavnService.permaUrlKey] as String?;
   if (perma != null && perma.startsWith('http')) return perma;
@@ -486,7 +513,50 @@ String? shareLinkFor(AppMediaItem item) {
       origin == MediaSourceType.youtube.name) {
     return 'https://music.youtube.com/watch?v=${item.id}';
   }
+  if (item.sourceType == MediaSourceType.podcast) {
+    if (item.streamUrl != null && item.streamUrl!.startsWith('http')) {
+      return item.streamUrl;
+    }
+    final originUrl = item.extras?[MusicPlayerProvider.originUrlKey] as String?;
+    if (originUrl != null && originUrl.startsWith('http')) {
+      return originUrl;
+    }
+  }
   return null;
+}
+
+/// The local audio file on device, if available.
+String? localFilePathFor(AppMediaItem item) {
+  if (item.streamUrl != null &&
+      !item.streamUrl!.startsWith('http') &&
+      File(item.streamUrl!).existsSync()) {
+    return item.streamUrl;
+  }
+  final extraPath = item.extras?['filePath'] as String?;
+  if (extraPath != null && File(extraPath).existsSync()) {
+    return extraPath;
+  }
+  final downloaded = StorageService().getDownload(item.id);
+  if (downloaded?.streamUrl != null &&
+      !downloaded!.streamUrl!.startsWith('http') &&
+      File(downloaded.streamUrl!).existsSync()) {
+    return downloaded.streamUrl;
+  }
+  return null;
+}
+
+/// Detects the audio MIME type for local file sharing.
+String audioMimeTypeFor(String path) {
+  final ext = path.split('.').last.toLowerCase();
+  return switch (ext) {
+    'mp3' => 'audio/mpeg',
+    'm4a' || 'mp4' => 'audio/mp4',
+    'flac' => 'audio/flac',
+    'ogg' || 'oga' => 'audio/ogg',
+    'wav' => 'audio/wav',
+    'aac' => 'audio/aac',
+    _ => 'audio/*',
+  };
 }
 
 void _confirm(BuildContext context, String message) {

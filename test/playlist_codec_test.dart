@@ -89,6 +89,19 @@ void main() {
       final legacyPrefix = 'PULSE:$rawBase64';
       final parsedFromPrefix = PlaylistCodec.parseCodeOrText(legacyPrefix);
       expect(parsedFromPrefix['name'], 'Vibes');
+
+      final fullMessage = '''
+Check out my playlist "Vibes" (2 songs) on Pulse!
+
+• Song One - Artist A
+• Song Two - Artist B
+
+$code
+''';
+      final parsedFromMessage = PlaylistCodec.parseAny(fullMessage);
+      expect(parsedFromMessage, isNotNull);
+      expect(parsedFromMessage!.name, 'Vibes');
+      expect(parsedFromMessage.items.length, 2);
     });
 
     test('validatePlaylistJson rejects non-pulse or malformed data', () {

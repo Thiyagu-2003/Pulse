@@ -8,6 +8,7 @@ import '../../models/media_item_model.dart';
 import '../../models/playlist.dart';
 import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/podcast_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/download_folder.dart';
@@ -639,18 +640,75 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
     if (text == null || text.trim().isEmpty || !mounted) return;
 
     final parsed = PlaylistCodec.parseAny(text.trim());
-    if (parsed == null) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Invalid playlist link or code')),
+    if (parsed != null) {
+      if (!mounted) return;
+      await showImportPlaylistSheet(
+        context,
+        initialName: parsed.name,
+        items: parsed.items,
       );
       return;
     }
 
-    if (!mounted) return;
-    await showImportPlaylistSheet(
-      context,
-      initialName: parsed.name,
-      items: parsed.items,
+    final urlMatch = RegExp(r'https?:\/\/[^\s]+').firstMatch(text.trim());
+    if (urlMatch != null) {
+      final url = urlMatch.group(0)!;
+      final podcastService = PodcastService();
+
+      final channel = await podcastService.fetchChannelFromFeed(url);
+      if (channel != null) {
+        final episodes = await podcastService.fetchEpisodes(channel.feedUrl);
+        if (episodes.isNotEmpty && mounted) {
+          final items = [
+            for (final e in episodes)
+              podcastService.episodeToMediaItem(e, channel),
+          ];
+          await showImportPlaylistSheet(
+            context,
+            initialName: channel.title,
+            items: items,
+          );
+          return;
+        }
+      }
+
+      final cleanUrl = url.split('?').first.toLowerCase();
+      if (cleanUrl.endsWith('.mp3') ||
+          cleanUrl.endsWith('.m4a') ||
+          cleanUrl.endsWith('.aac') ||
+          cleanUrl.endsWith('.ogg') ||
+          cleanUrl.endsWith('.wav')) {
+        final lines = text
+            .trim()
+            .split('\n')
+            .where((l) => l.trim().isNotEmpty && !l.startsWith('http'))
+            .toList();
+        final rawTitle = lines.isNotEmpty ? lines.first.trim() : 'Podcast Episode';
+        final parts = rawTitle.split('–').map((p) => p.trim()).toList();
+        final title = parts.first;
+        final artist = parts.length > 1 ? parts[1] : 'Podcast';
+
+        final item = AppMediaItem(
+          id: url.hashCode.toString(),
+          title: title,
+          artist: artist,
+          streamUrl: url,
+          sourceType: MediaSourceType.podcast,
+        );
+
+        if (mounted) {
+          await showImportPlaylistSheet(
+            context,
+            initialName: title,
+            items: [item],
+          );
+          return;
+        }
+      }
+    }
+
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Invalid playlist link or code')),
     );
   }
 

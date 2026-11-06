@@ -6,8 +6,18 @@ import '../models/podcast_model.dart';
 import '../models/media_item_model.dart';
 
 class PodcastService {
-  /// Search top podcasts using Apple iTunes Search API (100% Free)
+  /// Search top podcasts using Apple iTunes Search API (100% Free),
+  /// or loads directly if [query] contains an RSS feed URL
   Future<List<PodcastChannel>> searchPodcasts(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return [];
+
+    final urlMatch = RegExp(r'https?:\/\/[^\s]+').firstMatch(trimmed);
+    if (urlMatch != null) {
+      final direct = await fetchChannelFromFeed(urlMatch.group(0)!);
+      if (direct != null) return [direct];
+    }
+
     try {
       final url = Uri.parse(
           'https://itunes.apple.com/search?media=podcast&term=${Uri.encodeComponent(query)}&limit=25');
@@ -21,6 +31,44 @@ class PodcastService {
       debugPrint('Error searching podcasts: $e');
     }
     return [];
+  }
+
+  /// Parses [PodcastChannel] metadata from a direct RSS feed URL
+  Future<PodcastChannel?> fetchChannelFromFeed(String feedUrl) async {
+    if (feedUrl.trim().isEmpty) return null;
+    try {
+      final response = await http
+          .get(Uri.parse(feedUrl.trim()))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final document = XmlDocument.parse(
+          utf8.decode(response.bodyBytes, allowMalformed: true),
+        );
+        final channel = document.findAllElements('channel').firstOrNull;
+        if (channel == null) return null;
+
+        final title = channel.findElements('title').firstOrNull?.innerText.trim() ??
+            'Podcast';
+        final author = _childByLocalName(channel, 'author')?.innerText.trim() ??
+            channel.findElements('managingEditor').firstOrNull?.innerText.trim() ??
+            '';
+        final description =
+            channel.findElements('description').firstOrNull?.innerText.trim() ?? '';
+        final artworkUrl = _episodeImage(channel) ?? '';
+
+        return PodcastChannel(
+          id: feedUrl.hashCode.toString(),
+          title: title,
+          author: author,
+          description: description,
+          artworkUrl: artworkUrl,
+          feedUrl: feedUrl.trim(),
+        );
+      }
+    } catch (e) {
+      debugPrint('fetchChannelFromFeed error for $feedUrl: $e');
+    }
+    return null;
   }
 
   /// Get trending podcasts

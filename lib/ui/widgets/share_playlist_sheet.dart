@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../models/playlist.dart';
-import '../../providers/music_player_provider.dart';
 import '../../services/platform_bridge.dart';
 import '../../services/youtube_service.dart';
 import '../../util/playlist_codec.dart';
@@ -126,15 +125,8 @@ class _SharePlaylistSheet extends StatelessWidget {
               context: context,
               icon: Icons.link_rounded,
               title: 'Copy Share Link',
-              subtitle: 'Fast link for WhatsApp or chat',
+              subtitle: 'Fast link for WhatsApp, Telegram, or chat',
               onTap: () => _handleCopyLink(context, messenger),
-            ),
-            _buildActionTile(
-              context: context,
-              icon: Icons.send_rounded,
-              title: 'Share as Message',
-              subtitle: 'Formatted text with songs list and link',
-              onTap: () => _handleShareMessage(context, messenger),
             ),
             const SizedBox(height: 8),
           ],
@@ -315,68 +307,6 @@ class _SharePlaylistSheet extends StatelessWidget {
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not copy link: $e')),
-      );
-    }
-  }
-
-  Future<void> _handleShareMessage(
-    BuildContext sheetContext,
-    ScaffoldMessengerState messenger,
-  ) async {
-    Navigator.of(sheetContext).pop();
-
-    final export = PlaylistCodec.exportToJson(playlist);
-    final streamableItems = export.json['items'] as List;
-
-    if (streamableItems.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text("Only songs on this phone — there's nothing to share"),
-        ),
-      );
-      return;
-    }
-
-    try {
-      final link = PlaylistCodec.exportToCode(playlist);
-      final tracks = playlist.items
-          .map(MusicPlayerProvider.onlineCopy)
-          .nonNulls
-          .toList();
-
-      final buffer = StringBuffer();
-      buffer.writeln(
-        'Check out my playlist "${playlist.name}" (${tracks.length} songs) on Pulse!\n',
-      );
-      if (tracks.isNotEmpty) {
-        final sample = tracks.take(3).map((t) => '• ${t.title} - ${t.artist}').join('\n');
-        buffer.writeln(sample);
-        if (tracks.length > 3) {
-          buffer.writeln('• and ${tracks.length - 3} more...');
-        }
-        buffer.writeln();
-      }
-      buffer.writeln(link);
-
-      final message = buffer.toString().trim();
-      final shared = await PlatformBridge.share(message);
-      if (!shared) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Playlist message copied to clipboard')),
-        );
-      }
-      if (export.skipped > 0) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              '${export.skipped} device-only track${export.skipped == 1 ? '' : 's'} left out',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not share message: $e')),
       );
     }
   }

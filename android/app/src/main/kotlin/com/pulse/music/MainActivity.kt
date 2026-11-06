@@ -172,9 +172,20 @@ class MainActivity : AudioServiceActivity() {
                     }
                     "shareFile" -> {
                         val file = File(call.argument<String>("path") ?: "")
-                        val uri = androidx.core.content.FileProvider.getUriForFile(
-                            this, "$packageName.share", file
-                        )
+                        val uri = try {
+                            androidx.core.content.FileProvider.getUriForFile(
+                                this, "$packageName.share", file
+                            )
+                        } catch (e: Exception) {
+                            val sharedDir = File(cacheDir, "shared").apply { if (!exists()) mkdirs() }
+                            val dest = File(sharedDir, file.name)
+                            if (!dest.exists() || dest.length() != file.length()) {
+                                file.copyTo(dest, overwrite = true)
+                            }
+                            androidx.core.content.FileProvider.getUriForFile(
+                                this, "$packageName.share", dest
+                            )
+                        }
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = call.argument<String>("mimeType") ?: "*/*"
                             putExtra(Intent.EXTRA_STREAM, uri)

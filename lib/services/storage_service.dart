@@ -13,14 +13,14 @@ import '../models/podcast_model.dart';
 /// Which YouTube audio stream to play. Downloads always keep AAC in MP4,
 /// which is the safest thing to leave on disk.
 enum AudioQuality {
-  /// Lowest bitrate stream, around 50 kbps.
-  dataSaver('Data saver', 'About 50 kbps — least mobile data'),
+  /// Lowest bitrate stream, around 96 kbps.
+  dataSaver('Data saver', 'About 96 kbps — least data'),
 
-  /// AAC, about 128 kbps.
-  balanced('Balanced', 'About 128 kbps'),
+  /// AAC / MP4, about 160 kbps.
+  balanced('Balanced', 'About 160 kbps'),
 
-  /// Highest bitrate on offer, usually Opus at about 160 kbps.
-  best('Best available', 'Up to 160 kbps');
+  /// Highest studio bitrate on offer (320 kbps on JioSaavn).
+  best('Best available', '320 kbps studio quality');
 
   const AudioQuality(this.label, this.detail);
   final String label;
@@ -154,7 +154,7 @@ class StorageService {
 
   AudioQuality getAudioQuality() => AudioQuality.values.firstWhere(
     (q) => q.name == _settingsBox.get(audioQualityKey),
-    orElse: () => AudioQuality.balanced,
+    orElse: () => AudioQuality.best,
   );
 
   Future<void> setAudioQuality(AudioQuality quality) =>

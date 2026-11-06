@@ -120,7 +120,7 @@ class PlaylistCodec {
 
   static String _extractPayload(String text) {
     final linkMatch = RegExp(
-      r'pulse:\/\/playlist[^\s]*[?&]d=([A-Za-z0-9_=-]+)',
+      r'pulse:\/\/playlist[^\s]*[?&]d=([A-Za-z0-9_=\-]+)',
       caseSensitive: false,
     ).firstMatch(text);
     if (linkMatch != null) return linkMatch.group(1)!;
@@ -134,10 +134,10 @@ class PlaylistCodec {
     }
 
     final clean = text.replaceAll(RegExp(r'\s+'), '');
-    final gzipMatch = RegExp(r'(H4sI[A-Za-z0-9_=-]+)', caseSensitive: false).firstMatch(clean);
+    final gzipMatch = RegExp(r'(H4sI[A-Za-z0-9_=\-]+)', caseSensitive: false).firstMatch(clean);
     if (gzipMatch != null) return gzipMatch.group(1)!;
 
-    if (clean.length > 20 && RegExp(r'^[A-Za-z0-9_=-]+$').hasMatch(clean)) {
+    if (clean.length > 20 && RegExp(r'^[A-Za-z0-9_=\-]+$').hasMatch(clean)) {
       return clean;
     }
 

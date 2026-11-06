@@ -59,6 +59,16 @@ void main() {
           sourceType: MediaSourceType.youtube)),
       'https://music.youtube.com/watch?v=dQw4w9WgXcQ',
     );
+    expect(
+      shareLinkFor(AppMediaItem(
+        id: 'ep-1',
+        title: 'Episode 1',
+        artist: 'Podcast',
+        streamUrl: 'https://cdn.podcasts.org/ep1.mp3',
+        sourceType: MediaSourceType.podcast,
+      )),
+      'https://cdn.podcasts.org/ep1.mp3',
+    );
     expect(shareLinkFor(_device), isNull);
   });
 

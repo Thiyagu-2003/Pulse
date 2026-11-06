@@ -53,7 +53,6 @@ void main() {
     expect(find.text('Synthwave Nights'), findsOneWidget);
     expect(find.text('Share Playlist File'), findsOneWidget);
     expect(find.text('Copy Share Link'), findsOneWidget);
-    expect(find.text('Share as Message'), findsOneWidget);
   });
 
   testWidgets('SharePlaylistSheet displays large playlist warning for >100 tracks', (tester) async {

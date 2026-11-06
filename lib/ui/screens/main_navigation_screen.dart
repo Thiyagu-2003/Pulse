@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/media_item_model.dart';
 import '../../providers/music_player_provider.dart';
 import '../../services/desktop_tray.dart';
 import '../../services/platform_bridge.dart';
+import '../../services/podcast_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/update_service.dart';
 import '../../services/voice_command_service.dart';
@@ -117,23 +119,79 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       }
 
       final parsed = PlaylistCodec.parseAny(content);
-      if (parsed == null) {
+      if (parsed != null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Couldn't open shared playlist"),
-            behavior: SnackBarBehavior.floating,
-            margin: _snackMargin(context),
-          ),
+        await showImportPlaylistSheet(
+          context,
+          initialName: parsed.name,
+          items: parsed.items,
         );
         return;
       }
 
+      final urlMatch = RegExp(r'https?:\/\/[^\s]+').firstMatch(content);
+      if (urlMatch != null) {
+        final url = urlMatch.group(0)!;
+        final podcastService = PodcastService();
+
+        final channel = await podcastService.fetchChannelFromFeed(url);
+        if (channel != null) {
+          final episodes = await podcastService.fetchEpisodes(channel.feedUrl);
+          if (episodes.isNotEmpty && mounted) {
+            final items = [
+              for (final e in episodes)
+                podcastService.episodeToMediaItem(e, channel),
+            ];
+            await showImportPlaylistSheet(
+              context,
+              initialName: channel.title,
+              items: items,
+            );
+            return;
+          }
+        }
+
+        final cleanUrl = url.split('?').first.toLowerCase();
+        if (cleanUrl.endsWith('.mp3') ||
+            cleanUrl.endsWith('.m4a') ||
+            cleanUrl.endsWith('.aac') ||
+            cleanUrl.endsWith('.ogg') ||
+            cleanUrl.endsWith('.wav')) {
+          final lines = content
+              .split('\n')
+              .where((l) => l.trim().isNotEmpty && !l.startsWith('http'))
+              .toList();
+          final rawTitle = lines.isNotEmpty ? lines.first.trim() : 'Podcast Episode';
+          final parts = rawTitle.split('–').map((p) => p.trim()).toList();
+          final title = parts.first;
+          final artist = parts.length > 1 ? parts[1] : 'Podcast';
+
+          final item = AppMediaItem(
+            id: url.hashCode.toString(),
+            title: title,
+            artist: artist,
+            streamUrl: url,
+            sourceType: MediaSourceType.podcast,
+          );
+
+          if (mounted) {
+            await showImportPlaylistSheet(
+              context,
+              initialName: title,
+              items: [item],
+            );
+            return;
+          }
+        }
+      }
+
       if (!mounted) return;
-      await showImportPlaylistSheet(
-        context,
-        initialName: parsed.name,
-        items: parsed.items,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Couldn't open shared playlist"),
+          behavior: SnackBarBehavior.floating,
+          margin: _snackMargin(context),
+        ),
       );
     } catch (e) {
       if (!mounted) return;

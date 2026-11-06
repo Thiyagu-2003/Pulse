@@ -3,6 +3,7 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/platform_bridge.dart';
 import '../../services/podcast_service.dart';
 import '../../services/storage_service.dart';
 import '../../models/media_item_model.dart';
@@ -231,6 +232,23 @@ class _PodcastsScreenState extends State<PodcastsScreen> {
               onTap: () {
                 Navigator.pop(sheet);
                 _openPodcastDetails(channel);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.share_rounded, color: context.colors.accent),
+              title: const Text('Share show'),
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                Navigator.pop(sheet);
+                final link = channel.feedUrl;
+                final shared = await PlatformBridge.share(
+                  'Listen to "${channel.title}" by ${channel.author} on Pulse!\n$link',
+                );
+                if (!shared && mounted) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Podcast link copied')),
+                  );
+                }
               },
             ),
           ],
@@ -467,6 +485,25 @@ class _PodcastEpisodesSheetState extends State<_PodcastEpisodesSheet> {
                 DownloadAllButton(
                   items: _items,
                   playlistName: widget.channel.title,
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.share_rounded,
+                    color: context.colors.mist.withValues(alpha: 0.70),
+                  ),
+                  tooltip: 'Share podcast',
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final link = widget.channel.feedUrl;
+                    final shared = await PlatformBridge.share(
+                      'Listen to "${widget.channel.title}" by ${widget.channel.author} on Pulse!\n$link',
+                    );
+                    if (!shared && mounted) {
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Podcast link copied')),
+                      );
+                    }
+                  },
                 ),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
