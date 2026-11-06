@@ -41,11 +41,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     PlaylistsScreen(),
   ];
 
+  String? _lastHandledData;
+  DateTime? _lastHandledTime;
+
   /// The launcher icon is applied on the way out: swapping launcher entries
   /// while the app is on screen closes it on some phones.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.resumed) {
+      _checkPendingSharedData();
+    } else if (state == AppLifecycleState.paused) {
       context.read<MusicPlayerProvider>().onAppBackgrounded();
       PlatformBridge.setLauncherIcon(
         dark: context.read<MusicPlayerProvider>().darkLauncherIcon,
@@ -82,16 +87,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void _initSharedDataListener() {
     _sharedDataSubscription =
         PlatformBridge.sharedDataStream.listen(_handleIncomingSharedData);
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final initialData = await PlatformBridge.getInitialSharedData();
-      if (initialData != null && initialData.isNotEmpty) {
-        _handleIncomingSharedData(initialData);
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingSharedData();
     });
+  }
+
+  Future<void> _checkPendingSharedData() async {
+    final initialData = await PlatformBridge.getInitialSharedData();
+    if (initialData != null && initialData.isNotEmpty && mounted) {
+      await _handleIncomingSharedData(initialData);
+    }
   }
 
   Future<void> _handleIncomingSharedData(String data) async {
     if (!mounted || data.trim().isEmpty) return;
+    final now = DateTime.now();
+    if (_lastHandledData == data &&
+        _lastHandledTime != null &&
+        now.difference(_lastHandledTime!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastHandledData = data;
+    _lastHandledTime = now;
+
     try {
       String content = data.trim();
       if (File(content).existsSync()) {

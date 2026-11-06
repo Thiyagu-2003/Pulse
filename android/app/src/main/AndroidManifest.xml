@@ -44,31 +44,36 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
-            <!-- File associations: .pulse and .json files -->
+            <!-- File associations: .pulse and .json files by MIME type -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="application/json" />
                 <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="*/*" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/x-pulse" />
+            </intent-filter>
+
+            <!-- File associations: by extension (.pulse / .json) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
                 <data android:pathPattern=".*\\.pulse" />
                 <data android:pathPattern=".*\\.json" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:host="*" />
-                <data android:mimeType="application/json" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="*/*" />
                 <data android:pathPattern=".*\\.pulse" />
                 <data android:pathPattern=".*\\.json" />
             </intent-filter>
@@ -81,11 +86,13 @@
                 <data android:scheme="pulse" android:host="playlist" />
             </intent-filter>
 
-            <!-- ACTION_SEND for plain text and files -->
+            <!-- ACTION_SEND for plain text and shared files -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="*/*" />
             </intent-filter>
             <meta-data

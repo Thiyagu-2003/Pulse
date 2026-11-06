@@ -120,21 +120,26 @@ class PlaylistCodec {
 
   static String _extractPayload(String text) {
     final linkMatch = RegExp(
-      r'pulse:\/\/playlist[^\s]*[?&]d=([A-Za-z0-9_-]+={0,2})',
+      r'pulse:\/\/playlist[^\s]*[?&]d=([A-Za-z0-9_=-]+)',
+      caseSensitive: false,
     ).firstMatch(text);
     if (linkMatch != null) return linkMatch.group(1)!;
 
     final pulseMatch = RegExp(
-      r'PULSE:\s*([A-Za-z0-9_-]+={0,2})',
+      r'PULSE:\s*([A-Za-z0-9_=\-\s]+)',
       caseSensitive: false,
     ).firstMatch(text);
-    if (pulseMatch != null) return pulseMatch.group(1)!;
+    if (pulseMatch != null) {
+      return pulseMatch.group(1)!.replaceAll(RegExp(r'\s+'), '');
+    }
 
-    final gzipMatch = RegExp(r'(H4sI[A-Za-z0-9_-]+={0,2})').firstMatch(text);
+    final clean = text.replaceAll(RegExp(r'\s+'), '');
+    final gzipMatch = RegExp(r'(H4sI[A-Za-z0-9_=-]+)', caseSensitive: false).firstMatch(clean);
     if (gzipMatch != null) return gzipMatch.group(1)!;
 
-    final wordMatch = RegExp(r'([A-Za-z0-9_-]{20,}={0,2})').firstMatch(text);
-    if (wordMatch != null) return wordMatch.group(1)!;
+    if (clean.length > 20 && RegExp(r'^[A-Za-z0-9_=-]+$').hasMatch(clean)) {
+      return clean;
+    }
 
     return text.trim();
   }

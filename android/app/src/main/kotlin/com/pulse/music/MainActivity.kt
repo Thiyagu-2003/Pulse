@@ -175,10 +175,12 @@ class MainActivity : AudioServiceActivity() {
                         val uri = androidx.core.content.FileProvider.getUriForFile(
                             this, "$packageName.share", file
                         )
-                        val send = Intent(Intent.ACTION_SEND)
-                            .setType(call.argument<String>("mimeType") ?: "*/*")
-                            .putExtra(Intent.EXTRA_STREAM, uri)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = call.argument<String>("mimeType") ?: "*/*"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            clipData = android.content.ClipData.newRawUri("", uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
                         startActivity(Intent.createChooser(send, null))
                         result.success(null)
                     }
@@ -600,6 +602,7 @@ class MainActivity : AudioServiceActivity() {
     }
 
     private fun notifyFlutterSharedData(data: String) {
+        cachedSharedData = data
         runOnUiThread {
             sharedDataEventSink?.success(data)
         }
@@ -608,72 +611,83 @@ class MainActivity : AudioServiceActivity() {
     private fun handleIncomingIntent(intent: Intent?): String? {
         if (intent == null) return null
 
+        // 1. Direct pulse:// scheme URL
         val dataUri = intent.data
         if (dataUri != null && dataUri.scheme?.equals("pulse", ignoreCase = true) == true) {
             return intent.dataString ?: dataUri.toString()
         }
 
-        val action = intent.action
-        if (Intent.ACTION_SEND == action) {
-            val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // 2. Extra text (e.g. shared link or code)
+        val extraText = intent.getStringExtra(Intent.EXTRA_TEXT)
+        if (!extraText.isNullOrBlank()) {
+            return extraText
+        }
+
+        // 3. Find any target Uri from intent.data, EXTRA_STREAM, or clipData
+        var targetUri: Uri? = dataUri
+        if (targetUri == null) {
+            targetUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
             }
-            if (streamUri != null) {
-                return copyStreamToCache(streamUri)
-            }
-            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-            if (!text.isNullOrBlank()) {
-                return text
-            }
-        } else if (Intent.ACTION_VIEW == action && dataUri != null) {
-            val scheme = dataUri.scheme?.lowercase()
-            if (scheme == "content" || scheme == "file" || scheme == null) {
-                return copyStreamToCache(dataUri)
+        }
+        if (targetUri == null && intent.clipData != null && intent.clipData!!.itemCount > 0) {
+            val item = intent.clipData!!.getItemAt(0)
+            targetUri = item.uri
+            if (targetUri == null && !item.text.isNullOrBlank()) {
+                return item.text.toString()
             }
         }
+
+        if (targetUri != null) {
+            if (targetUri.scheme?.equals("pulse", ignoreCase = true) == true) {
+                return targetUri.toString()
+            }
+            return readUriContent(targetUri)
+        }
+
         return null
     }
 
-    private fun copyStreamToCache(uri: Uri): String? {
+    private fun readUriContent(uri: Uri): String? {
         return try {
-            val sharedDir = File(cacheDir, "shared")
-            if (!sharedDir.exists()) {
-                sharedDir.mkdirs()
-            }
-            val destFile = File(sharedDir, "incoming_shared.pulse")
-            val inputStream = try {
-                if (uri.scheme?.equals("file", ignoreCase = true) == true && uri.path != null) {
-                    val f = File(uri.path!!)
-                    if (f.exists()) f.inputStream() else contentResolver.openInputStream(uri)
-                } else {
-                    contentResolver.openInputStream(uri)
-                }
+            val bytes = try {
+                contentResolver.openInputStream(uri)?.use { it.readBytes() }
             } catch (e: Exception) {
-                uri.path?.let { path ->
+                android.util.Log.w("MainActivity", "contentResolver open failed for $uri: ${e.message}")
+                null
+            } ?: run {
+                val path = uri.path
+                if (path != null) {
                     val f = File(path)
-                    if (f.exists()) f.inputStream() else null
-                }
+                    if (f.exists()) f.readBytes() else null
+                } else null
             }
 
-            if (inputStream != null) {
-                inputStream.use { input ->
-                    destFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                if (destFile.exists() && destFile.length() > 0) {
-                    destFile.absolutePath
-                } else {
-                    null
-                }
-            } else {
-                null
+            if (bytes == null || bytes.isEmpty()) {
+                android.util.Log.w("MainActivity", "No bytes read from $uri")
+                return null
             }
+
+            // Check if bytes are Gzip compressed (magic bytes 0x1f, 0x8b)
+            val text = if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+                java.util.zip.GZIPInputStream(bytes.inputStream()).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else {
+                String(bytes, Charsets.UTF_8)
+            }
+
+            // Also persist to cache as backup file
+            try {
+                val sharedDir = File(cacheDir, "shared")
+                if (!sharedDir.exists()) sharedDir.mkdirs()
+                File(sharedDir, "incoming_shared.pulse").writeBytes(bytes)
+            } catch (_: Exception) {}
+
+            text
         } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Failed to copy shared stream from $uri: ${e.message}")
+            android.util.Log.e("MainActivity", "Failed to read uri content from $uri", e)
             null
         }
     }
