@@ -835,13 +835,20 @@ class MusicPlayerProvider extends ChangeNotifier {
         _fileExists(url)) {
       return item;
     }
+    return onlineCopy(item) ?? item;
+  }
+
+  /// The online form of [item]: itself if it already streams, the source a
+  /// download was saved from, or null for a song only on this device.
+  static AppMediaItem? onlineCopy(AppMediaItem item) {
+    if (item.sourceType.isDownloadable) return item;
     // Downloads record their origin. Older ones don't: those were all
     // YouTube, recognisable by the 11-character video id.
     final origin = item.extras?[originKey] as String? ?? _originFromId(item.id);
     final source = MediaSourceType.values
         .where((s) => s.isDownloadable && s.name == origin)
         .firstOrNull;
-    if (source == null) return item;
+    if (source == null) return null;
     return AppMediaItem(
       id: item.id,
       title: item.title,
@@ -1357,6 +1364,46 @@ class MusicPlayerProvider extends ChangeNotifier {
   Future<void> deletePlaylist(String id) async {
     await _storageService.deletePlaylist(id);
     notifyListeners();
+  }
+
+  /// A playlist as a file another Pulse can import. Only songs that stream
+  /// travel — a device-only song means nothing on another phone — so
+  /// [skipped] counts the ones left out.
+  static ({Map<String, dynamic> json, int skipped}) exportPlaylist(
+    Playlist playlist,
+  ) {
+    final items = playlist.items.map(onlineCopy).nonNulls.toList();
+    return (
+      json: {
+        'app': 'pulse',
+        'type': 'playlist',
+        'version': 1,
+        'name': playlist.name,
+        'items': items.map((t) => t.toJson()).toList(),
+      },
+      skipped: playlist.length - items.length,
+    );
+  }
+
+  /// Adds a shared playlist file as a new playlist. Throws [FormatException]
+  /// if it isn't one.
+  Future<Playlist> importPlaylist(Map<String, dynamic> json) async {
+    final name = json['name'];
+    final items = json['items'];
+    if (json['app'] != 'pulse' ||
+        json['type'] != 'playlist' ||
+        name is! String ||
+        name.trim().isEmpty ||
+        items is! List) {
+      throw const FormatException('Not a Pulse playlist');
+    }
+    final tracks = [
+      for (final t in items)
+        if (t is Map<String, dynamic>) AppMediaItem.fromJson(t),
+    ].where((t) => t.sourceType.isDownloadable).toList();
+    final playlist = await createPlaylist(name);
+    await addAllToPlaylist(playlist.id, tracks);
+    return getPlaylist(playlist.id) ?? playlist;
   }
 
   /// Returns false if the track was already there, so the UI can say so.

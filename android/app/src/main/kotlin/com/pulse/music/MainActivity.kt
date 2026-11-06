@@ -128,6 +128,18 @@ class MainActivity : AudioServiceActivity() {
                         startActivity(Intent.createChooser(send, null))
                         result.success(null)
                     }
+                    "shareFile" -> {
+                        val file = File(call.argument<String>("path") ?: "")
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            this, "$packageName.share", file
+                        )
+                        val send = Intent(Intent.ACTION_SEND)
+                            .setType(call.argument<String>("mimeType") ?: "*/*")
+                            .putExtra(Intent.EXTRA_STREAM, uri)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        startActivity(Intent.createChooser(send, null))
+                        result.success(null)
+                    }
                     "scanFile" -> {
                         val path = call.argument<String>("path")
                         if (path != null) {

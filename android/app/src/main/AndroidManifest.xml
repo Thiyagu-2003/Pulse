@@ -74,6 +74,17 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Shared playlist files (MainActivity "shareFile"). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Keeps the process alive while songs download (see the class). -->
         <service
             android:name=".DownloadKeepAliveService"

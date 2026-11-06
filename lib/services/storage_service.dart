@@ -227,7 +227,8 @@ class StorageService {
   /// entries were restored; throws [FormatException] if it isn't a Pulse
   /// backup.
   Future<int> importBackup(Map<String, dynamic> backup) async {
-    if (backup['app'] != 'pulse') {
+    // A shared playlist file is also 'pulse', marked with a type.
+    if (backup['app'] != 'pulse' || backup['type'] != null) {
       throw const FormatException('Not a Pulse backup');
     }
     var count = 0;

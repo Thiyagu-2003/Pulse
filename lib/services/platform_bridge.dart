@@ -92,6 +92,11 @@ class PlatformBridge {
     return false;
   }
 
+  /// Android's share sheet with the file at [path], which must be under the
+  /// app's cache `shared/` folder (see res/xml/file_paths.xml).
+  static Future<void> shareFile(String path, String mimeType) =>
+      _call('shareFile', {'path': path, 'mimeType': mimeType});
+
   /// Tell Android's media index about a new file. Only matters for a custom
   /// download folder (e.g. Music/): the default folder is app-private, which
   /// Android 11+ never indexes, so other apps won't list those files.

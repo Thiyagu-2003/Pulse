@@ -1,10 +1,17 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../models/media_item_model.dart';
 import '../../models/playlist.dart';
 import '../../models/track_query.dart';
 import '../../providers/music_player_provider.dart';
+import '../../services/platform_bridge.dart';
+import '../../services/youtube_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/download_folder.dart';
@@ -64,6 +71,12 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
           style: Theme.of(context).textTheme.displaySmall,
         ),
         actions: [
+          if (tabIndex == 2)
+            IconButton(
+              icon: Icon(Icons.file_open_outlined, color: context.colors.accent),
+              tooltip: 'Import playlist',
+              onPressed: _importPlaylist,
+            ),
           if (tabIndex == 2)
             IconButton(
               icon: Icon(Icons.add_rounded, color: context.colors.accent),
@@ -470,6 +483,17 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
                   );
                 },
               ),
+              ListTile(
+                leading: Icon(
+                  Icons.share_rounded,
+                  color: context.colors.accent,
+                ),
+                title: const Text('Share'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _sharePlaylist(playlist);
+                },
+              ),
             ],
             ListTile(
               leading: Icon(Icons.edit_rounded, color: context.colors.accent),
@@ -501,6 +525,81 @@ class _PlaylistsScreenState extends State<PlaylistsScreen>
         ),
       ),
     );
+  }
+
+  /// Sends the playlist as a `.json` file another Pulse imports. On Android
+  /// through the share sheet; elsewhere it's saved where the user picks.
+  Future<void> _sharePlaylist(Playlist playlist) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final (:json, :skipped) = MusicPlayerProvider.exportPlaylist(playlist);
+    if (skipped == playlist.length) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Only songs on this phone — there's nothing to share"),
+        ),
+      );
+      return;
+    }
+    final fileName = '${YoutubeService.safeFolderName(playlist.name)}.json';
+    final bytes = utf8.encode(jsonEncode(json));
+    try {
+      if (Platform.isAndroid) {
+        // Under cache/shared/, the only folder the FileProvider exposes.
+        final dir = Directory('${(await getTemporaryDirectory()).path}/shared');
+        await dir.create(recursive: true);
+        final file = File('${dir.path}/$fileName');
+        await file.writeAsBytes(bytes);
+        await PlatformBridge.shareFile(file.path, 'application/json');
+      } else {
+        final saved = await FilePicker.saveFile(
+          dialogTitle: 'Save playlist',
+          fileName: fileName,
+          mimeType: 'application/json',
+          bytes: bytes,
+        );
+        if (saved == null) return;
+      }
+      if (skipped > 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '$skipped song${skipped == 1 ? '' : 's'} only on this phone '
+              'left out',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not share: $e')));
+    }
+  }
+
+  Future<void> _importPlaylist() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<MusicPlayerProvider>();
+    try {
+      final picked = await FilePicker.pickFiles(
+        dialogTitle: 'Choose a shared playlist',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+      );
+      if (picked.isEmpty) return;
+      final json = jsonDecode(await picked.first.xFile.readAsString());
+      final playlist = await provider.importPlaylist(
+        json as Map<String, dynamic>,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Added "${playlist.name}" (${playlist.length} songs)',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("That file isn't a Pulse playlist")),
+      );
+    }
   }
 
   /// Deleting a playlist throws away work and can't be undone, so it asks.
